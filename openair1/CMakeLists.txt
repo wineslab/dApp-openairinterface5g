@@ -2,3 +2,4 @@
 
 add_subdirectory(PHY)
 add_subdirectory(SIMULATION)
+add_subdirectory(E3_AGENT)

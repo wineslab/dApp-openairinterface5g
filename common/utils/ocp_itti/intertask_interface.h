@@ -278,6 +278,7 @@ typedef struct {
   TASK_DEF(TASK_M3AP_MCE, 200)        \
   TASK_DEF(TASK_SCTP, 200)            \
   TASK_DEF(TASK_ENB_APP, 200)         \
+  TASK_DEF(TASK_E3_AGENT, 200)        \
   TASK_DEF(TASK_GNB_APP, 200)         \
   TASK_DEF(TASK_MCE_APP, 200)         \
   TASK_DEF(TASK_MME_APP, 200)         \

@@ -70,6 +70,10 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
 
+#ifdef 1 // this should be replaced by E3_AGENT
+#include <openair1/E3_AGENT/e3_agent.h>
+#endif
+
 pthread_cond_t nfapi_sync_cond;
 pthread_mutex_t nfapi_sync_mutex;
 int nfapi_sync_var=-1; //!< protected by mutex \ref nfapi_sync_mutex
@@ -638,6 +642,9 @@ int main( int argc, char **argv ) {
 
 #endif // E2_AGENT
 
+#ifdef 1 // This should be replaced by E3_AGENT
+  e3_agent_init();
+#endif // E3_AGENT
   // wait for F1 Setup Response before starting L1 for real
   if (NFAPI_MODE != NFAPI_MODE_PNF && (NODE_IS_DU(node_type) || NODE_IS_MONOLITHIC(node_type)))
     wait_f1_setup_response();
