@@ -7,6 +7,9 @@
 #include "common/utils/T/tracer/event_selector.h"
 #include "config.h"
 
+# include "intertask_interface.h"
+# include "create_tasks.h"
+
 #include "common/utils/T/tracer/logger/logger.h"
 #include "common/utils/T/tracer/event_selector.h"
 
@@ -226,11 +229,11 @@ int open_trigger_socket(void) {
         // if (trigger > 0)
         //     trigger = 1;
         // TODO improve this shit
-        if (trigger == 150) {
-          pthread_mutex_lock(&(e2_agent_db->mutex));
-          e2_agent_db->iq_mapping = trigger;
-          pthread_mutex_unlock(&(e2_agent_db->mutex));
-        }
+        // if (trigger == 150) {
+        //   pthread_mutex_lock(&(e2_agent_db->mutex));
+        //   e2_agent_db->iq_mapping = trigger;
+        //   pthread_mutex_unlock(&(e2_agent_db->mutex));
+        // }
 
         e3_agent_control->trigger_iq_dump = trigger;
         fprintf(stdout, "Trigger is set to %d\n", trigger);
