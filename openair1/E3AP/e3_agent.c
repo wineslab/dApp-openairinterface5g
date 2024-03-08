@@ -1,19 +1,18 @@
 #include "e3_agent.h"
 
-#include "common/utils/T/tracer/database.h"
+#include "database.h"
 #include "event.h"
-#include "common/utils/T/tracer/handler.h"
+#include "handler.h"
 #include "utils.h"
-#include "common/utils/T/tracer/event_selector.h"
+#include "event_selector.h"
 #include "config.h"
 
-# include "intertask_interface.h"
-# include "create_tasks.h"
+// # include "intertask_interface.h"
+// # include "create_tasks.h"
+#include "configuration.h"
+#include "logger/logger.h"
 
-#include "common/utils/T/tracer/logger/logger.h"
-#include "common/utils/T/tracer/event_selector.h"
-
-#include <common/utils/system.h>
+#include "common/utils/system.h"
 #include "common/ran_context.h"
 #include "common/utils/LOG/log.h"
 
@@ -69,10 +68,10 @@ int setup_t_tracer()
   activate_traces(tracer_info->socket, number_of_events, is_on);
   free(is_on);
 
-  if (itti_create_task(TASK_E3_AGENT, e3_agent_t_tracer_task, tracer_info) < 0) {
-    LOG_E(E3_AGENT, "cannot create ITTI task for T tracer\n");
-    return -1;
-  }
+  // if (itti_create_task(TASK_E3_AGENT, e3_agent_t_tracer_task, tracer_info) < 0) {
+  //   LOG_E(E3AP, "cannot create ITTI task for T tracer\n");
+  //   return -1;
+  // }
   return 0;
 }
 
@@ -86,10 +85,10 @@ int e3_agent_init(){
   // TODO e3
   e3_agent_control = (e3_agent_controls_t*) malloc(sizeof(e3_agent_controls_t));
   // Set T tracer socket
-  LOG_D(E3_AGENT, "Setup T Tracer socket");
+  LOG_D(E3AP, "Setup T Tracer socket");
   setup_t_tracer();
   // Set E3 interface for dApp socket
-  LOG_D(E3_AGENT, "Setup E3 Interface socket");
+  LOG_D(E3AP, "Setup E3 Interface socket");
   setup_e3_interface();
 
   return 0;
@@ -161,7 +160,7 @@ int open_trigger_socket(void) {
 
     protoent = getprotobyname(protoname);
     if (protoent == NULL) {
-        LOG_E(E3_AGENT,"getprotobyname");
+        LOG_E(E3AP,"getprotobyname");
         exit(EXIT_FAILURE);
     }
 
@@ -173,12 +172,12 @@ int open_trigger_socket(void) {
     );
 
     if (server_sockfd == -1) {
-        LOG_E(E3_AGENT,"socket");
+        LOG_E(E3AP,"socket");
         exit(EXIT_FAILURE);
     }
 
     if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
-        LOG_E(E3_AGENT,"setsockopt(SO_REUSEADDR) failed");
+        LOG_E(E3AP,"setsockopt(SO_REUSEADDR) failed");
         exit(EXIT_FAILURE);
     }
 
@@ -191,12 +190,12 @@ int open_trigger_socket(void) {
             sizeof(server_address)
         ) == -1
     ) {
-        LOG_E(E3_AGENT,"bind");
+        LOG_E(E3AP,"bind");
         exit(EXIT_FAILURE);
     }
 
     if (listen(server_sockfd, 5) == -1) {
-        LOG_E(E3_AGENT,"listen");
+        LOG_E(E3AP,"listen");
         exit(EXIT_FAILURE);
     }
     fprintf(stderr, "listening on port %d\n", server_port);
@@ -210,7 +209,7 @@ int open_trigger_socket(void) {
         // fflush(stdout);
 
         if (write(STDOUT_FILENO, buffer, nbytes_read) < 0) {
-          LOG_E(E3_AGENT, "write(STDOUT_FILENO) failed");
+          LOG_E(E3AP, "write(STDOUT_FILENO) failed");
           exit(EXIT_FAILURE);
         }
         // if (buffer[nbytes_read - 1] == '\n')

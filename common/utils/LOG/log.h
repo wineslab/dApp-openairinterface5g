@@ -155,7 +155,7 @@ static const char *const flag_name[] = {FOREACH_FLAG(FLAG_TEXT) ""};
   COMP_DEF(NFAPI_PNF, log)      \
   COMP_DEF(ITTI, log)           \
   COMP_DEF(UTIL, log)           \
-  COMP_DEF(E3_AGENT, log)       \
+  COMP_DEF(E3AP, log)           \
   COMP_DEF(MAX_LOG_PREDEF_COMPONENTS, )
 
 #define COMP_ENUM(comp, file_extension) comp,

@@ -17,7 +17,7 @@
 #include "T.h"
 #include "T_messages_creator.h"
 #include <sys/time.h>
-#include "E3_AGENT/e3_agent.h"
+#include "E3AP/e3_agent.h"
 
 
 #if T_TRACER
@@ -943,11 +943,13 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   // Dump IQs sample in frequency domain from rxdataF_comp
   // TODO check if this is before the equalization
+  #ifdef E3_AGENT
   if (e3_agent_control->trigger_iq_dump){
       printf("Trigger has been activated - Saving data to file\n");
       // int16_t* var_tmp = (int16_t *)&rxdataF_comp[0][(symbol*(off+(nb_rb*12)))];
       // T(T_E3_AGENT_RAW_IQ_DATA, T_BUFFER(var_tmp, 1024));
   }
+  #endif // E3_AGENT
 
   if (nb_layer == 1 && rel15_ul->transform_precoding == transformPrecoder_enabled && rel15_ul->qam_mod_order <= 6) {
     if (rel15_ul->qam_mod_order > 2)

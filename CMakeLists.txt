@@ -377,6 +377,12 @@ endif()
 add_boolean_option(ENABLE_IMSCOPE OFF "Enable phy scope based on imgui" OFF)
 add_boolean_option(ENABLE_IMSCOPE_RECORD OFF "Enable recording IQ data for imscope" OFF)
 
+#########################
+##### E3 AGENT
+#########################
+set(E3_AGENT "OFF" CACHE STRING "O-RAN nGR E3 Agent for dApps")
+set_property(CACHE E3_AGENT PROPERTY STRINGS "ON" "OFF")
+
 ##################################################
 # ASN.1 grammar C code generation & dependencies #
 ##################################################
@@ -1862,10 +1868,10 @@ add_executable(nr-softmodem
 
 target_link_libraries(nr-softmodem PRIVATE
   -Wl,--start-group
-  UTIL SCTP_CLIENT SCHED_LIB SCHED_NR_LIB PHY_NR PHY E3AGENT PHY_NR_COMMON NR_PHY_RU GTPV1U SECURITY
+  UTIL SCTP_CLIENT SCHED_LIB SCHED_NR_LIB PHY_NR PHY PHY_NR_COMMON NR_PHY_RU GTPV1U SECURITY
   ITTI ${NAS_UE_LIB} nr_rrc
   ngap s1ap L2_LTE_NR L2_NR MAC_NR_COMMON NFAPI_LIB NFAPI_VNF_LIB NFAPI_PNF_LIB NFAPI_USER_LIB SIMU
-  x2ap f1ap m2ap m3ap e1ap radio_common
+  x2ap f1ap m2ap m3ap e1ap radio_common e3ap
   time_management softmodem_common
   -Wl,--end-group dl)
 
@@ -1888,6 +1894,7 @@ if(E2_AGENT)
   target_link_libraries(nr-softmodem PUBLIC e2_agent e2_agent_arg e2_ran_func_du_cucp_cuup)
   target_compile_definitions(nr-softmodem PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
 endif()
+
 
 
 # force the generation of ASN.1 so that we don't need to wait during the build

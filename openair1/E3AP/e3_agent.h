@@ -1,5 +1,5 @@
-#ifndef __E3_AGENT__H__
-#define __E3_AGENT__H__
+#ifndef E3_AGENT_H
+#define E3_AGENT_H
 
 #define _XOPEN_SOURCE 700
 
@@ -46,4 +46,4 @@ void *e3_agent_dapp_task();
 // void* dump_iqs_on_file(void *vargp);
 
 
-#endif
+#endif // E3_AGENT_H
