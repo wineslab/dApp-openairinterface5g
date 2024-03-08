@@ -7,8 +7,9 @@
 #include "event_selector.h"
 #include "config.h"
 
-// # include "intertask_interface.h"
-// # include "create_tasks.h"
+// TODO replace itti with pthreads
+// #include "intertask_interface.h"
+// #include "create_tasks.h"
 #include "configuration.h"
 #include "logger/logger.h"
 
@@ -28,7 +29,7 @@ void activate_traces(int socket, int number_of_events, int *is_on)
 #define GET_DATA_FROM_TRACER(var_name, var_type, var)           \
   if (!strcmp(f.name[i], var_name)) {        \
     if (strcmp(f.type[i], var_type)) {       \
-      printf("bad type for %s\n", var_name); \
+      LOG_D(E3AP, "bad type for %s\n", var_name); \
       exit(1);                               \
     }                                        \
     var = i;                                 \
@@ -96,7 +97,7 @@ int e3_agent_init(){
 
 void *e3_agent_t_tracer_task(void* args_p){
   int i;
-  int data;
+  int data = 0;
   int e3_agent_raw_iq_data_id;
   database_event_format f;
   e3_agent_tracer_info_t* tracer_info = (e3_agent_tracer_info_t*) args_p;
@@ -128,10 +129,10 @@ void *e3_agent_t_tracer_task(void* args_p){
        * see in event.h the structure event_arg
        */
       unsigned char *buf = e.e[data].b;
-      printf("get E3_AGENT_RAW_IQ_DATA event buffer length %d = [", e.e[data].bsize);
+      LOG_D(E3AP,"get E3_AGENT_RAW_IQ_DATA event buffer length %d = [", e.e[data].bsize);
       for (i = 0; i < e.e[data].bsize; i++)
-        printf(" %2.2x", buf[i]);
-      printf("]\n");
+        LOG_D(E3AP," %2.2x", buf[i]);
+      LOG_D(E3AP, "]\n");
     }
   }
 
@@ -140,6 +141,7 @@ void *e3_agent_t_tracer_task(void* args_p){
 
 void *e3_agent_dapp_task(){
 
+  return NULL;
 }
 
 
