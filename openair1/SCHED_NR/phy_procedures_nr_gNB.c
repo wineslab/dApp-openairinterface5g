@@ -1156,6 +1156,15 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
   {
     // Mask of occupied RBs, per symbol and PRB
     uint32_t rb_mask_ul[14][MAX_BWP_SIZE] = {0};
+    /*Extracting time domain IQ samples from Antenna: 0 ToDO: Multiple antenna*/
+    if(nr_slot_select(&gNB->gNB_config, frame_rx, slot_rx)== NR_UPLINK_SLOT){
+      int numsamples = gNB->frame_parms.get_samples_per_slot(slot_rx,&gNB->frame_parms);
+      T(T_GNB_PHY_INTPUT_SIGNAL,
+        T_INT(frame_rx),
+        T_INT(0),
+        T_INT(0),
+        T_BUFFER(&gNB->RU_list[0]->common.rxdata[0][slot_rx* numsamples],numsamples* sizeof(int32_t)));
+    }
     fill_ul_rb_mask(gNB, now, rb_mask_ul, pucch, n_pucch, pusch, n_pusch_jobs, srs, n_srs);
 
     int first_symb = 0, num_symb = 0;
