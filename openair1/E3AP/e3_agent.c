@@ -40,8 +40,7 @@ int setup_t_tracer()
 {
   e3_agent_tracer_info_t *tracer_info = (e3_agent_tracer_info_t *) malloc(sizeof(e3_agent_tracer_info_t));
   // This shall just setup the T tracer socket
-  // If this does not work, use /home/wineslab/openairinterface5g/common/
-  char *database_filename = "../utils/T/T_messages.txt";
+  char *database_filename = T_MESSAGES_PATH;
   char *ip = DEFAULT_REMOTE_IP;
   int port = DEFAULT_REMOTE_PORT;
   int *is_on;
@@ -61,11 +60,11 @@ int setup_t_tracer()
   if (is_on == NULL)
     abort();
 
-  /* activate the E3_AGENT_RAW_IQ_DATA trace in this array */
-  on_off(tracer_info->database, "E3_AGENT_RAW_IQ_DATA", is_on, 1);
+  /* activate the GNB_PHY_INPUT_SIGNAL trace in this array */
+  on_off(tracer_info->database, "GNB_PHY_INPUT_SIGNAL", is_on, 1);
   /* connect to the nr-softmodem */
   tracer_info->socket = connect_to(ip, port);
-  /* activate the trace E3_AGENT_RAW_IQ_DATA in the nr-softmodem */
+  /* activate the trace GNB_PHY_INPUT_SIGNAL in the nr-softmodem */
   activate_traces(tracer_info->socket, number_of_events, is_on);
   free(is_on);
 
@@ -73,6 +72,8 @@ int setup_t_tracer()
   //   LOG_E(E3AP, "cannot create ITTI task for T tracer\n");
   //   return -1;
   // }
+
+  e3_agent_t_tracer_task(tracer_info);
   return 0;
 }
 
@@ -101,15 +102,15 @@ void *e3_agent_t_tracer_task(void* args_p){
   int e3_agent_raw_iq_data_id;
   database_event_format f;
   e3_agent_tracer_info_t* tracer_info = (e3_agent_tracer_info_t*) args_p;
-  /* get the format of the E3_AGENT_RAW_IQ_DATA trace */
-  e3_agent_raw_iq_data_id = event_id_from_name(tracer_info->database, "E3_AGENT_RAW_IQ_DATA");
+  /* get the format of the GNB_PHY_INPUT_SIGNAL trace */
+  e3_agent_raw_iq_data_id = event_id_from_name(tracer_info->database, "GNB_PHY_INPUT_SIGNAL");
   f = get_format(tracer_info->database, e3_agent_raw_iq_data_id);
 
-  /* get the elements of the E3_AGENT_RAW_IQ_DATA trace
+  /* get the elements of the GNB_PHY_INPUT_SIGNAL trace
    * the value is an index in the event, see below
    */
   for (i = 0; i < f.count; i++) {
-    GET_DATA_FROM_TRACER("iqsamples", "buffer", data);
+    GET_DATA_FROM_TRACER("rxdata", "buffer", data);
   }
 
   /* a buffer needed to receive events from the nr-softmodem */
@@ -129,7 +130,7 @@ void *e3_agent_t_tracer_task(void* args_p){
        * see in event.h the structure event_arg
        */
       unsigned char *buf = e.e[data].b;
-      LOG_D(E3AP,"get E3_AGENT_RAW_IQ_DATA event buffer length %d = [", e.e[data].bsize);
+      LOG_D(E3AP,"Get GNB_PHY_INPUT_SIGNAL event buffer length %d = [", e.e[data].bsize);
       for (i = 0; i < e.e[data].bsize; i++)
         LOG_D(E3AP," %2.2x", buf[i]);
       LOG_D(E3AP, "]\n");
@@ -139,7 +140,7 @@ void *e3_agent_t_tracer_task(void* args_p){
   return NULL;
 }
 
-void *e3_agent_dapp_task(){
+void *e3_agent_dapp_task(void* args_p){
 
   return NULL;
 }
@@ -246,24 +247,3 @@ int open_trigger_socket(void) {
 
     return EXIT_SUCCESS;
 }
-
-// This may be deprecated now that we are using T Tracer
-// Marked to deletion
-// void *dump_iqs_on_file(void* vargp) {
-
-//     FILE * fp;
-//     int16_t* data_to_dump = (int16_t*) vargp;
-
-//     fp = fopen ("../../../iqs_dump/iqs.txt", "a+");
-
-//     int prnt_idx;
-//     for (prnt_idx=0;prnt_idx<12*5*2;prnt_idx+=2){
-// //        fprintf(fp, "Received inside thread rxF[%d] = (%d,%d)\n", prnt_idx>>1, data_to_dump[prnt_idx],data_to_dump[prnt_idx+1]);
-//         // fprintf(fp, "%d,%d,%d\n", prnt_idx>>1, data_to_dump[prnt_idx],data_to_dump[prnt_idx+1]);
-//         fprintf(fp, "%d+%dj\n", data_to_dump[prnt_idx],data_to_dump[prnt_idx+1]);
-//     }
-//     fclose(fp);
-
-//     return NULL;
-// }
-

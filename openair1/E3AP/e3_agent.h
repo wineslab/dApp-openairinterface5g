@@ -16,6 +16,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// If this does not work, use /home/wineslab/openairinterface5g/common/
+#define T_MESSAGES_PATH "../utils/T/T_messages.txt"
 
 typedef struct e3_agent_tracer_info{
     void *database;
@@ -39,11 +41,8 @@ extern e3_agent_controls_t* e3_agent_control;
 
 int e3_agent_init();
 
-void *e3_agent_t_tracer_task();
-void *e3_agent_dapp_task();
-
-// Marked for deletion
-// void* dump_iqs_on_file(void *vargp);
+void *e3_agent_t_tracer_task(void* args_p);
+void *e3_agent_dapp_task(void* args_p);
 
 
 #endif // E3_AGENT_H
