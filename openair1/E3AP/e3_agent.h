@@ -40,6 +40,7 @@ typedef struct e3_agent_controls{
 extern e3_agent_controls_t* e3_agent_control;
 
 int e3_agent_init();
+int e3_agent_destroy();
 
 void *e3_agent_t_tracer_task(void* args_p);
 void *e3_agent_dapp_task(void* args_p);

@@ -7,15 +7,20 @@
 #include "event_selector.h"
 #include "config.h"
 
-// TODO replace itti with pthreads
+// TODO replace pthreads with itti once we (i) figure out how to link them
 // #include "intertask_interface.h"
 // #include "create_tasks.h"
+#include <pthread.h>
+#include <errno.h>
 #include "configuration.h"
 #include "logger/logger.h"
 
 #include "common/utils/system.h"
 #include "common/ran_context.h"
 #include "common/utils/LOG/log.h"
+
+pthread_t t_tracer_thread;
+pthread_t e3_interface_thread;
 
 /* this function sends the activated traces to the nr-softmodem */
 void activate_traces(int socket, int number_of_events, int *is_on)
@@ -36,8 +41,47 @@ void activate_traces(int socket, int number_of_events, int *is_on)
     continue;                                \
   }
 
-int setup_t_tracer()
-{
+e3_agent_controls_t* e3_agent_control = NULL;
+
+int e3_agent_init() {
+    e3_agent_control = (e3_agent_controls_t*) malloc(sizeof(e3_agent_controls_t));
+    LOG_D(E3AP, "Setup T Tracer socket thread");
+    if (pthread_create(&t_tracer_thread, NULL, e3_agent_t_tracer_task, NULL) != 0) {
+        LOG_E(E3AP, "Error creating T tracer thread: %s", strerror(errno));
+        return -1;
+    }
+
+    // TODO fix after linkage
+    // if (itti_create_task(TASK_E3_AGENT, e3_agent_t_tracer_task, NULL) < 0) {
+    //   LOG_E(E3AP, "cannot create ITTI task for T tracer\n");
+    //   return -1;
+    // }
+
+    LOG_D(E3AP, "Setup E3 Interface socket thread");
+    if (pthread_create(&e3_interface_thread, NULL, e3_agent_dapp_task, NULL) != 0) {
+        LOG_E(E3AP, "Error creating E3 interface thread: %s", strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
+int e3_agent_destroy(){
+
+  if (pthread_join(t_tracer_thread, NULL) != 0) {
+        LOG_E(E3AP, "Error joining T tracer thread: %s", strerror(errno));
+        return -1;
+  }
+  
+  if (pthread_join(e3_interface_thread, NULL) != 0) {
+        LOG_E(E3AP, "Error joining E3 interface thread: %s", strerror(errno));
+        return -1;
+  }
+
+  return 0;
+}
+
+void *e3_agent_t_tracer_task(void* args_p){
   e3_agent_tracer_info_t *tracer_info = (e3_agent_tracer_info_t *) malloc(sizeof(e3_agent_tracer_info_t));
   // This shall just setup the T tracer socket
   char *database_filename = T_MESSAGES_PATH;
@@ -45,6 +89,10 @@ int setup_t_tracer()
   int port = DEFAULT_REMOTE_PORT;
   int *is_on;
   int number_of_events;
+  int i;
+  int data = 0;
+  int e3_agent_raw_iq_data_id;
+  database_event_format f;
 
   /* write on a socket fails if the other end is closed and we get SIGPIPE */
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
@@ -68,40 +116,6 @@ int setup_t_tracer()
   activate_traces(tracer_info->socket, number_of_events, is_on);
   free(is_on);
 
-  // if (itti_create_task(TASK_E3_AGENT, e3_agent_t_tracer_task, tracer_info) < 0) {
-  //   LOG_E(E3AP, "cannot create ITTI task for T tracer\n");
-  //   return -1;
-  // }
-
-  e3_agent_t_tracer_task(tracer_info);
-  return 0;
-}
-
-void setup_e3_interface(){
-
-}
-
-e3_agent_controls_t* e3_agent_control = NULL;
-
-int e3_agent_init(){
-  // TODO e3
-  e3_agent_control = (e3_agent_controls_t*) malloc(sizeof(e3_agent_controls_t));
-  // Set T tracer socket
-  LOG_D(E3AP, "Setup T Tracer socket");
-  setup_t_tracer();
-  // Set E3 interface for dApp socket
-  LOG_D(E3AP, "Setup E3 Interface socket");
-  setup_e3_interface();
-
-  return 0;
-}
-
-void *e3_agent_t_tracer_task(void* args_p){
-  int i;
-  int data = 0;
-  int e3_agent_raw_iq_data_id;
-  database_event_format f;
-  e3_agent_tracer_info_t* tracer_info = (e3_agent_tracer_info_t*) args_p;
   /* get the format of the GNB_PHY_INPUT_SIGNAL trace */
   e3_agent_raw_iq_data_id = event_id_from_name(tracer_info->database, "GNB_PHY_INPUT_SIGNAL");
   f = get_format(tracer_info->database, e3_agent_raw_iq_data_id);
@@ -141,25 +155,15 @@ void *e3_agent_t_tracer_task(void* args_p){
 }
 
 void *e3_agent_dapp_task(void* args_p){
-
-  return NULL;
-}
-
-
-int open_trigger_socket(void) {
-
     char buffer[BUFSIZ];
     char protoname[] = "tcp";
     struct protoent *protoent;
     int enable = 1;
-    // int i;
-    // int newline_found = 0;
     int server_sockfd, client_sockfd;
     socklen_t client_len;
     ssize_t nbytes_read;
     struct sockaddr_in client_address, server_address;
     unsigned short server_port = 12346u;
-    int trigger;
 
     protoent = getprotobyname(protoname);
     if (protoent == NULL) {
@@ -225,25 +229,10 @@ int open_trigger_socket(void) {
 
         // convert to int and update global variable with trigger received from socket
         // NOTE: if below: > 1 does not make sense, and atof returns 0.0 if conversion is unsuccessful (e.g., the string is not a number)
-        trigger = (int)atof(buffer);
-
-        // we comment this part to allow the controller to set the number of iqs to save
-        // if (trigger > 0)
-        //     trigger = 1;
-        // TODO improve this shit
-        // if (trigger == 150) {
-        //   pthread_mutex_lock(&(e2_agent_db->mutex));
-        //   e2_agent_db->iq_mapping = trigger;
-        //   pthread_mutex_unlock(&(e2_agent_db->mutex));
-        // }
-
-        e3_agent_control->trigger_iq_dump = trigger;
-        fprintf(stdout, "Trigger is set to %d\n", trigger);
-        fflush(stdout);
+        LOG_D(E3AP, "%s", buffer);
       }
 
       close(client_sockfd);
     }
 
-    return EXIT_SUCCESS;
 }
