@@ -531,6 +531,12 @@ int main( int argc, char **argv ) {
 
   softmodem_verify_mode(get_softmodem_params());
 
+//////////////////////////////////
+//// Init the E3 Agent
+#ifdef E3_AGENT
+  e3_agent_init();
+#endif // E3_AGENT
+
 #if T_TRACER
   T_Config_Init();
 #endif
@@ -642,11 +648,6 @@ int main( int argc, char **argv ) {
 
 #endif // E2_AGENT
 
-//////////////////////////////////
-//// Init the E3 Agent
-#ifdef E3_AGENT
-  e3_agent_init();
-#endif // E3_AGENT
   // wait for F1 Setup Response before starting L1 for real
   if (NFAPI_MODE != NFAPI_MODE_PNF && (NODE_IS_DU(node_type) || NODE_IS_MONOLITHIC(node_type)))
     wait_f1_setup_response();
