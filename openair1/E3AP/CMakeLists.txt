@@ -5,3 +5,5 @@ add_library(e3ap e3_agent.c)
 # target_link_libraries(e3ap PUBLIC OCP_ITTI)
 
 target_include_directories(e3ap PUBLIC ${OPENAIR_DIR}/common/utils/T/tracer)
+
+target_link_libraries(e3ap PUBLIC tracer_utils)

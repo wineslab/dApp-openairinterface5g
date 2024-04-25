@@ -45,10 +45,10 @@ e3_agent_controls_t* e3_agent_control = NULL;
 
 int e3_agent_init() {
     e3_agent_control = (e3_agent_controls_t*) malloc(sizeof(e3_agent_controls_t));
-    LOG_D(E3AP, "Setup T Tracer socket thread");
+    LOG_D(E3AP, "Setup T Tracer socket thread\n");
     if (pthread_create(&t_tracer_thread, NULL, e3_agent_t_tracer_task, NULL) != 0) {
-        LOG_E(E3AP, "Error creating T tracer thread: %s", strerror(errno));
-        return -1;
+      LOG_E(E3AP, "Error creating T tracer thread: %s\n", strerror(errno));
+      return -1;
     }
 
     // TODO fix after linkage
@@ -57,9 +57,9 @@ int e3_agent_init() {
     //   return -1;
     // }
 
-    LOG_D(E3AP, "Setup E3 Interface socket thread");
+    LOG_D(E3AP, "Setup E3 Interface socket thread\n");
     if (pthread_create(&e3_interface_thread, NULL, e3_agent_dapp_task, NULL) != 0) {
-        LOG_E(E3AP, "Error creating E3 interface thread: %s", strerror(errno));
+        LOG_E(E3AP, "Error creating E3 interface thread: %s\n", strerror(errno));
         return -1;
     }
 
@@ -69,12 +69,12 @@ int e3_agent_init() {
 int e3_agent_destroy(){
 
   if (pthread_join(t_tracer_thread, NULL) != 0) {
-        LOG_E(E3AP, "Error joining T tracer thread: %s", strerror(errno));
+        LOG_E(E3AP, "Error joining T tracer thread: %s\n", strerror(errno));
         return -1;
   }
   
   if (pthread_join(e3_interface_thread, NULL) != 0) {
-        LOG_E(E3AP, "Error joining E3 interface thread: %s", strerror(errno));
+        LOG_E(E3AP, "Error joining E3 interface thread: %s\n", strerror(errno));
         return -1;
   }
 
@@ -129,7 +129,7 @@ void *e3_agent_t_tracer_task(void* args_p){
 
   /* a buffer needed to receive events from the nr-softmodem */
   OBUF ebuf = {osize : 0, omaxsize : 0, obuf : NULL};
-
+  LOG_D(E3AP, "Start infinte loop\n");
   /* read events */
   while (1) {
     event e;
@@ -167,7 +167,7 @@ void *e3_agent_dapp_task(void* args_p){
 
     protoent = getprotobyname(protoname);
     if (protoent == NULL) {
-        LOG_E(E3AP,"getprotobyname");
+        LOG_E(E3AP, "Error getprotobyname: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -179,12 +179,12 @@ void *e3_agent_dapp_task(void* args_p){
     );
 
     if (server_sockfd == -1) {
-        LOG_E(E3AP,"socket");
+        LOG_E(E3AP, "Error socket creation: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
-        LOG_E(E3AP,"setsockopt(SO_REUSEADDR) failed");
+        LOG_E(E3AP, "Error setsockopt: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -197,26 +197,26 @@ void *e3_agent_dapp_task(void* args_p){
             sizeof(server_address)
         ) == -1
     ) {
-        LOG_E(E3AP,"bind");
+        LOG_E(E3AP, "Error bind: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     if (listen(server_sockfd, 5) == -1) {
-        LOG_E(E3AP,"listen");
+        LOG_E(E3AP, "Error listen: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    fprintf(stderr, "listening on port %d\n", server_port);
 
+    LOG_D(E3AP, "E3 Agent is listening on port %d for dApps\n", server_port);
     while (1) {
       client_len = sizeof(client_address);
-      client_sockfd = accept(server_sockfd, (struct sockaddr *)&client_address, &client_len);
+      client_sockfd = accept(server_sockfd, (struct sockaddr *) &client_address, &client_len);
 
       while ((nbytes_read = read(client_sockfd, buffer, BUFSIZ)) > 0) {
         // fprintf(stdout, "Received from socket:\n");
         // fflush(stdout);
 
         if (write(STDOUT_FILENO, buffer, nbytes_read) < 0) {
-          LOG_E(E3AP, "write(STDOUT_FILENO) failed");
+          LOG_E(E3AP, "write(STDOUT_FILENO) failed: %s\n", strerror(errno));
           exit(EXIT_FAILURE);
         }
         // if (buffer[nbytes_read - 1] == '\n')
@@ -229,7 +229,7 @@ void *e3_agent_dapp_task(void* args_p){
 
         // convert to int and update global variable with trigger received from socket
         // NOTE: if below: > 1 does not make sense, and atof returns 0.0 if conversion is unsuccessful (e.g., the string is not a number)
-        LOG_D(E3AP, "%s", buffer);
+        LOG_D(E3AP, "buffer is %s", buffer);
       }
 
       close(client_sockfd);

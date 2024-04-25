@@ -1895,6 +1895,11 @@ if(E2_AGENT)
   target_compile_definitions(nr-softmodem PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
 endif()
 
+if (E3_AGENT)
+    message(STATUS "E3_Agent status is ${E3_AGENT}")
+    target_compile_definitions(nr-softmodem PRIVATE E3_AGENT)
+    # Here realistically you can add e3ap, at the moment is not linked correctly
+endif()
 
 
 # force the generation of ASN.1 so that we don't need to wait during the build

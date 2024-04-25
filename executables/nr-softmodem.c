@@ -534,7 +534,8 @@ int main( int argc, char **argv ) {
 //////////////////////////////////
 //// Init the E3 Agent
 #ifdef E3_AGENT
-  e3_agent_init();
+  printf("Init E3 Agent\n");
+  e3_agent_init(); 
 #endif // E3_AGENT
 
 #if T_TRACER

@@ -17,7 +17,8 @@
 #include <unistd.h>
 
 // If this does not work, use /home/wineslab/openairinterface5g/common/
-#define T_MESSAGES_PATH "../utils/T/T_messages.txt"
+// TODO use relative path passed from CMAKE
+#define T_MESSAGES_PATH "/home/wines/spear-openairinterface5g/common/utils/T/T_messages.txt"
 
 typedef struct e3_agent_tracer_info{
     void *database;
