@@ -84,6 +84,44 @@ void *nrmac_stats_thread(void *arg) {
   return NULL;
 }
 
+void *prb_update_thread(void *arg) {
+
+  gNB_MAC_INST *gNB = (gNB_MAC_INST *)arg;
+  char *addr = "127.0.0.1";
+  int port = 9999;
+  int s;
+  pthread_mutex_t lock;
+
+  printf("connecting to %s:%d\n", addr, port);
+  s=get_connection(addr,port);
+  gNB->prb_thread_listen_sock = s;
+
+  char buf[2],l,*buffer;
+  int len;
+
+  while(1) {
+    l = read(gNB->prb_thread_listen_sock, buf, 2);
+    if (l == 2) {
+      pthread_mutex_lock(&lock);
+      len = ((buf[1]<<8) & 0xFF) | (buf[0] & 0xFF);
+      buffer = (char*)malloc(len*sizeof(uint16_t));
+      l = read(gNB->prb_thread_listen_sock, buffer, len*2);
+
+      for(int j=0;j<275;j++){
+        gNB->dyn_prbbl[j] = 0;
+      }
+
+      for(int j=0;j<len;j++){
+        gNB->dyn_prbbl[(buffer[2*j+1]<<8 & 0xFF) | (buffer[2*j]& 0xFF)] = 0x3FFF;
+      }
+
+      free(buffer);
+      pthread_mutex_unlock(&lock);
+	}
+  }
+  return NULL;
+}
+
 void clear_mac_stats(gNB_MAC_INST *gNB) {
   UE_iterator(gNB->UE_info.connected_ue_list, UE) {
     memset(&UE->mac_stats,0,sizeof(UE->mac_stats));
@@ -307,6 +345,9 @@ void mac_top_init_gNB(ngran_node_t node_type,
         RC.nrmac[i]->pre_processor_dl = nr_init_dlsch_preprocessor();
         RC.nrmac[i]->pre_processor_ul = nr_init_ulsch_preprocessor();
       }
+      // Prb policy updating
+      threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void*)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX );
+
       if (!IS_SOFTMODEM_NOSTATS)
         threadCreate(&RC.nrmac[i]->stats_thread,
                      nrmac_stats_thread,

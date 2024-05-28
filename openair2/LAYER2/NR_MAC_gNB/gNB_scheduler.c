@@ -166,6 +166,7 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
             "periodical UE stats deactivated after reaching %d UEs, please check nrMAC_stats.log, or increase MACRLCs.[0].stats_max_ue\n",
             gNB->stats_max_ue);
     }
+    nr_update_prb_policy(module_idP, frame, slot);
   }
 
   nr_measgap_scheduling(gNB, frame, slot);

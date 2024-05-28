@@ -18,7 +18,7 @@
 
 // If this does not work, use /home/wineslab/openairinterface5g/common/
 // TODO use relative path passed from CMAKE
-#define T_MESSAGES_PATH "/home/wines/spear-openairinterface5g/common/utils/T/T_messages.txt"
+#define T_MESSAGES_PATH "/home/rajeev/spear-openairinterface5g/common/utils/T/T_messages.txt"
 
 typedef struct e3_agent_tracer_info{
     void *database;
@@ -45,6 +45,7 @@ int e3_agent_destroy();
 
 void *e3_agent_t_tracer_task(void* args_p);
 void *e3_agent_dapp_task(void* args_p);
-
+int e3_agent_t_tracer_extract(void);
+void e3_agent_t_tracer_init(void);
 
 #endif // E3_AGENT_H
