@@ -16,9 +16,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-// If this does not work, use /home/wineslab/openairinterface5g/common/
-// TODO use relative path passed from CMAKE
-#define T_MESSAGES_PATH "/home/rajeev/spear-openairinterface5g/common/utils/T/T_messages.txt"
+// Ensure the macro is defined
+#ifndef T_MESSAGES_PATH
+#define T_MESSAGES_PATH "/home/wineslab/openairinterface5g/common/utils/T/T_messages.txt"
+#endif
+
 
 typedef struct e3_agent_tracer_info{
     void *database;
