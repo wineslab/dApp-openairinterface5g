@@ -137,25 +137,22 @@ int e3_agent_t_tracer_extract(void){
     if (e.type == -1)
       break;
     if (e.type == e3_agent_raw_iq_data_id) {
-      unsigned char *buf = e.e[data].b;
-      LOG_D(E3AP,"Get GNB_PHY_INPUT_SIGNAL event buffer length %d = [", e.e[data].bsize);
+
+      LOG_D(E3AP,"Get GNB_PHY_INPUT_SIGNAL event buffer length %d\n", e.e[data].bsize);
       if(e.e[data].bsize > 0){
         char pkt[e.e[data].bsize+4];
         pkt[0] = (e.e[data].bsize >> 24) & 0xFF;
         pkt[1] = (e.e[data].bsize >> 16) & 0xFF;
         pkt[2] = (e.e[data].bsize >> 8) & 0xFF;
         pkt[3] = e.e[data].bsize & 0xFF;
-        memcpy(pkt + 4, e.e[data].b, e.e[data].bsize);
+        memcpy(pkt+4,e.e[data].b,e.e[data].bsize);
 
         if (socket_send(socket_d, pkt, e.e[data].bsize+4) == -1){
-          printf(" couldn't send the data");
+          LOG_E(E3AP, " couldn't send the data\n");
           abort();
         }
       }
 
-      for (i = 0; i < e.e[data].bsize; i++)
-        LOG_D(E3AP," %2.2x", buf[i]);
-      LOG_D(E3AP, "]\n");
     }
   }
   return 1;
