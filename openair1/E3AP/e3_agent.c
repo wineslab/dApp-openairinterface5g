@@ -145,7 +145,7 @@ int e3_agent_t_tracer_extract(void){
         pkt[1] = (e.e[data].bsize >> 16) & 0xFF;
         pkt[2] = (e.e[data].bsize >> 8) & 0xFF;
         pkt[3] = e.e[data].bsize & 0xFF;
-        memcpy(pkt+4,e.e[data].b,e.e[data].bsize);
+        memcpy(pkt + 4, e.e[data].b, e.e[data].bsize);
 
         if (socket_send(socket_d, pkt, e.e[data].bsize+4) == -1){
           printf(" couldn't send the data");
