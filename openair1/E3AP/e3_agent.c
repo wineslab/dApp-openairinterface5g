@@ -19,7 +19,6 @@
 #include "common/ran_context.h"
 #include "common/utils/LOG/log.h"
 
-pthread_t t_tracer_thread;
 pthread_t e3_interface_thread;
 
 /* this function sends the activated traces to the nr-softmodem */
@@ -56,16 +55,13 @@ int e3_agent_init() {
 }
 
 int e3_agent_destroy(){
-
-  if (pthread_join(t_tracer_thread, NULL) != 0) {
-        LOG_E(E3AP, "Error joining T tracer thread: %s\n", strerror(errno));
-        return -1;
-  }
   
   if (pthread_join(e3_interface_thread, NULL) != 0) {
         LOG_E(E3AP, "Error joining E3 interface thread: %s\n", strerror(errno));
         return -1;
   }
+
+  unlink(DAPP_SOCKET_PATH);
 
   return 0;
 }
@@ -93,6 +89,45 @@ void e3_agent_t_tracer_init(void){
   activate_traces(tracer_info->socket, number_of_events, is_on);
 }
 
+// This code may be integrated later with common/utils/T/tracer/utils.c
+int try_connect_to_uds(char *path) {
+  int s;
+  struct sockaddr_un a;
+  s = socket(AF_UNIX, SOCK_STREAM, 0);
+
+  if (s == -1) {
+    perror("socket");
+    exit(1);
+  }
+
+  memset(&a, 0, sizeof(struct sockaddr_un));
+  a.sun_family = AF_UNIX;
+  strncpy(a.sun_path, path, sizeof(a.sun_path) - 1);
+
+  if (connect(s, (struct sockaddr *)&a, sizeof(a)) == -1) {
+    perror("connect");
+    close(s);
+    return -1;
+  }
+
+  return s;
+}
+
+int connect_to_uds(char* path){
+  int s;
+  printf("connecting to %s\n", path);
+again:
+  s = try_connect_to_uds(path);
+
+  if (s == -1) {
+    perror("trying again in 1s\n");
+    sleep(1);
+    goto again;
+  }
+
+  return s;
+}
+
 int e3_agent_t_tracer_extract(void){
 
   int number_of_events;
@@ -113,8 +148,8 @@ int e3_agent_t_tracer_extract(void){
   /* activate the trace GNB_PHY_UL_FREQ_SENSING_SYMBOL in the nr-softmodem */
   activate_traces(tracer_info->socket, number_of_events, is_on);
 
-  char *ip_d = "127.0.0.1";
-  socket_d = connect_to(ip_d, 9990);
+  // Create a UDS socket and connect to the dApp
+  socket_d = connect_to_uds(E3_SOCKET_PATH);
 
   /* get the format of the GNB_PHY_UL_FREQ_SENSING_SYMBOL trace */
   e3_agent_raw_iq_data_id = event_id_from_name(tracer_info->database, "GNB_PHY_UL_FREQ_SENSING_SYMBOL");
