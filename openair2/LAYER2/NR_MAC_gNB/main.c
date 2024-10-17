@@ -86,6 +86,7 @@ void *nrmac_stats_thread(void *arg) {
   return NULL;
 }
 
+#ifdef USE_E3_UDS
 // This code may be integrated later with common/utils/T/tracer/utils.c
 int create_listen_uds_socket(char *path)
 {
@@ -153,15 +154,25 @@ int get_uds_connection(char *path)
   printf("connected\n");
   return t;
 }
+#endif
 
 void *prb_update_thread(void *arg) {
 
   gNB_MAC_INST *gNB = (gNB_MAC_INST *)arg;
+#ifndef USE_E3_UDS
+  char *addr = "127.0.0.1";
+  int port = 9999;
+#endif
   int s;
   pthread_mutex_t lock;
 
+#ifdef USE_E3_UDS
   printf("connecting to %s\n", DAPP_SOCKET_PATH);
   s=get_uds_connection(DAPP_SOCKET_PATH);
+#else
+  printf("connecting to %s:%d\n", addr, port);
+  s=get_connection(addr,port);
+#endif
   gNB->prb_thread_listen_sock = s;
 
   char buf[2],l,*buffer;

@@ -54,14 +54,16 @@ int e3_agent_init() {
   return 0;
 }
 
-int e3_agent_destroy(){
-  
+int e3_agent_destroy()
+{
   if (pthread_join(e3_interface_thread, NULL) != 0) {
-        LOG_E(E3AP, "Error joining E3 interface thread: %s\n", strerror(errno));
-        return -1;
+    LOG_E(E3AP, "Error joining E3 interface thread: %s\n", strerror(errno));
+    return -1;
   }
 
+#ifdef USE_E3_UDS
   unlink(DAPP_SOCKET_PATH);
+#endif
 
   return 0;
 }
@@ -90,6 +92,7 @@ void e3_agent_t_tracer_init(void){
 }
 
 // This code may be integrated later with common/utils/T/tracer/utils.c
+#ifdef USE_E3_UDS
 int try_connect_to_uds(char *path) {
   int s;
   struct sockaddr_un a;
@@ -127,6 +130,7 @@ again:
 
   return s;
 }
+#endif
 
 int e3_agent_t_tracer_extract(void){
 
@@ -151,8 +155,15 @@ int e3_agent_t_tracer_extract(void){
   /* activate the trace GNB_PHY_UL_FREQ_SENSING_SYMBOL in the nr-softmodem */
   activate_traces(tracer_info->socket, number_of_events, is_on);
 
-  // Create a UDS socket and connect to the dApp
+  // Create a socket and connect to the dApp
+#ifndef USE_E3_UDS
+  // We use TCP
+  char *ip_d = "127.0.0.1";
+  socket_d = connect_to(ip_d, 9990);
+#else
+  // We use UDS
   socket_d = connect_to_uds(E3_SOCKET_PATH);
+#endif
 
   /* get the format of the GNB_PHY_UL_FREQ_SENSING_SYMBOL trace */
   e3_agent_raw_iq_data_id = event_id_from_name(tracer_info->database, "GNB_PHY_UL_FREQ_SENSING_SYMBOL");
