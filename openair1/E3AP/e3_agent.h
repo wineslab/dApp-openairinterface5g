@@ -24,9 +24,9 @@
 #endif
 
 // E3 Interface Path
-#define E3_SOCKET_PATH "/root/e3_socket"
+#define E3_SOCKET_PATH "/tmp/dapps/e3_socket"
 // Control Action Path
-#define DAPP_SOCKET_PATH "/root/dapp_socket"
+#define DAPP_SOCKET_PATH "/tmp/dapps/dapp_socket"
 
 typedef struct e3_agent_tracer_info{
     void *database;
