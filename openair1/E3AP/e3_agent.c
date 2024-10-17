@@ -136,6 +136,9 @@ int e3_agent_t_tracer_extract(void){
   int e3_agent_raw_iq_data_id;
   database_event_format f;
   int socket_d;
+  // Each sensing is done once every 10ms
+  // int sampling_threshold = 0; // one delivery each sampling_threshold samples captures
+  // int sampling_counter = 0;
 
   /* write on a socket fails if the other end is closed and we get SIGPIPE */
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
@@ -181,10 +184,14 @@ int e3_agent_t_tracer_extract(void){
         pkt[2] = (e.e[data].bsize >> 8) & 0xFF;
         pkt[3] = e.e[data].bsize & 0xFF;
         memcpy(pkt+4,e.e[data].b,e.e[data].bsize);
+        // sampling_counter += 1;
 
-        if (socket_send(socket_d, pkt, e.e[data].bsize+4) == -1){
-          LOG_E(E3AP, " couldn't send the data\n");
-          abort();
+        // if (sampling_counter > sampling_threshold) {
+          if (socket_send(socket_d, pkt, e.e[data].bsize + 4) == -1) {
+            LOG_E(E3AP, " couldn't send the data\n");
+            abort();
+          // }
+          // sampling_counter = 0;
         }
       }
 
