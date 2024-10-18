@@ -149,6 +149,10 @@ function main() {
              CMAKE_CMD="$CMAKE_CMD -DE3_AGENT=ON"
              shift
              ;;
+      --use-e3-uds )
+             CMAKE_CMD="$CMAKE_CMD -DUSE_E3_UDS=ON"
+             shift
+             ;;
        -I | --install-external-packages)
             INSTALL_EXTERNAL=1
             echo_info "Will install external packages"

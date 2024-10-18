@@ -41,7 +41,9 @@
 #include "time_meas.h"
 #include "utils.h"
 
+#ifdef E3_AGENT
 #include <openair1/E3AP/e3_agent.h>
+#endif
 
 #define MACSTATSSTRLEN 36256
 
@@ -156,6 +158,7 @@ int get_uds_connection(char *path)
 }
 #endif
 
+#ifdef E3_AGENT
 void *prb_update_thread(void *arg) {
 
   gNB_MAC_INST *gNB = (gNB_MAC_INST *)arg;
@@ -200,6 +203,7 @@ void *prb_update_thread(void *arg) {
   }
   return NULL;
 }
+#endif
 
 void clear_mac_stats(gNB_MAC_INST *gNB) {
   UE_iterator(gNB->UE_info.connected_ue_list, UE) {
@@ -424,8 +428,11 @@ void mac_top_init_gNB(ngran_node_t node_type,
         RC.nrmac[i]->pre_processor_dl = nr_init_dlsch_preprocessor();
         RC.nrmac[i]->pre_processor_ul = nr_init_ulsch_preprocessor();
       }
+
+#ifdef E3_AGENT
       // Prb policy updating
       threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void*)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX );
+#endif
 
       if (!IS_SOFTMODEM_NOSTATS)
         threadCreate(&RC.nrmac[i]->stats_thread,
