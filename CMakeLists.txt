@@ -1375,6 +1375,13 @@ if(OAI_AERIAL)
     target_compile_definitions(L2_NR PRIVATE ENABLE_AERIAL)
 endif()
 
+if(E3_AGENT)
+  target_compile_definitions(L2_NR PRIVATE PRIVATE E3_AGENT)
+  if(USE_E3_UDS)
+      target_compile_definitions(L2_NR PRIVATE USE_E3_UDS)
+  endif()
+endif()
+
 add_library(L2_LTE_NR
   # temporary solution until 4G/5G code completely untangled (as evidenced by deletion of the following file)
   ${MAC_DIR}/dummy_functions.c
