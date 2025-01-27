@@ -1,16 +1,16 @@
-add_library(e3ap e3_agent.c)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CZMQ REQUIRED libzmq)
 
-# target_link_libraries(e3ap PUBLIC OCP_ITTI)
-
-if(USE_E3_UDS)
-    message(STATUS "Use UNIX Domain Sockets for E3 interface")
-    target_compile_definitions(e3ap PRIVATE USE_E3_UDS)
-else()
-    message(STATUS "Use TCP Sockets for E3 interface")
+if(NOT CZMQ_FOUND)
+    message(FATAL_ERROR "CZMQ not found and required for E3AP, install it with apt-get install libczmq-dev")
 endif()
+
+add_subdirectory(MESSAGES)
+add_library(e3ap e3_agent.c e3ap_handler.c e3_connector.c)
+
+target_link_libraries(e3ap PUBLIC ${CZMQ_LIBRARIES} tracer_utils asn1_e3ap)
+# target_link_libraries(e3ap PUBLIC OCP_ITTI)
 
 target_include_directories(e3ap PUBLIC ${OPENAIR_DIR}/common/utils/T/tracer)
 
 target_compile_definitions(e3ap PRIVATE T_MESSAGES_PATH="${OPENAIR_DIR}/common/utils/T/T_messages.txt")
-
-target_link_libraries(e3ap PUBLIC tracer_utils)

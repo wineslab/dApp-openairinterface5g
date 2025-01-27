@@ -12,6 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <math.h>
+#include <sys/un.h>
+#include <sys/stat.h>
 
 void new_thread(void *(*f)(void *), void *data) {
   pthread_t t;
@@ -231,6 +233,118 @@ again:
   }
 
   return s;
+}
+
+/****************************************************************************/
+/* unix domain socket                                                       */
+/****************************************************************************/
+
+
+int try_connect_to_uds(char *path)
+{
+  int s;
+  struct sockaddr_un a;
+  s = socket(AF_UNIX, SOCK_STREAM, 0);
+
+  if (s == -1) {
+    perror("socket");
+    exit(1);
+  }
+
+  memset(&a, 0, sizeof(struct sockaddr_un));
+  a.sun_family = AF_UNIX;
+  strncpy(a.sun_path, path, sizeof(a.sun_path) - 1);
+
+  if (connect(s, (struct sockaddr *)&a, sizeof(a)) == -1) {
+    perror("connect");
+    close(s);
+    return -1;
+  }
+
+  return s;
+}
+
+int connect_to_uds(char *path)
+{
+  int s;
+  printf("connecting to %s\n", path);
+again:
+  s = try_connect_to_uds(path);
+
+  if (s == -1) {
+    perror("trying again in 1s\n");
+    sleep(1);
+    goto again;
+  }
+
+  return s;
+}
+
+int create_listen_uds_socket(char *path)
+{
+  struct sockaddr_un a;
+  int s;
+  int v;
+  s = socket(AF_UNIX, SOCK_STREAM, 0);
+
+  if (s == -1) {
+    perror("socket");
+    exit(1);
+  }
+
+  v = 1;
+
+  if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(int))) {
+    perror("setsockopt");
+    exit(1);
+  }
+
+  // Bind the socket to a file path
+  memset(&a, 0, sizeof(struct sockaddr_un));
+  a.sun_family = AF_UNIX;
+  strncpy(a.sun_path, path, sizeof(a.sun_path) - 1);
+
+  // Remove any existing socket file
+  unlink(path);
+
+  if (bind(s, (struct sockaddr *)&a, sizeof(a)) == -1) {
+    perror("Bind failed");
+    close(s);
+    exit(1);
+  }
+
+    // Set permissions to 770 (rwxrwx---) to make sure groups can access
+    if (chmod(path, 0770) == -1) {
+        perror("Failed to change permissions");
+        close(s);
+        exit(1);
+    }
+
+  // Listen for incoming connections
+  if (listen(s, 5) == -1) {
+    perror("Listen failed");
+    close(s);
+    exit(1);
+  }
+
+  return s;
+}
+
+int get_uds_connection(char *path)
+{
+  int s, t;
+  printf("waiting for connection on %s\n", path);
+  s = create_listen_uds_socket(path);
+  t = socket_accept(s);
+
+  if (t == -1) {
+    perror("accept");
+    exit(1);
+  }
+
+  close(s);
+  printf("connected\n");
+  return t;
 }
 
 /****************************************************************************/

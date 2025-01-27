@@ -908,8 +908,9 @@ typedef struct gNB_MAC_INST_s {
   /// Pointer to IF module instance for PHY
   NR_IF_Module_t                  *if_inst;
   pthread_t                       stats_thread;
+#ifdef E3_AGENT
   pthread_t                       prb_update_thread;
-  int                             prb_thread_listen_sock;
+#endif
   /// Subcarrier Offset
   int                             ssb_SubcarrierOffset;
   int                             ssb_OffsetPointA;

@@ -16,31 +16,22 @@
 
 #include <unistd.h>
 
-// If this does not work, use /home/wineslab/openairinterface5g/common/
-// TODO use relative path passed from CMAKE
-// Ensure the macro is defined
-#ifndef T_MESSAGES_PATH
-#define T_MESSAGES_PATH "/home/wineslab/spear-openairinterface5g/common/utils/T/T_messages.txt"
-#endif
-
-#ifndef USE_E3_UDS
 #include <netinet/in.h>
-#else
 #include <sys/un.h>
-// E3 Interface Path
-#define E3_SOCKET_PATH "/tmp/dapps/e3_socket"
-// Control Action Path
-#define DAPP_SOCKET_PATH "/tmp/dapps/dapp_socket"
-#endif
+
+#include "common/config/config_userapi.h"
+#include "common/config/config_paramdesc.h"
 
 typedef struct e3_agent_tracer_info{
     void *database;
     int socket;
 } e3_agent_tracer_info_t;
 
-typedef struct e3_agent_interface_info{
-    int info;
-} e3_agent_interface_info_t;
+typedef struct e3_config{
+    char* link;
+    char* transport;
+    int sampling;
+} e3_config_t;
 
 /**
  * @brief E3 agent control variables
@@ -48,7 +39,13 @@ typedef struct e3_agent_interface_info{
  *
 */
 typedef struct e3_agent_controls{
-    int trigger_iq_dump; // IQS: trigger to dump IQs on file
+    char* action_list;
+    int action_size;
+    int ready;
+    int sampling_threshold;
+    int sampling_counter;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
 } e3_agent_controls_t;
 
 extern e3_agent_controls_t* e3_agent_control;
@@ -57,7 +54,6 @@ int e3_agent_init();
 int e3_agent_destroy();
 
 void *e3_agent_dapp_task(void* args_p);
-int e3_agent_t_tracer_extract(void);
 void e3_agent_t_tracer_init(void);
 
 #endif // E3_AGENT_H

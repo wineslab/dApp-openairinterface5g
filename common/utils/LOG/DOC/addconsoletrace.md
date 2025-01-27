@@ -11,7 +11,7 @@ LOG_D(<component>,<format>,<argument>,...)
 LOG_T(<component>,<format>,<argument>,...)
 )
 ```
-these macros are used in place of the printf C function. The additionnal ***component*** parameter identifies the functionnal module which generates the message. At run time, the message will only be printed if the configured log level for the component is greater or equal than the macro level used in the code.
+these macros are used in place of the printf C function. The additionnal ***component*** parameter identifies the functional module which generates the message. At run time, the message will only be printed if the configured log level for the component is greater or equal than the macro level used in the code.
 
 | macro | level letter | level value | level name |
 |:---------|:---------------|:---------------|----------------:|

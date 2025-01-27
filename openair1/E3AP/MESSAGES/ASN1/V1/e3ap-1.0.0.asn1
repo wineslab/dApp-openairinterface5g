@@ -1,0 +1,27 @@
+E3 DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+    E3-SetupRequest ::= SEQUENCE {
+        ranIdentifier         INTEGER (0..15),
+        ranFunctionsList      SEQUENCE OF INTEGER (0..255)
+    }
+
+    E3-SetupResponse ::= SEQUENCE {
+        responseCode          ENUMERATED {positive(0), negative(1)}
+    }
+
+    E3-IndicationMessage ::= SEQUENCE {
+        protocolData          OCTET STRING (SIZE(1..8192))
+    }
+
+    E3-ControlAction ::= SEQUENCE {
+        actionData            OCTET STRING (SIZE(1..64))
+    }
+
+    E3-PDU ::= CHOICE {
+        setupRequest          [0] E3-SetupRequest,
+        setupResponse         [1] E3-SetupResponse,
+        indicationMessage     [2] E3-IndicationMessage,
+        controlAction         [3] E3-ControlAction
+    }
+
+END

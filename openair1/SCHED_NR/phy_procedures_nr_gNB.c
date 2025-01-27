@@ -25,6 +25,10 @@
 #include <stdint.h>
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 
+#ifdef E3_AGENT
+#include <openair1/E3AP/e3_agent.h>
+#endif // E3_AGENT
+
 //#define DEBUG_RXDATA
 //#define SRS_IND_DEBUG
 
@@ -1242,21 +1246,25 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     stop_meas(&gNB->rx_srs_stats);
   }
 
+#ifdef E3_AGENT
   //Spectrum Listening Symbols
   if(nr_slot_select(&gNB->gNB_config, frame_rx, slot_rx) == NR_UPLINK_SLOT && slot_rx == 8){
     uint16_t n_symbols = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot;
     // Extracting 12th symbol
     uint64_t symbol_offset = (n_symbols)*gNB->frame_parms.ofdm_symbol_size+(12)*gNB->frame_parms.ofdm_symbol_size;
-    int32_t *rx_signal;
-    rx_signal = (int32_t *)&gNB->common_vars.rxdataF[0][symbol_offset];
-
-    T(T_GNB_PHY_UL_FREQ_SENSING_SYMBOL,
-      T_INT(0),
-      T_INT(frame_rx),
-      T_INT(slot_rx),
-      T_INT(0),
-      T_BUFFER(rx_signal, (gNB->frame_parms.ofdm_symbol_size)*sizeof(int32_t)));
+    int32_t *rx_signal = (int32_t *) &gNB->common_vars.rxdataF[0][symbol_offset];
+    e3_agent_control->sampling_counter++;
+    if (e3_agent_control->sampling_counter > e3_agent_control->sampling_threshold) {
+      T(T_GNB_PHY_UL_FREQ_SENSING_SYMBOL,
+        T_INT(0),
+        T_INT(frame_rx),
+        T_INT(slot_rx),
+        T_INT(0),
+        T_BUFFER(rx_signal, (gNB->frame_parms.ofdm_symbol_size) * sizeof(int32_t)));
+      e3_agent_control->sampling_counter = 0;
+    }
   }
+#endif // E3_AGENT
 
   stop_meas(&gNB->phy_proc_rx);
 

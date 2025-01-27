@@ -735,6 +735,9 @@ set(SCHED_NR_SRC
 add_library(SCHED_NR_LIB ${SCHED_NR_SRC})
 target_link_libraries(SCHED_NR_LIB PRIVATE asn1_nr_rrc_hdrs UTIL)
 target_link_libraries(SCHED_NR_LIB PRIVATE NFAPI_LIB) # some FAPI messages pack "subPDUs"
+if(E3_AGENT)
+  target_compile_definitions(SCHED_NR_LIB PRIVATE E3_AGENT)
+endif()
 
 set(SCHED_SRC_RU
   ${OPENAIR1_DIR}/SCHED/ru_procedures.c
@@ -1376,10 +1379,7 @@ if(OAI_AERIAL)
 endif()
 
 if(E3_AGENT)
-  target_compile_definitions(L2_NR PRIVATE PRIVATE E3_AGENT)
-  if(USE_E3_UDS)
-      target_compile_definitions(L2_NR PRIVATE USE_E3_UDS)
-  endif()
+  target_compile_definitions(L2_NR PRIVATE E3_AGENT)
 endif()
 
 add_library(L2_LTE_NR
@@ -1905,7 +1905,6 @@ endif()
 if (E3_AGENT)
     target_link_libraries(nr-softmodem PRIVATE e3ap)
     target_compile_definitions(nr-softmodem PRIVATE E3_AGENT)
-    # Here realistically you can add e3ap, at the moment is not linked correctly
 endif()
 
 
