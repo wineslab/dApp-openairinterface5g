@@ -380,7 +380,7 @@ add_boolean_option(ENABLE_IMSCOPE_RECORD OFF "Enable recording IQ data for imsco
 #########################
 ##### E3 AGENT
 #########################
-set(E3_AGENT "OFF" CACHE STRING "O-RAN nGR E3 Agent for dApps")
+set(E3_AGENT "OFF" CACHE STRING "O-RAN nGRG E3 Agent for dApps")
 set_property(CACHE E3_AGENT PROPERTY STRINGS "ON" "OFF")
 
 ##################################################
