@@ -28,5 +28,5 @@ jobs:
     - name: Push to Public Repository
       run: |
         echo "Pushing to public repository..."
-        git remote add public git@github.com:wineslab/dApp-library.git
+        git remote add public git@github.com:wineslab/dApp-openairinterface5g.git
         git push public main:main --force
