@@ -54,10 +54,11 @@ void nr_update_prb_policy(module_id_t module_id, frame_t frame, sub_frame_t slot
   gNB_MAC_INST *mac = RC.nrmac[module_id];
 
   LOG_W(NR_MAC, "Barred_PRBs ");
-  for(int j=0;j<275;j++){
-    if (mac->dyn_prbbl[j]== 0x3FFF)  printf("%d ", j) ;
+  for (int j = 0; j < 275; j++) {
+    if (mac->dyn_prbbl[j] == 0x3FFF)
+      printf("%d ", j);
   }
-  printf("\n") ;
+  printf("\n");
 
   memcpy(mac->ulprbbl, mac->dyn_prbbl, 275 * sizeof(mac->dyn_prbbl[0]));
 }

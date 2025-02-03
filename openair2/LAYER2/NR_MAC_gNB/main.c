@@ -117,7 +117,8 @@ void *prb_update_thread(void *arg)
     }
 
     for (int j = 0; j < e3_agent_control->action_size; j++) {
-      gNB->dyn_prbbl[(e3_agent_control->action_list[2 * j + 1] << 8 & 0xFF) | (e3_agent_control->action_list[2 * j] & 0xFF)] = 0x3FFF;
+      gNB->dyn_prbbl[(e3_agent_control->action_list[2 * j + 1] << 8 & 0xFF) | (e3_agent_control->action_list[2 * j] & 0xFF)] =
+          0x3FFF;
     }
 
     NR_SCHED_UNLOCK(&gNB->sched_lock);
@@ -358,7 +359,7 @@ void mac_top_init_gNB(ngran_node_t node_type,
 
 #ifdef E3_AGENT
       // Prb policy updating
-      threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void*)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX );
+      threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void *)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX);
 #endif
 
       if (!IS_SOFTMODEM_NOSTATS)

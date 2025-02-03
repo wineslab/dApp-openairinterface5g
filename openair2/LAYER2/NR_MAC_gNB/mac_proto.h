@@ -49,9 +49,7 @@ void clear_nr_nfapi_information(gNB_MAC_INST *gNB, int CC_idP, frame_t frameP, s
 
 void nr_mac_update_timers(module_id_t module_id);
 
-void nr_update_prb_policy(module_id_t module_id,
-                          frame_t frame,
-                          sub_frame_t slot);
+void nr_update_prb_policy(module_id_t module_id, frame_t frame, sub_frame_t slot);
 
 void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame_rxP, slot_t slot_rxP, NR_Sched_Rsp_t *sched_info);
 
