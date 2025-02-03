@@ -312,7 +312,7 @@ void *publisher_thread(void *arg)
 
   /* a buffer needed to receive events from the nr-softmodem */
   OBUF ebuf = {osize : 0, omaxsize : 0, obuf : NULL};
-  LOG_D(E3AP, "Start infinte loop\n");
+  LOG_D(E3AP, "Start infinite loop\n");
   /* read events */
 
   // size_t fake_payload_length = sizeof(int32_t)*768 ;
@@ -324,24 +324,12 @@ void *publisher_thread(void *arg)
     if (e.type == -1)
       break;
     if (e.type == e3_agent_raw_iq_data_id) {
-      LOG_D(E3AP, "Get GNB_PHY_INPUT_SIGNAL event buffer length %d\n", e.e[data].bsize);
+      LOG_D(E3AP, "Get GNB_PHY_UL_FREQ_SENSING_SYMBOL event buffer length %d\n", e.e[data].bsize);
       for (size_t i = 0; i < 10; i++) {
         LOG_D(E3AP, "e.e[data].b[%zu] = %d\n", i, ((int32_t *)e.e[data].b)[i]);
       }
 
       if (e.e[data].bsize > 0) {
-        // long pkt[e.e[data].bsize];
-        // pkt[0] = (e.e[data].bsize >> 24) & 0xFF;
-        // pkt[1] = (e.e[data].bsize >> 16) & 0xFF;
-        // pkt[2] = (e.e[data].bsize >> 8) & 0xFF;
-        // pkt[3] = e.e[data].bsize & 0xFF;
-        // memcpy(pkt, e.e[data].b, e.e[data].bsize);
-
-        // if (socket_send(socket_d, pkt, e.e[data].bsize + 4) == -1) {
-        //   LOG_E(E3AP, " couldn't send the data\n");
-        //   abort();
-        // }
-
         // E3_PDU_t *indicationMessage = create_indication_message(fake_payload, fake_payload_length);        
         E3_PDU_t *indicationMessage = create_indication_message(e.e[data].b, e.e[data].bsize);
 
