@@ -910,7 +910,7 @@ typedef struct gNB_MAC_INST_s {
   pthread_t                       stats_thread;
 #ifdef E3_AGENT
   pthread_t                       prb_update_thread;
-#endif
+#endif // E3_AGENT
   /// Subcarrier Offset
   int                             ssb_SubcarrierOffset;
   int                             ssb_OffsetPointA;
@@ -921,7 +921,9 @@ typedef struct gNB_MAC_INST_s {
   uint16_t pdu_index[NFAPI_CC_MAX];
   /// UL PRBs blacklist
   uint16_t ulprbbl[MAX_BWP_SIZE];
+#ifdef E3_AGENT
   uint16_t dyn_prbbl[MAX_BWP_SIZE];
+#endif // E3_AGENT
   /// NFAPI Config Request Structure
   nfapi_nr_config_request_scf_t     config[NFAPI_CC_MAX];
   /// a PDCCH PDU groups DCIs per BWP and CORESET. The following structure

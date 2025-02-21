@@ -43,7 +43,7 @@
 
 #ifdef E3_AGENT
 #include <openair1/E3AP/e3_agent.h>
-#endif
+#endif // E3_AGENT
 
 #define MACSTATSSTRLEN 36256
 
@@ -58,18 +58,11 @@ void *nrmac_stats_thread(void *arg) {
     LOG_W(NR_MAC, "Cannot open nrMAC_stats.log: %d, %s\n", errno, strerror(errno));
     return NULL;
   }
-  FILE *file_runlog = fopen("statsMAC.log", "a");
-  if (!file_runlog) {
-    LOG_W(NR_MAC, "Cannot open statsMAC.log: %d, %s\n", errno, strerror(errno));
-    fclose(file);
-    return NULL;
-  }
 
   while (oai_exit == 0) {
     char *p = output;
     NR_SCHED_LOCK(&gNB->sched_lock);
-    size_t stats_length = dump_mac_stats(gNB, p, end - p, false);
-    p += stats_length;
+    p += dump_mac_stats(gNB, p, end - p, false);
     p += snprintf(p, end - p, "\n");
     p += print_meas_log(&gNB->gNB_scheduler, "gNB_scheduler", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->rx_ulsch_sdu, "rx_ulsch_sdu", NULL, NULL, p, end - p);
@@ -85,10 +78,6 @@ void *nrmac_stats_thread(void *arg) {
       LOG_E(NR_MAC, "error while writing nrMAC_stats.log: %d, %s\n", errno, strerror(errno));
       break;
     }
-    if (fwrite(output, stats_length, 1, file_runlog) != 1 || fflush(file_runlog) != 0) {
-      LOG_E(NR_MAC, "error while writing statsMAC.log: %d, %s\n", errno, strerror(errno));
-      break;
-    }
     sleep(1);
     if (ftruncate(fileno(file), 0) != 0 || fseek(file, 0, SEEK_SET) != 0) {
       LOG_E(NR_MAC, "error while writing nrMAC_stats.log: %d, %s\n", errno, strerror(errno));
@@ -96,7 +85,6 @@ void *nrmac_stats_thread(void *arg) {
     }
   }
   fclose(file);
-  fclose(file_runlog);
   return NULL;
 }
 
@@ -130,7 +118,7 @@ void *prb_update_thread(void *arg)
   }
   return NULL;
 }
-#endif
+#endif // E3_AGENT
 
 void clear_mac_stats(gNB_MAC_INST *gNB) {
   UE_iterator(gNB->UE_info.connected_ue_list, UE) {
@@ -360,7 +348,7 @@ void mac_top_init_gNB(ngran_node_t node_type,
 #ifdef E3_AGENT
       // Prb policy updating
       threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void *)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX);
-#endif
+#endif // E3_AGENT
 
       if (!IS_SOFTMODEM_NOSTATS)
         threadCreate(&RC.nrmac[i]->stats_thread,
