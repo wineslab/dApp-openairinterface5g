@@ -18,12 +18,13 @@ cd ./cmake_targets/ran_build/build
 
 umask 0000
 
-rm statsMAC.log
-rm statsPRB.log
-
 # x310 and x410
 # gdb --args
-taskset -ca 0-45 ./nr-softmodem -O ${OAI_CONFIG_DIR}${OAI_CONFIG_FILE} --gNBs.[0].min_rxtxtime 6 --sa --usrp-tx-thread-config 1  -E --T_stdout 2 --gNBs.[0].do_SRS 0
+# ASAN_OPTIONS=detect_odr_violation=0 LD_LIBRARY_PATH=. 
+taskset -ca 0-45 ./nr-softmodem -O ${OAI_CONFIG_DIR}${OAI_CONFIG_FILE} --gNBs.[0].min_rxtxtime 6 --sa --usrp-tx-thread-config 1 -E --T_stdout 2 --gNBs.[0].do_SRS 0
+
+# rfsim
+# valgrind --leak-check=full --track-origins=yes -s --log-file="valgrind.log" ./nr-softmodem -O ${OAI_CONFIG_DIR}${OAI_CONFIG_FILE} --rfsim --rfsimulator.serveraddr server
 
 # b210
 # ./nr-softmodem -O ${OAI_CONFIG_DIR}${OAI_CONFIG_FILE} --gNBs.[0].min_rxtxtime 6 --sa --usrp-tx-thread-config 1 -E  --T_stdout  2

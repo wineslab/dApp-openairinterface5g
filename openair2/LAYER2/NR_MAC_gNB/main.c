@@ -41,10 +41,6 @@
 #include "time_meas.h"
 #include "utils.h"
 
-#ifdef E3_AGENT
-#include <openair1/E3AP/e3_agent.h>
-#endif // E3_AGENT
-
 #define MACSTATSSTRLEN 36256
 
 void *nrmac_stats_thread(void *arg) {
@@ -87,38 +83,6 @@ void *nrmac_stats_thread(void *arg) {
   fclose(file);
   return NULL;
 }
-
-#ifdef E3_AGENT
-void *prb_update_thread(void *arg)
-{
-  gNB_MAC_INST *gNB = (gNB_MAC_INST *)arg;
-
-  while (1) {
-    pthread_mutex_lock(&e3_agent_control->mutex);
-    while (!e3_agent_control->ready) {
-      pthread_cond_wait(&e3_agent_control->cond, &e3_agent_control->mutex);
-    }
-
-    NR_SCHED_LOCK(&gNB->sched_lock);
-    for (int j = 0; j < 275; j++) {
-      gNB->dyn_prbbl[j] = 0;
-    }
-
-    for (int j = 0; j < e3_agent_control->action_size; j++) {
-      gNB->dyn_prbbl[(e3_agent_control->action_list[2 * j + 1] << 8 & 0xFF) | (e3_agent_control->action_list[2 * j] & 0xFF)] =
-          0x3FFF;
-    }
-
-    NR_SCHED_UNLOCK(&gNB->sched_lock);
-
-    free(e3_agent_control->action_list);
-
-    e3_agent_control->ready = 0; // Reset ready flag for next production
-    pthread_mutex_unlock(&e3_agent_control->mutex);
-  }
-  return NULL;
-}
-#endif // E3_AGENT
 
 void clear_mac_stats(gNB_MAC_INST *gNB) {
   UE_iterator(gNB->UE_info.connected_ue_list, UE) {
@@ -344,12 +308,6 @@ void mac_top_init_gNB(ngran_node_t node_type,
         RC.nrmac[i]->pre_processor_dl = nr_init_dlsch_preprocessor();
         RC.nrmac[i]->pre_processor_ul = nr_init_ulsch_preprocessor();
       }
-
-#ifdef E3_AGENT
-      // Prb policy updating
-      threadCreate(&RC.nrmac[i]->prb_update_thread, prb_update_thread, (void *)RC.nrmac[i], "prb_update", -1, OAI_PRIORITY_RT_MAX);
-#endif // E3_AGENT
-
       if (!IS_SOFTMODEM_NOSTATS)
         threadCreate(&RC.nrmac[i]->stats_thread,
                      nrmac_stats_thread,

@@ -1,8 +1,6 @@
 #ifndef E3_AGENT_H
 #define E3_AGENT_H
 
-#define _XOPEN_SOURCE 700
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +17,7 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 
+#include "common/utils/nr/nr_common.h"
 #include "common/config/config_userapi.h"
 #include "common/config/config_paramdesc.h"
 
@@ -41,11 +40,11 @@ typedef struct e3_config{
 typedef struct e3_agent_controls{
     char* action_list;
     int action_size;
+    uint16_t dyn_prbbl[MAX_BWP_SIZE];
     int ready;
     int sampling_threshold;
     int sampling_counter;
     pthread_mutex_t mutex;
-    pthread_cond_t cond;
 } e3_agent_controls_t;
 
 extern e3_agent_controls_t* e3_agent_control;

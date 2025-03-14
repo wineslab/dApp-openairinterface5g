@@ -8,8 +8,9 @@ cd ./cmake_targets/
 
 # ./build_oai -I
 
-./build_oai -w USRP --ninja --gNB --build-e3 --cmake-opt "-DCMAKE_C_FLAGS=-march=native -DCMAKE_CXX_FLAGS=-march=native"
-# --build-e2
+./build_oai -w USRP --ninja --gNB --build-e2 --build-e3 --cmake-opt "-DCMAKE_C_FLAGS=-march=native -DCMAKE_CXX_FLAGS=-march=native"
+
+# --sanitize
 # --nrUE
 # -g for gdb
 # e2_agent = {

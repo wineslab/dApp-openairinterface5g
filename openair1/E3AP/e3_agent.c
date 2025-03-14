@@ -145,7 +145,6 @@ int e3_agent_init()
   e3_agent_control = (e3_agent_controls_t *)malloc(sizeof(e3_agent_controls_t));
   
   pthread_mutex_init(&e3_agent_control->mutex, NULL);
-  pthread_cond_init(&e3_agent_control->cond, NULL);
   e3_agent_control->ready = 0;
 
   LOG_D(E3AP, "Start E3 Agent main thread\n");
@@ -201,6 +200,7 @@ void *subscriber_thread(void *arg)
   int action_list_size;
 
   e3connector->setup_inbound_connection(e3connector);
+  e3_agent_control->action_list = (char *) malloc(MAX_BWP_SIZE * sizeof(uint16_t));
 
   while (1) {
     ret = e3connector->receive(e3connector, buffer, buffer_size);
@@ -225,20 +225,31 @@ void *subscriber_thread(void *arg)
       action_list_size = ((controlPayload[1]<<8) & 0xFF) | (controlPayload[0] & 0xFF);
 
       LOG_D(E3AP, "action_list_size = %d\n", action_list_size);
-      pthread_mutex_lock(&e3_agent_control->mutex);
+
       for (size_t i = 0; i < controlAction->choice.controlAction->actionData.size; i++) {
         LOG_D(E3AP, "controlPayload[%zu] = %u\n", i, controlPayload[i]);
       }
-      e3_agent_control->action_list = (char *)malloc(action_list_size * sizeof(uint16_t));
-      memcpy(e3_agent_control->action_list, controlPayload + 2, action_list_size * sizeof(uint16_t));
+
+      int action_list_size_bits = action_list_size * sizeof(uint16_t);
+      int write_size = (action_list_size_bits < MAX_BWP_SIZE) ? action_list_size_bits : MAX_BWP_SIZE;
+  
+      pthread_mutex_lock(&e3_agent_control->mutex);
+      memcpy(e3_agent_control->action_list, controlPayload + 2, write_size);
       
       e3_agent_control->action_size = action_list_size;
       for (size_t i = 0; i < action_list_size; i++) {
           LOG_D(E3AP, "e3_agent_control[%zu] = %d\n", i, ((uint16_t*)e3_agent_control->action_list)[i]);
       }
 
+      memset(e3_agent_control->dyn_prbbl, 0, MAX_BWP_SIZE * sizeof(uint16_t));
+
+      for (int j = 0; j < e3_agent_control->action_size && j < MAX_BWP_SIZE; j++) {
+        e3_agent_control->dyn_prbbl[(e3_agent_control->action_list[2 * j + 1] << 8 & 0xFF) | (e3_agent_control->action_list[2 * j] & 0xFF)] = 0x3FFF;
+      }
+
+      memset(e3_agent_control->action_list, 0, e3_agent_control->action_size * sizeof(uint16_t));
+
       e3_agent_control->ready = 1; // Set ready flag to 1 to indicate data is available
-      pthread_cond_signal(&e3_agent_control->cond); // Notify consumer
       pthread_mutex_unlock(&e3_agent_control->mutex);
 
       free(controlPayload);
@@ -251,6 +262,7 @@ void *subscriber_thread(void *arg)
     free_E3_PDU(controlAction);
   }
 
+  free(e3_agent_control->action_list);
   return NULL;
 }
 
@@ -350,6 +362,12 @@ void *publisher_thread(void *arg)
     }
   }
 
+  free(buffer);
+  if(ebuf.obuf != NULL)
+  {
+    free(ebuf.obuf);
+  }
+  free(pub_sub_args);
   return NULL;
 }
 
@@ -419,7 +437,6 @@ void *e3_agent_dapp_task(void *args_p)
   free(buffer);
   
   pthread_mutex_destroy(&e3_agent_control->mutex);
-  pthread_cond_destroy(&e3_agent_control->cond);
 
   e3connector->dispose(e3connector);
 
