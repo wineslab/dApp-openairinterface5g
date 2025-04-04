@@ -1246,7 +1246,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
       const uint16_t n_symbols = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot;
       // Extracting 12th symbol
       uint64_t symbol_offset = (n_symbols)*gNB->frame_parms.ofdm_symbol_size + (12) * gNB->frame_parms.ofdm_symbol_size;
-      int32_t *rx_signal = (int32_t *) &rxdataF_sen[0][symbol_offset];
+      int32_t *rx_signal = (int32_t *)&rxdataF_sen[0][symbol_offset];
 
       // for(int i = 0; i < gNB->frame_parms.ofdm_symbol_size; i++){
       // 	LOG_D(E3AP, "i = %d, (%d  %d) \n",i, ((c16_t*) rx_signal)[i].r, ((c16_t*) rx_signal)[i].i);

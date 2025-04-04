@@ -239,7 +239,6 @@ again:
 /* unix domain socket                                                       */
 /****************************************************************************/
 
-
 int try_connect_to_uds(char *path)
 {
   int s;
@@ -313,12 +312,12 @@ int create_listen_uds_socket(char *path)
     exit(1);
   }
 
-    // Set permissions to 770 (rwxrwx---) to make sure groups can access
-    if (chmod(path, 0770) == -1) {
-        perror("Failed to change permissions");
-        close(s);
-        exit(1);
-    }
+  // Set permissions to 770 (rwxrwx---) to make sure groups can access
+  if (chmod(path, 0770) == -1) {
+    perror("Failed to change permissions");
+    close(s);
+    exit(1);
+  }
 
   // Listen for incoming connections
   if (listen(s, 5) == -1) {
