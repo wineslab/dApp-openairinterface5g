@@ -2,7 +2,3 @@
 
 add_subdirectory(PHY)
 add_subdirectory(SIMULATION)
-if(E3_AGENT)
-    message(STATUS "Add E3 Agent capabilities")
-    add_subdirectory(E3AP)
-endif()

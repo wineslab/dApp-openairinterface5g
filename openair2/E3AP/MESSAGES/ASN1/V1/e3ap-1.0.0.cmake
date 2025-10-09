@@ -48,11 +48,17 @@ set(e3ap_source
     constr_SET_OF_uper.c
     constr_SET_OF_xer.c
     constr_TYPE.c
+    E3-ActionType.c
     E3-ControlAction.c
     E3-IndicationMessage.c
+    E3-MessageAck.c
+    E3-MessageID.c
     E3-PDU.c
+    E3-ResponseCode.c
     E3-SetupRequest.c
     E3-SetupResponse.c
+    E3-SubscriptionRequest.c
+    E3-SubscriptionResponse.c
     ENUMERATED_aper.c
     ENUMERATED.c
     ENUMERATED_uper.c
@@ -128,11 +134,17 @@ set(e3ap_headers
     constr_SEQUENCE_OF.h
     constr_SET_OF.h
     constr_TYPE.h
+    E3-ActionType.h
     E3-ControlAction.h
     E3-IndicationMessage.h
+    E3-MessageAck.h
+    E3-MessageID.h
     E3-PDU.h
+    E3-ResponseCode.h
     E3-SetupRequest.h
     E3-SetupResponse.h
+    E3-SubscriptionRequest.h
+    E3-SubscriptionResponse.h
     ENUMERATED.h
     EXTERNAL.h
     GraphicString.h

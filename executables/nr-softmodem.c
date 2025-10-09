@@ -19,6 +19,11 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "openair2/E2AP/flexric/src/agent/e2_agent_api.h"
 #include "openair2/E2AP/RAN_FUNCTION/init_ran_func.h"
 #endif
+
+#ifdef E3_AGENT
+#include "openair2/E3AP/e3_agent.h"
+#endif
+
 #include "nr-softmodem.h"
 #include <common/utils/assertions.h>
 #include <openair2/GNB_APP/gnb_app.h>
@@ -69,10 +74,6 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "x2ap_eNB.h"
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
-
-#ifdef E3_AGENT
-#include "openair1/E3AP/e3_agent.h"
-#endif
 
 pthread_cond_t nfapi_sync_cond;
 pthread_mutex_t nfapi_sync_mutex;

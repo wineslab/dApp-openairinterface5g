@@ -49,9 +49,18 @@ int zeromq_send_response(E3Connector *self, const uint8_t *response, size_t resp
 int zeromq_setup_inbound_connection(E3Connector *self) {
     int conflate = 1;
     void *inbound_socket = zmq_socket(self->context, ZMQ_SUB);
-    int ret = zmq_connect(inbound_socket, self->inbound_endpoint);
+    int ret = zmq_bind(inbound_socket, self->inbound_endpoint);
     zmq_setsockopt(inbound_socket, ZMQ_SUBSCRIBE, "", 0);
     zmq_setsockopt(inbound_socket, ZMQ_CONFLATE, &conflate, sizeof(conflate)); // Keep only the last message
+    
+    if (strncmp(self->inbound_endpoint, "ipc", 3) == 0) {
+      if (chmod(DAPP_IPC_SOCKET_PATH, 0666) == -1) {
+        LOG_E(E3AP, "Failed to chmod IPC inbound endpoint: %s\n", strerror(errno));
+      } else {
+        LOG_I(E3AP, "Permissions of %s set correctly\n", self->inbound_endpoint);
+      }
+    }
+    
     self->inbound_socket = inbound_socket;
     return ret;
 }
@@ -249,25 +258,42 @@ int posix_setup_outbound_connection(E3Connector *self) {
       addr_in.sin_family = AF_INET;
       addr_in.sin_port = htons(9991);
       addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
-      ret = connect(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
+      ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
     } else if (strncmp(self->outbound_endpoint, "tcp", 3) == 0) {
       sock = socket(AF_INET, SOCK_STREAM, 0);
       addr_in.sin_family = AF_INET;
       addr_in.sin_port = htons(9991);
       addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
-      ret = connect(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
+      ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
     } else { // Unix Domain Sockets for POSIX IPC
       sock = socket(AF_UNIX, SOCK_STREAM, 0);
       addr_un.sun_family = AF_UNIX;
       strncpy(addr_un.sun_path, E3_IPC_SOCKET_PATH, sizeof(addr_un.sun_path) - 1);
-      ret = connect(sock, (struct sockaddr *)&addr_un, sizeof(addr_un));
+      ret = bind(sock, (struct sockaddr *)&addr_un, sizeof(addr_un));
     }
+    
+    if (ret < 0) {
+      LOG_E(E3AP, "Bind in setup outbound connection failed: %s\n", strerror(errno));
+      return ret;
+    }
+    
+    ret = listen(sock, 5);
+    if (ret < 0) {
+      LOG_E(E3AP, "Listen in setup outbound connection failed: %s\n", strerror(errno));
+      return ret;
+    }
+    
     self->outbound_socket = (void *)(intptr_t)sock;
+    self->outbound_connection_socket = accept((intptr_t)self->outbound_socket, NULL, NULL);
+    if (self->outbound_connection_socket <= 0) {
+      LOG_E(E3AP, "Accept in setup outbound connection failed: %s\n", strerror(errno));
+    }
+    
     return ret;
 }
 
 int posix_send(E3Connector *self, const uint8_t *payload, size_t payload_size) {
-    return send_in_chunks((intptr_t)self->outbound_socket, payload, payload_size);
+    return send_in_chunks(self->outbound_connection_socket, payload, payload_size);
 }
 
 void posix_dispose(E3Connector *self) {
@@ -277,6 +303,10 @@ void posix_dispose(E3Connector *self) {
 
   if (self->setup_connection_socket != UNUSED_SOCKET) {
     close(self->setup_connection_socket);
+  }
+
+  if (self->outbound_connection_socket != UNUSED_SOCKET) {
+    close(self->outbound_connection_socket);
   }
 
   close((intptr_t)self->inbound_socket);
@@ -376,6 +406,7 @@ E3Connector *create_connector(const char *link_layer, const char *transport_laye
 
     connector->inbound_connection_socket = UNUSED_SOCKET;
     connector->setup_connection_socket = UNUSED_SOCKET;
+    connector->outbound_connection_socket = UNUSED_SOCKET;
 
     connector->setup_initial_connection = posix_setup_initial_connection;
     connector->recv_setup_request = posix_recv_setup_request;

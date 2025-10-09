@@ -11,7 +11,7 @@ typedef struct E3Connector {
     char *setup_endpoint;
     char *inbound_endpoint;
     char *outbound_endpoint;
-    
+
     // Socket descriptors
     void *inbound_socket;
     void *outbound_socket;
@@ -20,13 +20,13 @@ typedef struct E3Connector {
     // POSIX only
     int inbound_connection_socket;
     int setup_connection_socket;
+    int outbound_connection_socket;
     int setup_happened;
 
     // ZMQ only
     void *context;
 
     // Wrapping function shared
-    
     int (*setup_initial_connection)(struct E3Connector *self);
     int (*recv_setup_request)(struct E3Connector *self, void *buffer, size_t buffer_size);
     int (*send_response)(struct E3Connector *self, const uint8_t *response, size_t response_size);
