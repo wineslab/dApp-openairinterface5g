@@ -118,13 +118,13 @@ int posix_setup_initial_connection(E3Connector *self){
     sock = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
     addr_in.sin_family = AF_INET;
     addr_in.sin_port = htons(9990);
-    addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
     ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
   } else if (strncmp(self->setup_endpoint, "tcp", 3) == 0) {
     sock = socket(AF_INET, SOCK_STREAM, 0);
     addr_in.sin_family = AF_INET;
     addr_in.sin_port = htons(9990);
-    addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
     ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
   } else { // Unix Domain Sockets for POSIX IPC
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -208,13 +208,13 @@ int posix_setup_inbound_connection(E3Connector *self)
     sock = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
     addr_in.sin_family = AF_INET;
     addr_in.sin_port = htons(9999);
-    addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
     ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
   } else if (strncmp(self->inbound_endpoint, "tcp", 3) == 0) {
     sock = socket(AF_INET, SOCK_STREAM, 0);
     addr_in.sin_family = AF_INET;
     addr_in.sin_port = htons(9999);
-    addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
     ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
   } else { // Unix Domain Sockets for POSIX IPC
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -257,13 +257,13 @@ int posix_setup_outbound_connection(E3Connector *self) {
       sock = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
       addr_in.sin_family = AF_INET;
       addr_in.sin_port = htons(9991);
-      addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+      addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
       ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
     } else if (strncmp(self->outbound_endpoint, "tcp", 3) == 0) {
       sock = socket(AF_INET, SOCK_STREAM, 0);
       addr_in.sin_family = AF_INET;
       addr_in.sin_port = htons(9991);
-      addr_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+      addr_in.sin_addr.s_addr = inet_addr("0.0.0.0");
       ret = bind(sock, (struct sockaddr *)&addr_in, sizeof(addr_in));
     } else { // Unix Domain Sockets for POSIX IPC
       sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -355,14 +355,14 @@ E3Connector *create_connector(const char *link_layer, const char *transport_laye
       connector->inbound_endpoint = "ipc://" DAPP_IPC_SOCKET_PATH;
       connector->outbound_endpoint = "ipc://" E3_IPC_SOCKET_PATH;
     } else if (strncmp(transport_layer, "tcp", 3) == 0) {
-      connector->setup_endpoint = "tcp://127.0.0.1:9990";
-      connector->inbound_endpoint = "tcp://127.0.0.1:9999";
-      connector->outbound_endpoint = "tcp://127.0.0.1:9991";
+      connector->setup_endpoint = "tcp://0.0.0.0:9990";
+      connector->inbound_endpoint = "tcp://0.0.0.0:9999";
+      connector->outbound_endpoint = "tcp://0.0.0.0:9991";
     } else if (strncmp(transport_layer, "sctp", 4) == 0) {
       // Not actually working because SCTP is not implemented in zeromq
-      connector->setup_endpoint = "sctp://127.0.0.1:9990";
-      connector->inbound_endpoint = "sctp://127.0.0.1:9999";
-      connector->outbound_endpoint = "sctp://127.0.0.1:9991";
+      connector->setup_endpoint = "sctp://0.0.0.0:9990";
+      connector->inbound_endpoint = "sctp://0.0.0.0:9999";
+      connector->outbound_endpoint = "sctp://0.0.0.0:9991";
     } else {
       free(connector);
       LOG_E(E3AP, "Unsupported transport layer for ZeroMQ: %s\n", transport_layer);
@@ -391,13 +391,13 @@ E3Connector *create_connector(const char *link_layer, const char *transport_laye
       connector->outbound_endpoint = E3_IPC_SOCKET_PATH;
     } else if (strncmp(transport_layer, "tcp", 3)
                == 0) { // these are not used at the moment and the code could benefit from using them
-      connector->setup_endpoint = "tcp://127.0.0.1:9990";
-      connector->inbound_endpoint = "tcp://127.0.0.1:9999";
-      connector->outbound_endpoint = "tcp://127.0.0.1:9991";
+      connector->setup_endpoint = "tcp://0.0.0.0:9990";
+      connector->inbound_endpoint = "tcp://0.0.0.0:9999";
+      connector->outbound_endpoint = "tcp://0.0.0.0:9991";
     } else if (strncmp(transport_layer, "sctp", 4) == 0) {
-      connector->setup_endpoint = "sctp://127.0.0.1:9990";
-      connector->inbound_endpoint = "sctp://127.0.0.1:9999";
-      connector->outbound_endpoint = "sctp://127.0.0.1:9991";
+      connector->setup_endpoint = "sctp://0.0.0.0:9990";
+      connector->inbound_endpoint = "sctp://0.0.0.0:9999";
+      connector->outbound_endpoint = "sctp://0.0.0.0:9991";
     } else {
       free(connector);
       LOG_E(E3AP, "Unsupported transport layer for POSIX: %s\n", transport_layer);

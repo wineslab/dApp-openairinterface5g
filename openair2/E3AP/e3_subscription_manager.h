@@ -41,6 +41,8 @@ extern "C" {
 #define E3_SM_ERROR_ALREADY_EXISTS      -5
 #define E3_SM_ERROR_NOT_SUBSCRIBED      -6
 #define E3_SM_ERROR_NOT_INITIALIZED     -7
+/* Error when SM start failed after adding a subscription */
+#define E3_SM_ERROR_SM_START_FAILED     -8
 
 /* Type definitions */
 typedef time_t timestamp_t;
@@ -59,7 +61,6 @@ typedef struct {
 typedef struct {
     uint32_t dapp_identifier;          /**< dApp ID (0-100) */
     uint32_t ran_function_id;          /**< RAN function ID (0-255) */
-    uint32_t subscription_id;          /**< Unique subscription ID */
     timestamp_t created_time;          /**< When subscription was created */
 } e3_subscription_entry_t;
 
@@ -79,7 +80,6 @@ typedef struct {
     e3_subscription_entry_t *entries;  /**< Array of subscription entries */
     size_t count;                      /**< Current number of subscriptions */
     size_t capacity;                   /**< Current array capacity */
-    uint32_t next_subscription_id;     /**< Counter for unique subscription IDs */
 } e3_subscription_list_t;
 
 /**
@@ -155,14 +155,19 @@ int e3_subscription_manager_add_subscription(e3_subscription_manager_t *manager,
                                            uint32_t dapp_id,
                                            uint32_t ran_function_id);
 
+
+
 /**
- * Remove a specific subscription by ID
+ * Remove a subscription for a specific dApp and RAN function
  * @param manager Subscription manager
- * @param subscription_id Subscription ID to remove
- * @return E3_SM_SUCCESS on success, error code on failure
+ * @param dapp_id dApp identifier (0-100)
+ * @param ran_function_id RAN function identifier (0-255)
+ * @return E3_SM_SUCCESS on success, E3_SM_ERROR_NOT_SUBSCRIBED if not found, other error codes on failure
  */
-int e3_subscription_manager_remove_subscription(e3_subscription_manager_t *manager,
-                                               uint32_t subscription_id);
+int e3_subscription_manager_remove_subscription_for_dapp(
+                                               e3_subscription_manager_t *manager,
+                                               uint32_t dapp_id,
+                                               uint32_t ran_function_id);
 
 /**
  * Remove all subscriptions for a specific dApp

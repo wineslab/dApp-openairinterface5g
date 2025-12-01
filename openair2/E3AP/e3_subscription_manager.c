@@ -1,4 +1,5 @@
 #include "e3_subscription_manager.h"
+#include "service_models/sm_interface.h"
 
 /**
  * @file e3_subscription_manager.c
@@ -131,7 +132,6 @@ int e3_subscription_manager_init(e3_subscription_manager_t *manager) {
     }
     manager->subscriptions.count = 0;
     manager->subscriptions.capacity = E3_SUBSCRIPTION_MANAGER_INITIAL_CAPACITY;
-    manager->subscriptions.next_subscription_id = 1;
     
     manager->initialized = true;
     LOG_I(E3AP, "Subscription manager initialized successfully\n");
@@ -229,6 +229,7 @@ int e3_subscription_manager_unregister_dapp(e3_subscription_manager_t *manager,
     
     LOG_I(E3AP, "dApp %u unregistered, %zu subscriptions removed\n", 
           dapp_id, subscriptions_removed);
+
     return E3_SM_SUCCESS;
 }
 
@@ -292,52 +293,46 @@ int e3_subscription_manager_add_subscription(e3_subscription_manager_t *manager,
     e3_subscription_entry_t *entry = &manager->subscriptions.entries[manager->subscriptions.count];
     entry->dapp_identifier = dapp_id;
     entry->ran_function_id = ran_function_id;
-    entry->subscription_id = manager->subscriptions.next_subscription_id++;
     entry->created_time = time(NULL);
     manager->subscriptions.count++;
-    
-    uint32_t subscription_id = entry->subscription_id;
     pthread_mutex_unlock(&manager->manager_mutex);
-    
-    return subscription_id;
+
+    return E3_SM_SUCCESS;
 }
 
-int e3_subscription_manager_remove_subscription(e3_subscription_manager_t *manager,
-                                               uint32_t subscription_id) {
+int e3_subscription_manager_remove_subscription_for_dapp(
+                                               e3_subscription_manager_t *manager,
+                                               uint32_t dapp_id,
+                                               uint32_t ran_function_id) {
     if (!manager || !manager->initialized) {
         return E3_SM_ERROR_NOT_INITIALIZED;
     }
-    
+
     pthread_mutex_lock(&manager->manager_mutex);
-    
-    // Find and remove subscription entry
+
     bool found = false;
     for (size_t i = 0; i < manager->subscriptions.count; i++) {
-        if (manager->subscriptions.entries[i].subscription_id == subscription_id) {
-            uint32_t dapp_id = manager->subscriptions.entries[i].dapp_identifier;
-            uint32_t ran_function_id = manager->subscriptions.entries[i].ran_function_id;
-            
-            // Move last entry to this position to fill the gap
+        if (manager->subscriptions.entries[i].dapp_identifier == dapp_id &&
+            manager->subscriptions.entries[i].ran_function_id == ran_function_id) {
             if (i < manager->subscriptions.count - 1) {
-                manager->subscriptions.entries[i] = 
+                manager->subscriptions.entries[i] =
                     manager->subscriptions.entries[manager->subscriptions.count - 1];
             }
             manager->subscriptions.count--;
             found = true;
-            
-            LOG_I(E3AP, "Subscription removed: dApp %u -> RAN function %u (ID: %u)\n",
-                  dapp_id, ran_function_id, subscription_id);
+            LOG_I(E3AP, "Subscription removed: dApp %u -> RAN function %u\n",
+                  dapp_id, ran_function_id);
             break;
         }
     }
-    
+
     pthread_mutex_unlock(&manager->manager_mutex);
-    
+
     if (!found) {
-        LOG_W(E3AP, "Subscription ID %u not found for removal\n", subscription_id);
-        return E3_SM_ERROR_NOT_FOUND;
+        LOG_W(E3AP, "Subscription not found for dApp %u -> RAN function %u\n", dapp_id, ran_function_id);
+        return E3_SM_ERROR_NOT_SUBSCRIBED;
     }
-    
+
     return E3_SM_SUCCESS;
 }
 
@@ -575,8 +570,7 @@ void e3_subscription_manager_print_status(e3_subscription_manager_t *manager) {
     
     printf("Active Subscriptions: %zu\n", manager->subscriptions.count);
     for (size_t i = 0; i < manager->subscriptions.count; i++) {
-        printf("  ID %u: dApp %u -> RAN function %u (created: %ld)\n",
-               manager->subscriptions.entries[i].subscription_id,
+        printf("  dApp %u -> RAN function %u (created: %ld)\n",
                manager->subscriptions.entries[i].dapp_identifier,
                manager->subscriptions.entries[i].ran_function_id,
                manager->subscriptions.entries[i].created_time);

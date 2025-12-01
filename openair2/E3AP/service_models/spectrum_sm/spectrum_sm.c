@@ -133,7 +133,7 @@ static bool t_tracer_init(spectrum_sm_context_t *sm_ctx) {
 int spectrum_sm_init(e3_service_model_t *sm) {
     LOG_D(E3AP, "[SPECTRUM] Initializing spectrum SM\n");
     
-    if (spectrum_context) {
+    if (spectrum_context && spectrum_context->initialized) {
         LOG_W(E3AP, "[SPECTRUM] SM already initialized\n");
         return SM_SUCCESS;
     }
@@ -196,7 +196,6 @@ int spectrum_sm_destroy(e3_service_model_t *sm) {
         free(spectrum_context->event_flags);
         LOG_D(E3AP, "[SPECTRUM] Event flags freed\n");
     }
-
 
     free(e3_sm_spectrum_control->action_list);
     pthread_mutex_destroy(&e3_sm_spectrum_control->mutex);

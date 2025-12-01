@@ -45,6 +45,8 @@ int sm_registry_init(void) {
         LOG_E(E3AP, "Failed to register spectrum SM: %d\n", ret);
         return ret;
     }
+    // Add here new SMs
+
     
     LOG_I(E3AP, "Built-in SMs registered successfully\n");
     return SM_SUCCESS;
@@ -188,7 +190,7 @@ int sm_registry_start_sm(uint32_t ran_function_id) {
     }
     
     if (sm->is_running) {
-        LOG_D(E3AP, "SM %s already running\n", sm->name);
+        LOG_W(E3AP, "SM %s already running\n", sm->name);
         return SM_SUCCESS;
     }
     

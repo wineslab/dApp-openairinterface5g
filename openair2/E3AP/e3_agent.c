@@ -13,7 +13,6 @@
 #include "e3ap_handler.h"
 #include "e3ap_types.h"
 #include "e3_subscription_manager.h"
-#include "service_models/sm_interface.h"
 
 #include "common/utils/system.h"
 #include "common/ran_context.h"
@@ -115,45 +114,60 @@ void *subscriber_thread(void *arg)
     };
 
     e3ap_pdu_t *received_pdu = e3_decode_message(&encoded_msg);
-    
     if (received_pdu) {
       switch (received_pdu->pdu_type) {
         case E3AP_PDU_TYPE_SUBSCRIPTION_REQUEST: {
           // Handle subscription request
           uint32_t dapp_id = received_pdu->choice.subscription_request.dapp_identifier;
           uint32_t ran_function_id = received_pdu->choice.subscription_request.ran_function_identifier;
-          
-          LOG_I(E3AP, "Received subscription request for RAN function %u\n", ran_function_id);
+          e3ap_action_type_t action = received_pdu->choice.subscription_request.type;
+
+          LOG_I(E3AP, "Received subscription request (action=%d) for RAN function %u, dApp %u\n", action, ran_function_id, dapp_id);
           e3ap_response_code_t response_code = E3AP_RESPONSE_CODE_NEGATIVE;
-          
-          // Add subscription if dApp is registered
-          if (e3_subscription_manager_is_dapp_registered(e3_subscription_manager, dapp_id)) {
-            int sub_result = e3_subscription_manager_add_subscription(e3_subscription_manager, 
-                                                                     dapp_id, ran_function_id);
-            if (sub_result > 0) {
-              LOG_I(E3AP, "Subscription added: dApp %u -> RAN function %u (ID: %d)\n", 
-                    dapp_id, ran_function_id, sub_result);
-              response_code = E3AP_RESPONSE_CODE_POSITIVE;
-              
-              // Start SM if this is the first subscription for this RAN function
-              if (!sm_registry_is_sm_running(ran_function_id)) {
-                int start_result = sm_registry_start_sm(ran_function_id);
-                if (start_result == SM_SUCCESS) {
-                  LOG_I(E3AP, "Started SM for RAN function %u\n", ran_function_id);
-                } else {
-                  LOG_E(E3AP, "Failed to start SM for RAN function %u: %d\n", ran_function_id, start_result);
-                  response_code = E3AP_RESPONSE_CODE_NEGATIVE; // Failed to start SM
-                }
+
+          if (action == E3AP_ACTION_TYPE_INSERT) {
+            // Add subscription if dApp is registered
+            if (e3_subscription_manager_is_dapp_registered(e3_subscription_manager, dapp_id)) {
+              int sub_result = e3_subscription_manager_add_subscription(e3_subscription_manager, dapp_id, ran_function_id);
+              if (sub_result == E3_SM_SUCCESS) {
+                LOG_I(E3AP, "Subscription added: dApp %u -> RAN function %u\n", dapp_id, ran_function_id);
+                response_code = E3AP_RESPONSE_CODE_POSITIVE;
+              }
+              else if (sub_result == E3_SM_ERROR_ALREADY_EXISTS){
+                LOG_W(E3AP, "dApp %u is already subscribed to RAN function %u, sending positive response\n", dapp_id, ran_function_id);
+                response_code = E3AP_RESPONSE_CODE_POSITIVE;
+              } 
+              else {
+                LOG_E(E3AP, "Failed to add subscription: %d\n", sub_result);
+                response_code = E3AP_RESPONSE_CODE_NEGATIVE; // Failed to add subscription
               }
             } else {
-              LOG_E(E3AP, "Failed to add subscription: %d\n", sub_result);
-              response_code = E3AP_RESPONSE_CODE_NEGATIVE; // Failed to start subscription
+              LOG_E(E3AP, "dApp %u not registered, cannot add subscription\n", dapp_id);
+              response_code = E3AP_RESPONSE_CODE_NEGATIVE;
+            }
+          } else if (action == E3AP_ACTION_TYPE_DELETE) {
+            // Remove single subscription for this dApp and RAN function
+            int rem_result =
+                e3_subscription_manager_remove_subscription_for_dapp(e3_subscription_manager, dapp_id, ran_function_id);
+            if (rem_result == E3_SM_SUCCESS) {
+              LOG_I(E3AP, "Removed subscription: dApp %u -> RAN function %u\n", dapp_id, ran_function_id);
+              response_code = E3AP_RESPONSE_CODE_POSITIVE;
+            } else if (rem_result == E3_SM_ERROR_NOT_SUBSCRIBED) {
+              LOG_W(E3AP, "Subscription not found for dApp %u -> RAN function %u\n", dapp_id, ran_function_id);
+              response_code = E3AP_RESPONSE_CODE_NEGATIVE;
+            } else {
+              LOG_E(E3AP,
+                    "Failed to remove subscription for dApp %u -> RAN function %u: %d\n",
+                    dapp_id,
+                    ran_function_id,
+                    rem_result);
+              response_code = E3AP_RESPONSE_CODE_NEGATIVE;
             }
           } else {
-            LOG_E(E3AP, "dApp %u not registered, cannot add subscription\n", dapp_id);
+            LOG_W(E3AP, "Unsupported subscription action type: %d\n", action);
             response_code = E3AP_RESPONSE_CODE_NEGATIVE;
           }
-          
+
           // Create subscription response PDU
           e3ap_pdu_t *response_pdu = e3ap_create_subscription_response(
               received_pdu->choice.subscription_request.id,  // Original request ID
@@ -181,7 +195,7 @@ void *subscriber_thread(void *arg)
           e3ap_pdu_free(received_pdu);
           continue;
         }
-        
+
         case E3AP_PDU_TYPE_CONTROL_ACTION: {
           uint32_t ran_function_id = received_pdu->choice.control_action.ran_function_identifier;
           uint32_t dapp_id = received_pdu->choice.control_action.dapp_identifier;
@@ -367,7 +381,6 @@ void *publisher_thread(void *args)
 * Handle dApp disconnection and cleanup subscriptions
 * @param dapp_id dApp identifier to cleanup
 */
-
 void handle_dapp_disconnection(uint32_t dapp_id) {
     if (!e3_subscription_manager) {
          LOG_W(E3AP, "Subscription manager not initialized\n");
@@ -376,38 +389,38 @@ void handle_dapp_disconnection(uint32_t dapp_id) {
     // Get current subscriptions for logging 
   uint32_t *ran_functions = NULL;
   int sub_count = e3_subscription_manager_get_dapp_subscriptions(e3_subscription_manager, dapp_id, &ran_functions);
- 
- if (sub_count > 0) {
-   LOG_I(E3AP, "Cleaning up %d subscriptions for disconnected dApp %u\n", sub_count, dapp_id);
-   
-   // Check if any RAN functions will no longer have subscribers
-   for (int i = 0; i < sub_count; i++) {
-     uint32_t ran_func_id = ran_functions[i];
-     int remaining_subs = e3_subscription_manager_get_subscriber_count_for_ran_function(
-                                                  e3_subscription_manager, ran_func_id);
-     if (remaining_subs <= 1) { 
-        // This dApp was the last subscriber, stop the SM
-       LOG_I(E3AP, "RAN function %u will be deactivated (no remaining subscribers)\n", ran_func_id);
-       
-       int stop_result = sm_registry_stop_sm(ran_func_id);
-       if (stop_result == SM_SUCCESS) {
-         LOG_I(E3AP, "Stopped SM for RAN function %u\n", ran_func_id);
-       } else {
-         LOG_E(E3AP, "Failed to stop SM for RAN function %u: %d\n", ran_func_id, stop_result);
-       }
-     }
-   }
-   
-   free(ran_functions);
- }
- 
- // Unregister dApp (this also removes all subscriptions)
- int result = e3_subscription_manager_unregister_dapp(e3_subscription_manager, dapp_id);
- if (result == E3_SM_SUCCESS) {
-   LOG_I(E3AP, "dApp %u unregistered and cleaned up successfully\n", dapp_id);
- } else {
-   LOG_E(E3AP, "Failed to unregister dApp %u: %d\n", dapp_id, result);
- }
+  if (sub_count > 0) {
+    LOG_I(E3AP, "Cleaning up %d subscriptions for disconnected dApp %u\n", sub_count, dapp_id);
+
+    /*
+     * Safer sequence: first unregister the dApp (this atomically removes the
+     * subscriptions under the subscription manager lock), then check how many
+     * subscribers remain per RAN function. Checking after unregister avoids a
+     * race where another dApp may subscribe between our check and removal.
+     */
+    int result = e3_subscription_manager_unregister_dapp(e3_subscription_manager, dapp_id);
+    if (result == E3_SM_SUCCESS) {
+      LOG_I(E3AP, "dApp %u unregistered and subscriptions removed\n", dapp_id);
+      /* Manager will check and stop SMs for affected RAN functions as part of
+       * the unregister/remove operations. */
+
+    } else {
+      LOG_E(E3AP, "Failed to unregister dApp %u: %d\n", dapp_id, result);
+      /*
+       * Even if unregister failed, free the ran_functions array obtained earlier.
+       */
+    }
+
+    free(ran_functions);
+  } else {
+    /* No subscriptions found; still attempt to unregister the dApp to be safe */
+    int result = e3_subscription_manager_unregister_dapp(e3_subscription_manager, dapp_id);
+    if (result == E3_SM_SUCCESS) {
+      LOG_I(E3AP, "dApp %u unregistered (no subscriptions)\n", dapp_id);
+    } else {
+      LOG_E(E3AP, "Failed to unregister dApp %u: %d\n", dapp_id, result);
+    }
+  }
 }
   
 void *e3_agent_dapp_task(void *args_p){
@@ -492,27 +505,50 @@ void *e3_agent_dapp_task(void *args_p){
     if (setupRequest && setupRequest->pdu_type == E3AP_PDU_TYPE_SETUP_REQUEST) {
       uint32_t dapp_id = setupRequest->choice.setup_request.dapp_identifier;
       LOG_I(E3AP, "Received setup request from dApp ID: %u\n", dapp_id);
+      e3ap_response_code_t response_code = E3AP_RESPONSE_CODE_NEGATIVE;
+      switch (setupRequest->choice.setup_request.type)
+      {
+      case E3AP_ACTION_TYPE_INSERT:
+        // Register dApp in subscription manager
+        int reg_result = e3_subscription_manager_register_dapp(e3_subscription_manager, dapp_id);
+        if(reg_result == E3_SM_ERROR_ALREADY_EXISTS)
+        {
+          // This behavior may change in the future
+          response_code = E3AP_RESPONSE_CODE_POSITIVE;
+          LOG_W(E3AP, "dApp %u already registered, sending positive ack \n", dapp_id);
+        } else if (reg_result != E3_SM_SUCCESS) 
+        {
+          response_code = E3AP_RESPONSE_CODE_NEGATIVE;
+          LOG_E(E3AP, "Failed to register dApp %u: %d\n", dapp_id, reg_result);
+        } else {
+          response_code = E3AP_RESPONSE_CODE_POSITIVE;
+          LOG_I(E3AP, "dApp %u registered successfully\n", dapp_id);
+        }
+        break;
+    
+      case E3AP_ACTION_TYPE_DELETE:
+        {
+          /* Unregister dApp and remove all its subscriptions. If any RAN functions
+           * lose all subscribers we stop their SMs. */
+          int unreg_result = e3_subscription_manager_unregister_dapp(e3_subscription_manager, dapp_id);
+          if (unreg_result == E3_SM_SUCCESS) {
+            LOG_I(E3AP, "dApp %u unregistered via setup delete\n", dapp_id);
+            response_code = E3AP_RESPONSE_CODE_POSITIVE;
+          } else {
+            LOG_E(E3AP, "Failed to unregister dApp %u via setup delete: %d\n", dapp_id, unreg_result);
+            response_code = E3AP_RESPONSE_CODE_NEGATIVE;
+          }
+        }
+        break;
       
-      // Register dApp in subscription manager
-      int reg_result = e3_subscription_manager_register_dapp(e3_subscription_manager, dapp_id);
-      e3ap_response_code_t response_code;
-      if(reg_result == E3_SM_ERROR_ALREADY_EXISTS)
-      {
-        // This behavior may change in the future
-        response_code = E3AP_RESPONSE_CODE_POSITIVE;
-        LOG_W(E3AP, "dApp %u already registered, sending positive ack \n", dapp_id);
-      } else if (reg_result != E3_SM_SUCCESS) 
-      {
-        response_code = E3AP_RESPONSE_CODE_NEGATIVE;
-        LOG_E(E3AP, "Failed to register dApp %u: %d\n", dapp_id, reg_result);
-      } else {
-        response_code = E3AP_RESPONSE_CODE_POSITIVE;
-        LOG_I(E3AP, "dApp %u registered successfully\n", dapp_id);
+      default:
+        break;
       }
 
       e3ap_pdu_t *setupResponse = e3ap_create_setup_response(
           setupRequest->choice.setup_request.id,  // Original request ID
           response_code,                          // Response code
+          // These might become optional fields in the next iteration to reduce the size of the Setup response
           available_ran_functions,                // Available RAN functions
           ran_function_count                      // RAN function count
       );
@@ -531,6 +567,7 @@ void *e3_agent_dapp_task(void *args_p){
       } else {
         LOG_E(E3AP, "Failed to create setup response PDU\n");
       }
+    
     } else {
       LOG_E(E3AP, "Failed to decode setup request or unexpected PDU type, ignored\n");
     }
