@@ -40,6 +40,21 @@ E3 DEFINITIONS AUTOMATIC TAGS ::= BEGIN
         actionData           OCTET STRING (SIZE (1..32768))
     }
 
+
+    E3-DAppReport ::= SEQUENCE {
+        id                      E3-MessageID,
+        dAppIdentifier          INTEGER (0..100),
+        ranFunctionIdentifier   INTEGER (0..100),
+        reportData              OCTET STRING (SIZE (1..32768))
+    }
+
+    E3-XAppControlAction ::= SEQUENCE {
+        id                      E3-MessageID,
+        dAppIdentifier          INTEGER (0..100),
+        ranFunctionIdentifier   INTEGER (0..100),
+        xAppControlData         OCTET STRING (SIZE (1..32768))
+    }
+
     E3-MessageAck ::= SEQUENCE {
         id                   E3-MessageID,
         requestId            E3-MessageID,
@@ -57,7 +72,9 @@ E3 DEFINITIONS AUTOMATIC TAGS ::= BEGIN
         subscriptionResponse  [3] E3-SubscriptionResponse,
         indicationMessage     [4] E3-IndicationMessage,
         controlAction         [5] E3-ControlAction,
-        messageAck            [6] E3-MessageAck
+        dAppReport            [6] E3-DAppReport,
+        xAppControlAction     [7] E3-XAppControlAction,
+        messageAck            [8] E3-MessageAck
     }
 
 END
