@@ -3,7 +3,7 @@
 #include "common/utils/LOG/log.h"
 #include <string.h>
 
-#define ENCODE_BUFFER_SIZE 8192
+#define ENCODE_BUFFER_SIZE 16384
 
 #ifdef SPECTRUM_SM_ASN1_FORMAT
 /**
