@@ -208,10 +208,28 @@ int e3_subscription_manager_unregister_dapp(e3_subscription_manager_t *manager,
         return E3_SM_ERROR_NOT_FOUND;
     }
     
-    // Remove all subscriptions for this dApp
+    // Track RAN functions that may need their SMs stopped
+    uint32_t affected_ran_functions[256];  // Max RAN function ID is 255
+    size_t affected_count = 0;
+    
+    // Remove all subscriptions for this dApp and track affected RAN functions
     size_t subscriptions_removed = 0;
     for (size_t i = 0; i < manager->subscriptions.count; ) {
         if (manager->subscriptions.entries[i].dapp_identifier == dapp_id) {
+            uint32_t ran_func = manager->subscriptions.entries[i].ran_function_id;
+            
+            // Track this RAN function if not already tracked
+            bool already_tracked = false;
+            for (size_t j = 0; j < affected_count; j++) {
+                if (affected_ran_functions[j] == ran_func) {
+                    already_tracked = true;
+                    break;
+                }
+            }
+            if (!already_tracked && affected_count < 256) {
+                affected_ran_functions[affected_count++] = ran_func;
+            }
+            
             // Move last entry to this position to fill the gap
             if (i < manager->subscriptions.count - 1) {
                 manager->subscriptions.entries[i] = 
@@ -225,10 +243,39 @@ int e3_subscription_manager_unregister_dapp(e3_subscription_manager_t *manager,
         }
     }
     
+    // Check each affected RAN function to see if it still has subscribers
+    for (size_t i = 0; i < affected_count; i++) {
+        uint32_t ran_func = affected_ran_functions[i];
+        bool has_subscribers = false;
+        
+        for (size_t j = 0; j < manager->subscriptions.count; j++) {
+            if (manager->subscriptions.entries[j].ran_function_id == ran_func) {
+                has_subscribers = true;
+                break;
+            }
+        }
+        
+        // Store whether to stop this SM (do the actual stop after unlocking)
+        affected_ran_functions[i] = has_subscribers ? 0 : ran_func;
+    }
+    
     pthread_mutex_unlock(&manager->manager_mutex);
     
     LOG_I(E3AP, "dApp %u unregistered, %zu subscriptions removed\n", 
           dapp_id, subscriptions_removed);
+    
+    // Stop SMs for RAN functions that no longer have subscribers
+    for (size_t i = 0; i < affected_count; i++) {
+        if (affected_ran_functions[i] != 0) {
+            LOG_I(E3AP, "Stopping SM for RAN function %u (no remaining subscribers)\n", 
+                  affected_ran_functions[i]);
+            int sm_stop_result = sm_registry_stop_sm(affected_ran_functions[i]);
+            if (sm_stop_result != SM_SUCCESS) {
+                LOG_W(E3AP, "Failed to stop SM for RAN function %u: %d\n", 
+                      affected_ran_functions[i], sm_stop_result);
+            }
+        }
+    }
 
     return E3_SM_SUCCESS;
 }
@@ -279,6 +326,15 @@ int e3_subscription_manager_add_subscription(e3_subscription_manager_t *manager,
         }
     }
     
+    // Check if this is the first subscriber for this RAN function
+    bool is_first_subscriber = true;
+    for (size_t i = 0; i < manager->subscriptions.count; i++) {
+        if (manager->subscriptions.entries[i].ran_function_id == ran_function_id) {
+            is_first_subscriber = false;
+            break;
+        }
+    }
+    
     // Resize list if needed
     if (manager->subscriptions.count >= manager->subscriptions.capacity) {
         size_t new_capacity = manager->subscriptions.capacity * E3_SUBSCRIPTION_MANAGER_GROWTH_FACTOR;
@@ -296,6 +352,20 @@ int e3_subscription_manager_add_subscription(e3_subscription_manager_t *manager,
     entry->created_time = time(NULL);
     manager->subscriptions.count++;
     pthread_mutex_unlock(&manager->manager_mutex);
+    
+    // Start SM thread if this is the first subscriber
+    if (is_first_subscriber) {
+        LOG_I(E3AP, "First subscriber for RAN function %u, starting SM thread\n", ran_function_id);
+        int sm_start_result = sm_registry_start_sm(ran_function_id);
+        if (sm_start_result != SM_SUCCESS) {
+            LOG_E(E3AP, "Failed to start SM for RAN function %u: %d\n", ran_function_id, sm_start_result);
+            // Remove the subscription we just added since SM failed to start
+            pthread_mutex_lock(&manager->manager_mutex);
+            manager->subscriptions.count--;
+            pthread_mutex_unlock(&manager->manager_mutex);
+            return E3_SM_ERROR_SM_START_FAILED;
+        }
+    }
 
     return E3_SM_SUCCESS;
 }
@@ -326,11 +396,31 @@ int e3_subscription_manager_remove_subscription_for_dapp(
         }
     }
 
+    // Check if there are any remaining subscribers for this RAN function
+    bool has_remaining_subscribers = false;
+    if (found) {
+        for (size_t i = 0; i < manager->subscriptions.count; i++) {
+            if (manager->subscriptions.entries[i].ran_function_id == ran_function_id) {
+                has_remaining_subscribers = true;
+                break;
+            }
+        }
+    }
+
     pthread_mutex_unlock(&manager->manager_mutex);
 
     if (!found) {
         LOG_W(E3AP, "Subscription not found for dApp %u -> RAN function %u\n", dapp_id, ran_function_id);
         return E3_SM_ERROR_NOT_SUBSCRIBED;
+    }
+    
+    // Stop SM thread if this was the last subscriber
+    if (!has_remaining_subscribers) {
+        LOG_I(E3AP, "Last subscriber removed for RAN function %u, stopping SM thread\n", ran_function_id);
+        int sm_stop_result = sm_registry_stop_sm(ran_function_id);
+        if (sm_stop_result != SM_SUCCESS) {
+            LOG_W(E3AP, "Failed to stop SM for RAN function %u: %d\n", ran_function_id, sm_stop_result);
+        }
     }
 
     return E3_SM_SUCCESS;

@@ -262,18 +262,26 @@ void *sm_data_handler_thread(void *arg)
       int subscriber_count = e3_subscription_manager_get_subscribed_dapps(e3_subscription_manager, 
                                                                          ran_function_id, 
                                                                          &subscribed_dapps);
-      
+      LOG_D(E3AP, "subscriber_count: %d\n", subscriber_count);
       if (subscriber_count > 0) {
         // Get SM for this RAN function
+        LOG_D(E3AP, "Getting SM for RAN function %u\n", ran_function_id);
         e3_service_model_t *sm = sm_registry_get_by_ran_function(ran_function_id);
+        LOG_D(E3AP, "SM lookup result: sm=%p, is_running=%d, thread_context=%p\n", 
+              sm, sm ? sm->is_running : 0, sm ? sm->thread_context : NULL);
         if (sm && sm->is_running && sm->thread_context && sm->thread_context->output_data) {
+          LOG_D(E3AP, "SM is valid and running, output_data=%p\n", sm->thread_context->output_data);
           // Try to get indication data from SM
           uint8_t *sm_encoded_data = NULL;
           size_t sm_encoded_size = 0;
           uint64_t timestamp = 0;
           
+          LOG_D(E3AP, "Calling sm_indication_data_get for RAN function %u\n", ran_function_id);
           int get_result = sm_indication_data_get(sm->thread_context->output_data,
                                                  &sm_encoded_data, &sm_encoded_size, &timestamp);
+          
+          LOG_D(E3AP, "sm_indication_data_get returned: %d, data=%p, size=%zu\n", 
+                get_result, sm_encoded_data, sm_encoded_size);
           
           if (get_result == SM_SUCCESS && sm_encoded_data) {
             data_processed = true;
@@ -281,15 +289,20 @@ void *sm_data_handler_thread(void *arg)
                   ran_function_id, sm_encoded_size);
             
             // Create separate indication messages for each subscriber
+            LOG_D(E3AP, "Creating indication messages for %d subscribers\n", subscriber_count);
             for (int k = 0; k < subscriber_count; k++) {
+              LOG_D(E3AP, "Processing subscriber %d/%d: dApp %u\n", k+1, subscriber_count, subscribed_dapps[k]);
               e3ap_pdu_t *indicationMessage = e3ap_create_indication_message(
                 subscribed_dapps[k],     // dApp identifier for this subscriber
                 sm_encoded_data, 
                 sm_encoded_size
               );
 
+              LOG_D(E3AP, "Created indication message: %p\n", indicationMessage);
               if (indicationMessage) {
-                if (e3_response_queue_push(sm_args->response_queue, indicationMessage) != 0) {
+                int push_result = e3_response_queue_push(sm_args->response_queue, indicationMessage);
+                LOG_D(E3AP, "Queue push result: %d (0=success)\n", push_result);
+                if (push_result != 0) {
                   LOG_E(E3AP, "Failed to queue indication message for dApp %u\n", subscribed_dapps[k]);
                   e3ap_pdu_free(indicationMessage);
                 } else {
@@ -303,6 +316,9 @@ void *sm_data_handler_thread(void *arg)
             LOG_D(E3AP, "SM indication data queued for delivery to %d subscribers\n", subscriber_count);
             
             free(sm_encoded_data);
+          } else{
+             LOG_D(E3AP, "NO indication message for dApp (get_result=%d, sm_encoded_data=%p)\n", 
+                   get_result, sm_encoded_data);
           }
         }
       }
