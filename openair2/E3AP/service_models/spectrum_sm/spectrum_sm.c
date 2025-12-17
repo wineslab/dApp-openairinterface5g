@@ -221,7 +221,6 @@ int spectrum_sm_destroy(e3_service_model_t *sm) {
 
 /**
  * Main thread function for spectrum SM
- * This replaces the T-tracer logic from publisher_thread in e3_agent.c
  */
 void* spectrum_sm_thread_main(void *context) {
     sm_thread_context_t *thread_ctx = (sm_thread_context_t *)context;
@@ -354,8 +353,6 @@ void* spectrum_sm_thread_main(void *context) {
         LOG_D(E3AP, "[SPECTRUM] Event buffer cleaned up\n");
     }
     
-    // Mark as no longer initialized since thread is ending
-    sm_ctx->initialized = false;
     LOG_D(E3AP, "[SPECTRUM] Main thread cleanup completed\n");
     
     LOG_I(E3AP, "[SPECTRUM] Main thread finished\n");
