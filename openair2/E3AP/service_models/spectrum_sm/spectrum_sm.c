@@ -382,27 +382,31 @@ int spectrum_sm_process_dapp_control_action(uint32_t ran_function_id, uint8_t *e
     }
 
     
-    LOG_D(E3AP, "[SPECTRUM] PRB count: %d\n", control_payload->prb_count);
-    
-    int prb_count_bits = control_payload->prb_count * sizeof(uint16_t);
-    int write_size = (prb_count_bits < MAX_BWP_SIZE) ? prb_count_bits : MAX_BWP_SIZE;
+    LOG_D(E3AP, "[SPECTRUM] PRB count: %u\n", control_payload->prb_count);
+
+    const size_t max_elems = MAX_BWP_SIZE;
+    size_t elems = control_payload->prb_count;
+    if (elems > max_elems) elems = max_elems;
 
     pthread_mutex_lock(&e3_sm_spectrum_control->mutex);
-    memcpy(e3_sm_spectrum_control->action_list, control_payload->blacklisted_prbs, write_size);
-    e3_sm_spectrum_control->action_size = control_payload->prb_count;
-    for (size_t i = 0; i < control_payload->prb_count; i++) {
-      LOG_D(E3AP, "e3_sm_spectrum_control[%zu] = %d\n", i, ((uint16_t *)e3_sm_spectrum_control->action_list)[i]);
-    }
-    memset(e3_sm_spectrum_control->dyn_prbbl, 0, MAX_BWP_SIZE * sizeof(uint16_t));
-    for (int j = 0; j < e3_sm_spectrum_control->action_size && j < MAX_BWP_SIZE; j++) {
-      e3_sm_spectrum_control
-          ->dyn_prbbl[(e3_sm_spectrum_control->action_list[2 * j + 1] << 8 & 0xFF) | (e3_sm_spectrum_control->action_list[2 * j] & 0xFF)] =
-          0x3FFF;
-    }
-    memset(e3_sm_spectrum_control->action_list, 0, e3_sm_spectrum_control->action_size * sizeof(uint16_t));
 
-    // We don't care about the validity period atm, but in case the parsing
-    // should be implemented here
+    uint16_t *alist16 = (uint16_t *)e3_sm_spectrum_control->action_list;
+
+    memcpy(alist16, control_payload->blacklisted_prbs, elems * sizeof(uint16_t));
+    e3_sm_spectrum_control->action_size = elems;
+
+    for (size_t i = 0; i < elems; ++i) {
+    LOG_D(E3AP, "e3_sm_spectrum_control[%zu] = %u\n", i, alist16[i]);
+    }
+
+    memset(e3_sm_spectrum_control->dyn_prbbl, 0, max_elems * sizeof(uint16_t));
+    for (size_t j = 0; j < elems; ++j) {
+    uint16_t prb = alist16[j];
+    if (prb < MAX_BWP_SIZE)
+        e3_sm_spectrum_control->dyn_prbbl[prb] = 0x3FFF;
+    }
+
+    memset(alist16, 0, max_elems * sizeof(uint16_t));
 
     if(control_payload->sampling_threshold){
         LOG_I(E3AP, "[SPECTRUM] Change sampling threshold from %d to %d\n", e3_sm_spectrum_control->sampling_threshold, control_payload->sampling_threshold);

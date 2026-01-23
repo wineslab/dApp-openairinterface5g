@@ -45,20 +45,46 @@ spectrum_prb_control_t* spectrum_decode_prb_control(uint8_t *encoded_data, size_
         LOG_E(E3AP, "Failed to malloc structure\n");
         return NULL;
     }
-    
-    // Extract PRB count
-    prb_control->prb_count = asn_control->prbCount;
 
-    // Extract blacklisted PRBs
-    // Here we do not parse the PRBs, but we only extract them from the PDU
-    // Parsing is delegated to the sm controller
     prb_control->blacklisted_prbs = NULL;
-    
+    prb_control->prb_count = 0;
+
+    const int n = asn_control->blacklistedPRBs.list.count;
+    if (n < 0 || n > 273) {
+        LOG_E(E3AP, "Invalid PRB list count: %d\n", n);
+        ASN_STRUCT_FREE(asn_DEF_Spectrum_PRBBlacklistControl, asn_control);
+        free(prb_control);
+        return NULL;
+    }
+
+    prb_control->prb_count = (uint32_t)n;
+
     if (prb_control->prb_count > 0) {
-        size_t raw_size = asn_control->blacklistedPRBs.size;
-        prb_control->blacklisted_prbs = malloc(raw_size);
-        if (prb_control->blacklisted_prbs) {
-            memcpy(prb_control->blacklisted_prbs, asn_control->blacklistedPRBs.buf, raw_size);
+        prb_control->blacklisted_prbs = malloc((size_t)prb_control->prb_count * sizeof(uint16_t));
+        if (!prb_control->blacklisted_prbs) {
+            LOG_E(E3AP, "Failed to malloc PRB list\n");
+            ASN_STRUCT_FREE(asn_DEF_Spectrum_PRBBlacklistControl, asn_control);
+            free(prb_control);
+            return NULL;
+        }
+
+        for (int i = 0; i < n; ++i) {
+            if (asn_control->blacklistedPRBs.list.array[i] == NULL) {
+                prb_control->blacklisted_prbs[i] = 0;
+                continue;
+            }
+
+            long v = *(asn_control->blacklistedPRBs.list.array[i]);
+
+            if (v < 0 || v > 272) {
+                LOG_E(E3AP, "Invalid PRB value at index %d: %ld\n", i, v);
+                ASN_STRUCT_FREE(asn_DEF_Spectrum_PRBBlacklistControl, asn_control);
+                free(prb_control->blacklisted_prbs);
+                free(prb_control);
+                return NULL;
+            }
+
+            prb_control->blacklisted_prbs[i] = (uint16_t)v;
         }
     }
     

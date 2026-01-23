@@ -53,6 +53,21 @@ static E3EncodedMessage* encode_pdu_to_json(const e3ap_pdu_t *pdu) {
             json_object_object_add(data_obj, "action_data", json_object_new_string_len((char*)pdu->choice.control_action.action_data, pdu->choice.control_action.action_data_size));
             break;
         }
+        case E3AP_PDU_TYPE_DAPP_REPORT: { // untested
+            json_object_object_add(data_obj, "id", json_object_new_int(pdu->choice.dapp_report.id));
+            json_object_object_add(data_obj, "dapp_identifier", json_object_new_int(pdu->choice.dapp_report.dapp_identifier));
+            json_object_object_add(data_obj, "ran_function_identifier", json_object_new_int(pdu->choice.dapp_report.ran_function_identifier));
+            json_object_object_add(data_obj, "report_data", json_object_new_string_len((const char*)pdu->choice.dapp_report.report_data, pdu->choice.dapp_report.report_data_size));
+            break;
+        }
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION: { // untested
+            json_object_object_add(data_obj, "id", json_object_new_int(pdu->choice.xapp_control.id));
+            json_object_object_add(data_obj, "dapp_identifier", json_object_new_int(pdu->choice.xapp_control.dapp_identifier));
+            json_object_object_add(data_obj, "ran_function_identifier", json_object_new_int(pdu->choice.xapp_control.ran_function_identifier));
+            json_object_object_add(data_obj, "xapp_control_data", json_object_new_string_len((const char*)pdu->choice.xapp_control.xapp_control_data, pdu->choice.xapp_control.xapp_control_data_size));
+            break;
+        }
+
         default:
             json_object_put(root);
             json_object_put(data_obj);
@@ -113,6 +128,10 @@ static e3ap_pdu_t* decode_json_to_pdu(const char *json_str) {
         pdu_type = E3AP_PDU_TYPE_INDICATION_MESSAGE;
     } else if (strcmp(pdu_type_str, "ControlAction") == 0) {
         pdu_type = E3AP_PDU_TYPE_CONTROL_ACTION;
+    } else if (strcmp(pdu_type_str, "DAppReport") == 0) {
+        pdu_type = E3AP_PDU_TYPE_DAPP_REPORT;
+    } else if (strcmp(pdu_type_str, "XAppControlAction") == 0) {
+        pdu_type = E3AP_PDU_TYPE_XAPP_CONTROL_ACTION;
     } else {
         LOG_E(E3AP, "Unknown PDU type: %s\n", pdu_type_str);
         json_object_put(root);
@@ -151,6 +170,40 @@ static e3ap_pdu_t* decode_json_to_pdu(const char *json_str) {
                 if (data_len <= E3AP_MAX_ACTION_DATA_SIZE) {
                     memcpy(pdu->choice.control_action.action_data, action_data_str, data_len);
                     pdu->choice.control_action.action_data_size = data_len;
+                }
+            }
+            break;
+        }
+        case E3AP_PDU_TYPE_DAPP_REPORT: { // untested
+            if (json_object_object_get_ex(data_obj, "id", &temp_obj))
+                pdu->choice.dapp_report.id = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "dapp_identifier", &temp_obj))
+                pdu->choice.dapp_report.dapp_identifier = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "ran_function_identifier", &temp_obj))
+                pdu->choice.dapp_report.ran_function_identifier = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "report_data", &temp_obj)) {
+                const char *s = json_object_get_string(temp_obj);
+                size_t len = json_object_get_string_len(temp_obj);
+                if (len <= E3AP_MAX_DAPP_REPORT_DATA_SIZE) {
+                    memcpy(pdu->choice.dapp_report.report_data, s, len);
+                    pdu->choice.dapp_report.report_data_size = len;
+                }
+            }
+            break;
+        }
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION: { // untested
+            if (json_object_object_get_ex(data_obj, "id", &temp_obj))
+                pdu->choice.xapp_control.id = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "dapp_identifier", &temp_obj))
+                pdu->choice.xapp_control.dapp_identifier = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "ran_function_identifier", &temp_obj))
+                pdu->choice.xapp_control.ran_function_identifier = json_object_get_int(temp_obj);
+            if (json_object_object_get_ex(data_obj, "xapp_control_data", &temp_obj)) {
+                const char *s = json_object_get_string(temp_obj);
+                size_t len = json_object_get_string_len(temp_obj);
+                if (len <= E3AP_MAX_XAPP_CTRL_DATA_SIZE) {
+                    memcpy(pdu->choice.xapp_control.xapp_control_data, s, len);
+                    pdu->choice.xapp_control.xapp_control_data_size = len;
                 }
             }
             break;
@@ -302,6 +355,55 @@ static E3EncodedMessage* encode_pdu_to_asn1(const e3ap_pdu_t *pdu) {
             asn1_pdu->choice.controlAction->actionData.size = pdu->choice.control_action.action_data_size;
             break;
         }
+        case E3AP_PDU_TYPE_DAPP_REPORT: {
+            asn1_pdu->present = E3_PDU_PR_dAppReport;
+            asn1_pdu->choice.dAppReport = calloc(1, sizeof(E3_DAppReport_t));
+            if (!asn1_pdu->choice.dAppReport) { free(asn1_pdu); return NULL; }
+
+            asn1_pdu->choice.dAppReport->id = pdu->choice.dapp_report.id;
+            asn1_pdu->choice.dAppReport->dAppIdentifier = pdu->choice.dapp_report.dapp_identifier;
+            asn1_pdu->choice.dAppReport->ranFunctionIdentifier = pdu->choice.dapp_report.ran_function_identifier;
+
+            const size_t sz = pdu->choice.dapp_report.report_data_size;
+            asn1_pdu->choice.dAppReport->reportData.buf = malloc(sz);
+            if (!asn1_pdu->choice.dAppReport->reportData.buf) {
+                free(asn1_pdu->choice.dAppReport);
+                free(asn1_pdu);
+                return NULL;
+            }
+            memcpy(asn1_pdu->choice.dAppReport->reportData.buf,
+                pdu->choice.dapp_report.report_data, sz);
+            asn1_pdu->choice.dAppReport->reportData.size = sz;
+            break;
+        }
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION: {
+            asn1_pdu->present = E3_PDU_PR_xAppControlAction;
+            asn1_pdu->choice.xAppControlAction = calloc(1, sizeof(E3_XAppControlAction_t));
+            if (!asn1_pdu->choice.xAppControlAction) { free(asn1_pdu); return NULL; }
+
+            asn1_pdu->choice.xAppControlAction->id = pdu->choice.xapp_control.id;
+            asn1_pdu->choice.xAppControlAction->dAppIdentifier =
+                pdu->choice.xapp_control.dapp_identifier;
+            asn1_pdu->choice.xAppControlAction->ranFunctionIdentifier =
+                pdu->choice.xapp_control.ran_function_identifier;
+
+            size_t sz = pdu->choice.xapp_control.xapp_control_data_size;
+            if (sz > 0) {
+                asn1_pdu->choice.xAppControlAction->xAppControlData.buf = malloc(sz);
+                if (!asn1_pdu->choice.xAppControlAction->xAppControlData.buf) {
+                    free(asn1_pdu->choice.xAppControlAction);
+                    free(asn1_pdu);
+                    return NULL;
+                }
+                memcpy(asn1_pdu->choice.xAppControlAction->xAppControlData.buf,
+                    pdu->choice.xapp_control.xapp_control_data, sz);
+                asn1_pdu->choice.xAppControlAction->xAppControlData.size = sz;
+            } else {
+                asn1_pdu->choice.xAppControlAction->xAppControlData.buf = NULL;
+                asn1_pdu->choice.xAppControlAction->xAppControlData.size = 0;
+            }
+            break;
+        }
         default:
             free(asn1_pdu);
             return NULL;
@@ -434,6 +536,26 @@ static e3ap_pdu_t* decode_asn1_to_pdu(const uint8_t *buffer, size_t buffer_size)
             break;
         }
 
+        case E3_PDU_PR_dAppReport: {
+            generic_pdu = e3ap_create_dapp_report(
+                asn1_pdu->choice.dAppReport->dAppIdentifier,
+                asn1_pdu->choice.dAppReport->ranFunctionIdentifier,
+                asn1_pdu->choice.dAppReport->reportData.buf,
+                asn1_pdu->choice.dAppReport->reportData.size
+            );
+            break;
+        }
+
+        case E3_PDU_PR_xAppControlAction: {
+            generic_pdu = e3ap_create_xapp_control_action(
+                asn1_pdu->choice.xAppControlAction->dAppIdentifier,
+                asn1_pdu->choice.xAppControlAction->ranFunctionIdentifier,
+                asn1_pdu->choice.xAppControlAction->xAppControlData.buf,
+                asn1_pdu->choice.xAppControlAction->xAppControlData.size
+            );
+            break;
+        }
+
         default:
             LOG_E(E3AP, "Unsupported ASN.1 PDU type: %d\n", asn1_pdu->present);
             break;
@@ -529,4 +651,31 @@ long e3_parse_setup_response(const E3EncodedMessage *encoded_msg) {
     long response_code = pdu->choice.setup_response.response_code;
     e3ap_pdu_free(pdu);
     return response_code;
+}
+
+int e3_parse_dapp_report(const E3EncodedMessage *encoded_msg,
+                    uint32_t *out_dapp_id,
+                    uint32_t *out_ran_fn_id,
+                    uint8_t **out_buf,
+                    size_t *out_size)
+{
+    if (!encoded_msg || !out_dapp_id || !out_ran_fn_id || !out_buf || !out_size)
+        return -1;
+
+    e3ap_pdu_t *pdu = e3_decode_message(encoded_msg);
+    if (!pdu || pdu->pdu_type != E3AP_PDU_TYPE_DAPP_REPORT) {
+        if (pdu) e3ap_pdu_free(pdu);
+        return -1;
+    }
+
+    *out_dapp_id  = pdu->choice.dapp_report.dapp_identifier;
+    *out_ran_fn_id= pdu->choice.dapp_report.ran_function_identifier;
+    *out_size     = pdu->choice.dapp_report.report_data_size;
+
+    *out_buf = malloc(*out_size);
+    if (!*out_buf) { e3ap_pdu_free(pdu); return -1; }
+    memcpy(*out_buf, pdu->choice.dapp_report.report_data, *out_size);
+
+    e3ap_pdu_free(pdu);
+    return 0;
 }

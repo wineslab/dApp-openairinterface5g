@@ -34,6 +34,10 @@ typedef struct {
 e3_subscription_manager_t *e3_subscription_manager = NULL;
 pthread_t e3_interface_thread;
 
+#ifdef E2_AGENT
+e3_response_queue_t *ran_to_e3_agent_queue = NULL;
+#endif
+
 int e3_agent_init()
 {
   LOG_D(E3AP, "Read configuration\n");
@@ -220,6 +224,18 @@ void *subscriber_thread(void *arg)
           continue;
         }
         
+        case E3AP_PDU_TYPE_DAPP_REPORT: {
+#ifdef E2_AGENT
+          uint32_t ran_function_id = received_pdu->choice.dapp_report.ran_function_identifier;
+          uint32_t dapp_id = received_pdu->choice.dapp_report.dapp_identifier;
+          uint8_t *report_data = received_pdu->choice.dapp_report.report_data;
+          size_t report_size = received_pdu->choice.dapp_report.report_data_size;
+          generate_e2_indication_from_e3_dapp_report(ran_function_id, dapp_id, report_size, report_data);
+#endif
+          e3ap_pdu_free(received_pdu);
+          continue;
+        }
+
         default:
           LOG_W(E3AP, "Received unknown PDU type: %d\n", received_pdu->pdu_type);
           e3ap_pdu_free(received_pdu);
@@ -476,6 +492,10 @@ void *e3_agent_dapp_task(void *args_p){
     LOG_E(E3AP, "Failed to create response queue\n");
     abort();
   }
+
+#ifdef E2_AGENT
+  ran_to_e3_agent_queue = response_queue;
+#endif
 
   pub_sub_args_t *shared_args = malloc(sizeof(pub_sub_args_t));
   shared_args->e3_configs = e3_configs;

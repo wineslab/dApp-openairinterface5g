@@ -55,6 +55,7 @@ set(e3ap_source
     E3-MessageAck.c
     E3-MessageID.c
     E3-PDU.c
+    E3-DAppReport.c
     E3-ResponseCode.c
     E3-SetupRequest.c
     E3-SetupResponse.c
@@ -143,6 +144,7 @@ set(e3ap_headers
     E3-MessageAck.h
     E3-MessageID.h
     E3-PDU.h
+    E3-DAppReport.h
     E3-ResponseCode.h
     E3-SetupRequest.h
     E3-SetupResponse.h

@@ -1930,6 +1930,10 @@ target_link_libraries(nr-cuup PRIVATE
 target_link_libraries(nr-cuup PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
 if(E2_AGENT)
   target_link_libraries(nr-cuup PRIVATE e2_agent e2_agent_arg e2_ran_func_cuup)
+  if(E3_AGENT)
+    target_link_libraries(nr-cuup PRIVATE e3ap)
+    target_compile_definitions(nr-cuup PRIVATE E3_AGENT)
+  endif()
   target_compile_definitions(nr-cuup PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
 endif()
 

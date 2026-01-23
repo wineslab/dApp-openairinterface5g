@@ -47,6 +47,8 @@ typedef struct {
 /* Maximum sizes for E3AP data fields */
 #define E3AP_MAX_PROTOCOL_DATA_SIZE   32768
 #define E3AP_MAX_ACTION_DATA_SIZE     32768
+#define E3AP_MAX_DAPP_REPORT_DATA_SIZE 32768
+#define E3AP_MAX_XAPP_CTRL_DATA_SIZE  32768
 #define E3AP_MAX_RAN_FUNCTIONS        255
 
 /**
@@ -76,7 +78,9 @@ typedef enum {
     E3AP_PDU_TYPE_SUBSCRIPTION_RESPONSE = 3,
     E3AP_PDU_TYPE_INDICATION_MESSAGE = 4,
     E3AP_PDU_TYPE_CONTROL_ACTION = 5,
-    E3AP_PDU_TYPE_MESSAGE_ACK = 6
+    E3AP_PDU_TYPE_DAPP_REPORT = 6,
+    E3AP_PDU_TYPE_XAPP_CONTROL_ACTION = 7,
+    E3AP_PDU_TYPE_MESSAGE_ACK = 8
 } e3ap_pdu_type_t;
 
 /**
@@ -150,6 +154,22 @@ typedef struct {
     e3ap_response_code_t response_code;
 } e3ap_message_ack_t;
 
+typedef struct {
+    uint32_t id;
+    uint32_t dapp_identifier;
+    uint32_t ran_function_identifier;
+    uint8_t  report_data[E3AP_MAX_DAPP_REPORT_DATA_SIZE];
+    size_t   report_data_size;
+} e3ap_dapp_report_t;
+
+typedef struct {
+    uint32_t id;
+    uint32_t dapp_identifier;
+    uint32_t ran_function_identifier;
+    uint8_t  xapp_control_data[E3AP_MAX_XAPP_CTRL_DATA_SIZE];
+    size_t   xapp_control_data_size;
+} e3ap_xapp_control_action_t;
+
 /**
  * Generic E3AP PDU Structure
  * This structure holds any E3AP PDU regardless of encoding used
@@ -164,6 +184,8 @@ typedef struct {
         e3ap_indication_message_t indication_message;
         e3ap_control_action_t control_action;
         e3ap_message_ack_t message_ack;
+        e3ap_dapp_report_t dapp_report;
+        e3ap_xapp_control_action_t xapp_control;
     } choice;
 } e3ap_pdu_t;
 
@@ -256,6 +278,17 @@ e3ap_pdu_t* e3ap_create_control_action(uint32_t dapp_identifier,
  */
 e3ap_pdu_t* e3ap_create_message_ack(uint32_t request_id,
                                     e3ap_response_code_t response_code);
+
+e3ap_pdu_t* e3ap_create_dapp_report(uint32_t dapp_identifier,
+                               uint32_t ran_function_identifier,
+                               uint8_t *report_data,
+                               size_t report_data_size);
+
+e3ap_pdu_t* e3ap_create_xapp_control_action(uint32_t dapp_identifier,
+                                            uint32_t ran_function_identifier,
+                                            uint8_t *xapp_control_data,
+                                            size_t xapp_control_data_size);
+
 
 /**
  * Free resources allocated for an E3AP PDU

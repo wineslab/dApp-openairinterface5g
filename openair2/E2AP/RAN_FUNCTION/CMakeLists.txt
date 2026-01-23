@@ -39,6 +39,14 @@ set(UE_ID_COMMON_E2SM_SRCS
   ../flexric/src/sm/rc_sm/ie/asn/UEID-NG-ENB.c
 )
 
+if(E3_AGENT)
+  set(DAPP_RAN_FUNC_SRC
+    O-RAN/ran_func_dapp.c
+    O-RAN/ran_func_dapp_subs.c
+    ../flexric/src/sm/dapp_sm/ie/dapp_data_ie.c
+  )
+endif()
+
 add_library(e2_ran_func_cuup STATIC
             ${UE_ID_COMMON_E2SM_SRCS}
             init_ran_func.c
@@ -57,6 +65,13 @@ add_library(e2_ran_func_cuup STATIC
 
 target_link_libraries(e2_ran_func_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj kpm_ric_info_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds alg sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc)
 target_compile_definitions(e2_ran_func_cuup PUBLIC ${E2AP_VERSION}  ${KPM_VERSION}  NGRAN_GNB_CUUP)
+
+if(E3_AGENT)
+  target_sources(e2_ran_func_cuup PRIVATE ${DAPP_RAN_FUNC_SRC})
+  target_link_libraries(e2_ran_func_cuup PUBLIC e2sm_dapp_ir_obj e3sm_obj)
+  target_include_directories(e2_ran_func_cuup PUBLIC ${OPENAIR_DIR}/openair2/E3AP)
+  target_compile_definitions(e2_ran_func_cuup PUBLIC E3_AGENT)
+endif()
 
 
 add_library(e2_ran_func_du_cucp_cuup STATIC
@@ -81,6 +96,13 @@ add_library(e2_ran_func_du_cucp_cuup STATIC
 
 target_link_libraries(e2_ran_func_du_cucp_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj kpm_ric_info_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc)
 target_compile_definitions(e2_ran_func_du_cucp_cuup PUBLIC ${E2AP_VERSION}  ${KPM_VERSION} NGRAN_GNB_DU NGRAN_GNB_CUCP NGRAN_GNB_CUUP)
+
+if(E3_AGENT)
+  target_sources(e2_ran_func_du_cucp_cuup PRIVATE ${DAPP_RAN_FUNC_SRC})
+  target_link_libraries(e2_ran_func_du_cucp_cuup PUBLIC e2sm_dapp_ir_obj e3sm_obj)
+  target_include_directories(e2_ran_func_du_cucp_cuup PUBLIC ${OPENAIR_DIR}/openair2/E3AP)
+  target_compile_definitions(e2_ran_func_du_cucp_cuup PUBLIC E3_AGENT)
+endif()
 
 # Current implementation:
 # - we only have one executable nr-softmodem for 4 node types: DU, CU, gNB-mono, CU-CP

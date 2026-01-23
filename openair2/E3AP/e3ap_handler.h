@@ -19,6 +19,8 @@
     #include "E3-SubscriptionResponse.h"
     #include "E3-ControlAction.h"
     #include "E3-IndicationMessage.h"
+    #include "E3-DAppReport.h"
+    #include "E3-XAppControlAction.h"
 #endif
 
 #ifdef E3_JSON_FORMAT

@@ -215,6 +215,58 @@ e3ap_pdu_t* e3ap_create_message_ack(uint32_t request_id,
     return pdu;
 }
 
+e3ap_pdu_t* e3ap_create_dapp_report(uint32_t dapp_identifier,
+                               uint32_t ran_function_identifier,
+                               uint8_t *report_data,
+                               size_t report_data_size)
+{
+    /* Validate input parameters */
+    if (dapp_identifier > 100) return NULL;
+    if (ran_function_identifier > 100) return NULL;
+    if (report_data == NULL || report_data_size == 0) return NULL;
+    if (report_data_size > E3AP_MAX_DAPP_REPORT_DATA_SIZE) return NULL;
+
+    /* Allocate and initialize PDU */
+    e3ap_pdu_t *pdu = calloc(1, sizeof(e3ap_pdu_t));
+    if (pdu == NULL) return NULL;
+
+    pdu->pdu_type = E3AP_PDU_TYPE_DAPP_REPORT;
+    pdu->choice.dapp_report.id = generate_message_id();
+    pdu->choice.dapp_report.dapp_identifier = dapp_identifier;
+    pdu->choice.dapp_report.ran_function_identifier = ran_function_identifier;
+    pdu->choice.dapp_report.report_data_size = report_data_size;
+
+    /* Copy report payload */
+    memcpy(pdu->choice.dapp_report.report_data, report_data, report_data_size);
+
+    return pdu;
+}
+
+e3ap_pdu_t* e3ap_create_xapp_control_action(uint32_t dapp_identifier,
+                                            uint32_t ran_function_identifier,
+                                            uint8_t *xapp_control_data,
+                                            size_t xapp_control_data_size)
+{
+    if (dapp_identifier > 100) return NULL;
+    if (ran_function_identifier > 100) return NULL;
+    if (xapp_control_data == NULL || xapp_control_data_size == 0) return NULL;
+    if (xapp_control_data_size > E3AP_MAX_XAPP_CTRL_DATA_SIZE) return NULL;
+
+    e3ap_pdu_t *pdu = calloc(1, sizeof(e3ap_pdu_t));
+    if (!pdu) return NULL;
+
+    pdu->pdu_type = E3AP_PDU_TYPE_XAPP_CONTROL_ACTION;
+    pdu->choice.xapp_control.id = generate_message_id();
+    pdu->choice.xapp_control.dapp_identifier = dapp_identifier;
+    pdu->choice.xapp_control.ran_function_identifier = ran_function_identifier;
+    pdu->choice.xapp_control.xapp_control_data_size = xapp_control_data_size;
+
+    memcpy(pdu->choice.xapp_control.xapp_control_data,
+           xapp_control_data, xapp_control_data_size);
+
+    return pdu;
+}
+
 void e3ap_pdu_free(e3ap_pdu_t *pdu)
 {
     if (pdu == NULL) {
@@ -243,6 +295,10 @@ size_t e3ap_pdu_get_size(e3ap_pdu_type_t pdu_type)
             return sizeof(e3ap_control_action_t);
         case E3AP_PDU_TYPE_MESSAGE_ACK:
             return sizeof(e3ap_message_ack_t);
+        case E3AP_PDU_TYPE_DAPP_REPORT:
+            return sizeof(e3ap_dapp_report_t);
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION:
+            return sizeof(e3ap_xapp_control_action_t);
         default:
             return 0;
     }
@@ -265,6 +321,10 @@ const char* e3ap_pdu_type_to_string(e3ap_pdu_type_t pdu_type)
             return "ControlAction";
         case E3AP_PDU_TYPE_MESSAGE_ACK:
             return "MessageAck";
+        case E3AP_PDU_TYPE_DAPP_REPORT:
+            return "DAppReport";
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION:
+            return "XAppControlAction";
         default:
             return "Unknown";
     }
@@ -390,6 +450,41 @@ int e3ap_pdu_validate(const e3ap_pdu_t *pdu)
                 return -1;
             }
             break;
+
+        case E3AP_PDU_TYPE_DAPP_REPORT:
+            if (pdu->choice.dapp_report.id == 0 ||
+                pdu->choice.dapp_report.id > 100) {
+                return -1;
+            }
+            if (pdu->choice.dapp_report.dapp_identifier > 100) {
+                return -1;
+            }
+            if (pdu->choice.dapp_report.ran_function_identifier > 100) {
+                return -1;
+            }
+            if (pdu->choice.dapp_report.report_data_size == 0 ||
+                pdu->choice.dapp_report.report_data_size > E3AP_MAX_DAPP_REPORT_DATA_SIZE) {
+                return -1;
+            }
+            break;
+
+        case E3AP_PDU_TYPE_XAPP_CONTROL_ACTION:
+            if (pdu->choice.xapp_control.id == 0 ||
+                pdu->choice.xapp_control.id > 100) {
+                return -1;
+            }
+            if (pdu->choice.xapp_control.dapp_identifier > 100) {
+                return -1;
+            }
+            if (pdu->choice.xapp_control.ran_function_identifier > 100) {
+                return -1;
+            }
+            if (pdu->choice.xapp_control.xapp_control_data_size == 0 ||
+                pdu->choice.xapp_control.xapp_control_data_size > E3AP_MAX_XAPP_CTRL_DATA_SIZE) {
+                return -1;
+            }
+            break;
+
             
         default:
             return -1;
