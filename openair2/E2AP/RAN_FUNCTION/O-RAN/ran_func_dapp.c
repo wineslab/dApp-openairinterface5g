@@ -154,7 +154,7 @@ void read_dapp_setup_sm(void* data)
 void generate_e2_indication_from_e3_dapp_report(uint32_t ran_function_id,
                                                 uint32_t dapp_id,
                                                 size_t report_size,
-                                                uint8_t* report_data)
+                                                const uint8_t* report_data)
 {
   if (report_data == NULL || report_size == 0) {
     return;
@@ -246,9 +246,7 @@ sm_ag_if_ans_t write_subs_dapp_sm(void const* src)
  *
  * For format-0 E2SM-DAPP ControlMessages, and when compiled with E3_AGENT:
  *  - Extracts RAN function ID, dApp ID, and control payload,
- *  - Builds an E3AP xApp control PDU,
- *  - Pushes it into the RAN-to-E3-agent queue for delivery to the dApp,
- *  - Logs failures to create or enqueue the PDU.
+ *  - Forwards it to the E3 agent via libe3 C API wrapper.
  *
  * Always returns a control outcome of type DAPP_AGENT_IF_CTRL_ANS_V0.
  */
@@ -268,14 +266,8 @@ sm_ag_if_ans_t write_ctrl_dapp_sm(void const* data)
       uint32_t data_size = ctrl->msg.frmt_0.data_size;
       const uint8_t* payload = ctrl->msg.frmt_0.data;
 
-      e3ap_pdu_t* pdu = e3ap_create_xapp_control_action(dapp_id, ran_function_id, (uint8_t*)payload, data_size);
-      if (!pdu) {
-        printf("[RAN FUNC DAPP CTRL] Failed to create xApp control PDU\n");
-      } else {
-        if (e3_response_queue_push(ran_to_e3_agent_queue, pdu) != 0) {
-          printf("[RAN FUNC DAPP CTRL] Failed to enqueue xApp control message\n");
-        }
-        e3ap_pdu_free(pdu);
+      if (e3_send_xapp_control(dapp_id, ran_function_id, payload, data_size) != 0) {
+        printf("[RAN FUNC DAPP CTRL] Failed to forward xApp control via E3 agent\n");
       }
 #endif
 

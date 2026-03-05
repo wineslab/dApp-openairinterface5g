@@ -1,17 +1,16 @@
 #ifndef SPECTRUM_SM_H
 #define SPECTRUM_SM_H
 
-#include "../sm_interface.h"
+#include <libe3/c_api.h>
+
 #include "common/utils/nr/nr_common.h"
+#include <stdbool.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stddef.h>
 
-// Forward declarations for spectrum SM functions
-int spectrum_sm_init(e3_service_model_t *sm);
-int spectrum_sm_destroy(e3_service_model_t *sm);
-void* spectrum_sm_thread_main(void *context);
-int spectrum_sm_process_dapp_control_action(uint32_t ran_function_id, uint8_t *encoded_data, size_t size);
-
-// Spectrum SM RAN function IDs
-#define SPECTRUM_SM_RAN_FUNCTION_ID 1
+e3_c_service_model_desc_t* create_spectrum_sm_model(void);
+void spectrum_sm_set_handle(e3_service_model_handle_t *sm_handle);
 
 /**
  * @brief E3 agent control variables
@@ -20,7 +19,7 @@ int spectrum_sm_process_dapp_control_action(uint32_t ran_function_id, uint8_t *e
  *
  */
 typedef struct e3_sm_spectrum_control {
-  char* action_list;
+  uint16_t* action_list;
   int action_size;
   uint16_t dyn_prbbl[MAX_BWP_SIZE];
   int ready;
@@ -38,12 +37,16 @@ typedef struct {
     int *event_flags;
     int number_of_events;
     int iq_data_event_id;
-    
-    // State
-    bool initialized;
-} spectrum_sm_context_t;
 
-// Export the spectrum SM instance
-extern e3_service_model_t spectrum_sm;
+    pthread_t connector_thread;
+    pthread_t worker_thread;
+    pthread_mutex_t lock;
+    bool connector_started;
+    bool connector_running;
+    bool tracer_ready;
+    bool running;
+    bool initialized;
+    e3_service_model_handle_t *sm_handle;
+} spectrum_sm_context_t;
 
 #endif // SPECTRUM_SM_H

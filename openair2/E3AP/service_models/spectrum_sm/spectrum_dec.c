@@ -1,9 +1,9 @@
 #include "spectrum_dec.h"
-#include "../sm_interface.h"  
-#include "common/utils/LOG/log.h"
+
 #include <stdlib.h>
 #include <string.h>
-#include <arpa/inet.h>
+
+#include "common/utils/LOG/log.h"
 
 #ifdef SPECTRUM_SM_ASN1_FORMAT
 #include "Spectrum-PRBBlacklistControl.h"

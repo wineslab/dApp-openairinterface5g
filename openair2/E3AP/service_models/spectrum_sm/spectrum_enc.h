@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /**
  * Spectrum SM Encoding Functions
@@ -15,6 +16,8 @@
 #ifdef SPECTRUM_SM_ASN1_FORMAT
     #include "Spectrum-IQDataIndication.h"
     #include "Spectrum-PRBBlacklistControl.h"
+    #include "Spectrum-ConfigControl.h"
+    #include "Spectrum-RanFunctionData.h"
 #endif
 
 #ifdef SPECTRUM_SM_JSON_FORMAT
@@ -34,6 +37,10 @@
 int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp,
                               uint8_t **encoded_data, size_t *encoded_size);
 
+/**
+ * Encode Spectrum RAN Function data for setup/registration.
+ */
+int spectrum_encode_ran_function_data(uint8_t **encoded_data, size_t *encoded_size);
 
 
 #endif // SPECTRUM_ENC_H

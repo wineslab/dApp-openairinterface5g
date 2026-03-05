@@ -16,8 +16,6 @@
 #include "common/ran_context.h"
 
 #if defined(E3_AGENT)
-#include "e3_response_queue.h"
-#include "e3ap_types.h"
 #include "e3_agent.h"
 #include <endian.h>
 #endif

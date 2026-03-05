@@ -118,13 +118,13 @@ Since the samples are **pre-equalization**:
 
 ```c
 typedef struct e3_sm_spectrum_control {
-  char* action_list;           // Temporary buffer for incoming PRB list
-  int action_size;             // Number of PRBs in action_list
-  uint16_t dyn_prbbl[MAX_BWP_SIZE];  // Dynamic PRB blacklist bitmap
-  int ready;                   // Flag: new policy available
-  uint32_t sampling_threshold; // IQ sampling decimation factor
-  uint32_t sampling_counter;   // Current sample count
-  pthread_mutex_t mutex;       // Thread synchronization
+  uint16_t* action_list;           // Temporary buffer (array) for incoming PRB indices
+  int action_size;                 // Number of PRBs in action_list
+  uint16_t dyn_prbbl[MAX_BWP_SIZE];  // Dynamic PRB blacklist bitmap (per-PRB marker)
+  int ready;                       // Flag: new policy available
+  uint32_t sampling_threshold;     // IQ sampling decimation factor
+  uint32_t sampling_counter;       // Current sample count
+  pthread_mutex_t mutex;           // Thread synchronization
 } e3_sm_spectrum_control_t;
 ```
 
@@ -132,17 +132,18 @@ typedef struct e3_sm_spectrum_control {
 
 When a control message arrives from the dApp:
 
-1. **Decode**: `spectrum_sm_process_dapp_control_action()` decodes the PRB control message
+1. **Decode**: `spectrum_sm_process_control()` decodes the PRB control message (E3 SM control handler)
 2. **Parse**: Extract blacklisted PRB indices from the message
 3. **Update**: Set `dyn_prbbl[prb_index] = 0x3FFF` for each blacklisted PRB
 4. **Signal**: Set `ready = 1` to indicate new policy is available
 
 ```c
-// From spectrum_sm.c
+// From spectrum_sm.c (actual control handler: `spectrum_sm_process_control()`)
 for (size_t j = 0; j < elems; ++j) {
-    uint16_t prb = alist16[j];
-    if (prb < MAX_BWP_SIZE)
-        e3_sm_spectrum_control->dyn_prbbl[prb] = 0x3FFF;
+  uint16_t prb = alist16[j];
+  if (prb < MAX_BWP_SIZE) {
+    e3_sm_spectrum_control->dyn_prbbl[prb] = 0x3FFF;
+  }
 }
 e3_sm_spectrum_control->ready = 1;
 ```
@@ -258,6 +259,12 @@ When a PRB is blacklisted (`ulprbbl[prb] = 0x3FFF`):
 | Policy update period | 128 frames | gNB_scheduler.c | ~1.28s between updates |
 | `MAX_BWP_SIZE` | 275 | nr_common.h | Maximum PRBs supported |
 
+**Exported functions (SM entry points)**
+
+- `create_spectrum_sm_model()` : Build and return the `e3_c_service_model_desc_t` descriptor for registration with the E3 agent. Encodes RAN function metadata (ASN.1 or JSON) via the SM encoder.
+- `spectrum_sm_set_handle()` : Provide the SM with the `e3_service_model_handle_t` used to emit indications and acknowledgements.
+
+
 ---
 
 ## 4. xApp-dApp Interaction (E2-E3 Bridge)
@@ -279,13 +286,13 @@ Spectrum-PRBBlockedControl ::= SEQUENCE {
 ```
 ┌──────────┐    ┌──────────┐    ┌─────────────────────────┐    ┌──────────┐
 │   xApp   │ →  │ E2 Agent │ →  │        E3 Agent         │ →  │   dApp   │
-│          │    │          │    │ (ran_to_e3_agent_queue) │    │          │
+│          │    │          │    │ (direct E2→E3 handoff) │    │          │
 └──────────┘    └──────────┘    └─────────────────────────┘    └──────────┘
 ```
 
-- The E2 Agent receives the xApp control action and pushes it into `ran_to_e3_agent_queue` (defined in `e3_agent.h`)
-- The E3 Agent publisher thread dequeues the message and forwards it to the dApp over the outbound E3 connection
-- The dApp can then use this information alongside its own spectrum analysis to decide the final PRB blacklist
+- The E2 Agent delivers xApp control actions to the E3 Agent using the E3 library APIs.
+- The E3 Agent registers an internal dApp-report handler (`e2_e3_bridge()`) using `e3_agent_set_dapp_report_handler()` which is invoked when a dApp report arrives.
+- `e2_e3_bridge()` forwards the received report to the E2-side translation function `generate_e2_indication_from_e3_dapp_report(ran_function_id, dapp_id, report_size, report_data)`, which emits the E2 indication to subscribed xApps.
 
 ### 4.2 dApp → xApp Report (`Spectrum-PRBBlacklistReport`)
 
@@ -301,15 +308,14 @@ Spectrum-PRBBlacklistReport ::= SEQUENCE {
 
 ```
 ┌──────────┐    ┌──────────────────────────────────────┐    ┌──────────┐    ┌──────────┐
-│   dApp   │ →  │    E3 Agent (subscriber_thread)      │ →  │ E2 Agent │ →  │   xApp   │
-│          │    │ generate_e2_indication_from_e3_dapp_ │    │          │    │          │
+│   dApp   │ →  │    E3 Agent (dApp-report handler)   │ →  │ E2 Agent │ →  │   xApp   │
+│          │    │ generate_e2_indication_from_e3_dapp │    │          │    │          │
 │          │    │ report()                             │    │          │    │          │
 └──────────┘    └──────────────────────────────────────┘    └──────────┘    └──────────┘
 ```
 
-- The E3 Agent subscriber thread receives the dApp report (`e3_agent.c`)
-- When `E2_AGENT` is enabled, it calls `generate_e2_indication_from_e3_dapp_report()` to translate the E3 report into an E2 indication
-- The E2 Agent delivers the indication to the subscribed xApps
+- The E3 Agent receives the dApp report via the registered report handler (`e3_agent.c`) and forwards it to the E2 translation function.
+- When `E2_AGENT` is enabled, `generate_e2_indication_from_e3_dapp_report()` translates the E3 dApp report into an E2 indication which the E2 Agent delivers to subscribed xApps.
 
 ### 4.3 Complete xApp-dApp Closed Loop
 
@@ -346,13 +352,24 @@ RAN
 | `openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch.c` | `nr_update_prb_policy()` implementation |
 | `openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch.c` | Slot 8 TDA reservation for sensing |
 
+
 xApp-dApp Bridge
 
 | File | Purpose |
 |------|---------|
-| `openair2/E3AP/e3_agent.h` | Declares `ran_to_e3_agent_queue` (E2→E3 bridge queue) |
-| `openair2/E3AP/e3_agent.c` | `subscriber_thread()` handles dApp reports; publisher thread forwards xApp controls |
-| `openair2/E3AP/ran_func_dapp_extern.h` | `generate_e2_indication_from_e3_dapp_report()` declaration |
+| `openair2/E3AP/e3_agent.h` | E3 agent global state and initialization (`e3_init()`, `e3_destroy()`); E3 agent registers a dApp-report handler in `e3_init()`.
+| `openair2/E3AP/e3_agent.c` | Implements the E3 agent lifecycle; installs `e2_e3_bridge()` as the dApp-report handler and forwards reports to the E2 translation function.
+| `openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_dapp_extern.h` | Declares `generate_e2_indication_from_e3_dapp_report()` used to translate E3 dApp reports into E2 indications.
 
 
 ---
+
+## Key functions
+
+- `spectrum_encode_indication()` — encode raw IQ/buffer data into the SM indication payload (used in the worker loop to prepare dApp indications).
+- `spectrum_decode_prb_control()` — decode incoming PRB control messages from dApps into `spectrum_prb_control_t` (used by the SM control handler).
+- `spectrum_encode_ran_function_data()` — encode the RAN function metadata (ASN.1 or JSON) returned by `create_spectrum_sm_model()`.
+- `spectrum_free_decoded_control()` — free the decoded control payload returned by `spectrum_decode_prb_control()`.
+- `spectrum_sm_process_control()` — SM control handler invoked by the E3 framework to apply incoming control messages.
+- `create_spectrum_sm_model()` and `spectrum_sm_set_handle()` — SM registration and handle plumbing functions.
+

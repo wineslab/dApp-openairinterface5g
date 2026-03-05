@@ -1,38 +1,34 @@
 #ifndef E3_AGENT_H
 #define E3_AGENT_H
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include <signal.h>
-#include <assert.h>
-#include <stdbool.h>
-#include <arpa/inet.h>
-#include <netdb.h> /* getprotobyname */
-#include <sys/socket.h>
 
 #include <unistd.h>
 
-#include <netinet/in.h>
-#include <sys/un.h>
+#include <libe3/c_api.h>
 
 #include "config/e3_config.h"
-#include "e3ap_types.h"
-#include "e3_subscription_manager.h"
-#include "service_models/sm_interface.h"
-#include "e3_response_queue.h"
 
 #ifdef E2_AGENT
 #include "ran_func_dapp_extern.h"
 #endif
 
-extern e3_subscription_manager_t* e3_subscription_manager;
-extern e3_response_queue_t* ran_to_e3_agent_queue;
+typedef struct {
+  e3_agent_handle_t *agent;
+  e3_service_model_handle_t **service_models;
+  size_t num_service_models;
+} e3_agent_global_t;
 
-int e3_agent_init();
-int e3_agent_destroy();
+extern e3_agent_global_t e3;
 
-void* e3_agent_dapp_task(void* args_p);
+int e3_init();
+int e3_destroy();
+
+int e3_send_xapp_control(uint32_t dapp_id,
+                         uint32_t ran_function_id,
+                         const uint8_t *data,
+                         size_t len);
 
 #endif // E3_AGENT_H

@@ -1,9 +1,18 @@
 #include "spectrum_enc.h"
-#include "../sm_interface.h"
-#include "common/utils/LOG/log.h"
+
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include <libe3/error_codes.h>
+
+#include "common/utils/LOG/log.h"
 
 #define ENCODE_BUFFER_SIZE 32768  // 32KB - allows 16KB IQ data + ASN.1 overhead
+#define RAN_FUNCTION_BUFFER_SIZE 512
+#define SPECTRUM_RAN_FUNCTION_NAME "spectrum_sm"
+#define SPECTRUM_RAN_FUNCTION_DESCRIPTION "Spectrum service model for IQ indication and PRB blacklist control"
+#define SPECTRUM_RAN_FUNCTION_VERSION 1
 
 #ifdef SPECTRUM_SM_ASN1_FORMAT
 /**
@@ -17,14 +26,14 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     if (!iq_data || iq_size == 0 || !encoded_data || !encoded_size) {
         LOG_E(E3AP, "[SPECTRUM_ENC] Invalid parameters: iq_data=%p, iq_size=%zu, encoded_data=%p, encoded_size=%p\n",
               iq_data, iq_size, encoded_data, encoded_size);
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_INVALID_PARAM;
     }
     
     // Create ASN.1 structure
     Spectrum_IQDataIndication_t *indication = calloc(1, sizeof(Spectrum_IQDataIndication_t));
     if (!indication) {
         LOG_E(E3AP, "[SPECTRUM_ENC] Failed to allocate indication structure\n");
-        return SM_ERROR_MEMORY;
+        return E3_SM_ERROR_MEMORY;
     }
     LOG_D(E3AP, "[SPECTRUM_ENC] Allocated indication structure at %p\n", indication);
     
@@ -33,7 +42,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     if (!indication->iqSamples.buf) {
         LOG_E(E3AP, "[SPECTRUM_ENC] Failed to allocate IQ buffer of size %zu\n", iq_size);
         free(indication);
-        return SM_ERROR_MEMORY;
+        return E3_SM_ERROR_MEMORY;
     }
     memcpy(indication->iqSamples.buf, iq_data, iq_size);
     indication->iqSamples.size = iq_size;
@@ -53,6 +62,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
             LOG_D(E3AP, "[SPECTRUM_ENC] Set timestamp: %ld\n", *(indication->timestamp));
         } else {
             LOG_E(E3AP, "[SPECTRUM_ENC] Failed to allocate timestamp\n");
+            return E3_SM_ERROR_MEMORY;
         }
     } else {
         LOG_D(E3AP, "[SPECTRUM_ENC] No timestamp set (timestamp=0)\n");
@@ -70,7 +80,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     if (!buffer) {
         LOG_E(E3AP, "[SPECTRUM_ENC] Failed to allocate encoding buffer of size %d\n", ENCODE_BUFFER_SIZE);
         ASN_STRUCT_FREE(asn_DEF_Spectrum_IQDataIndication, indication);
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_MEMORY;
     }
     LOG_D(E3AP, "[SPECTRUM_ENC] Allocated encoding buffer: %p, size: %d\n", buffer, ENCODE_BUFFER_SIZE);
     
@@ -94,7 +104,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
               iq_size, ENCODE_BUFFER_SIZE);
         free(buffer);
         ASN_STRUCT_FREE(asn_DEF_Spectrum_IQDataIndication, indication);
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_MEMORY;
     }
     
     *encoded_size = (enc_ret.encoded + 7) / 8; // Convert bits to bytes
@@ -105,7 +115,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
         LOG_E(E3AP, "[SPECTRUM_ENC] Failed to allocate output buffer of size %zu\n", *encoded_size);
         free(buffer);
         ASN_STRUCT_FREE(asn_DEF_Spectrum_IQDataIndication, indication);
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_INVALID_PARAM;
     }
     memcpy(*encoded_data, buffer, *encoded_size);
     LOG_D(E3AP, "[SPECTRUM_ENC] Copied %zu bytes to output buffer at %p\n", *encoded_size, *encoded_data);
@@ -115,7 +125,61 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     ASN_STRUCT_FREE(asn_DEF_Spectrum_IQDataIndication, indication);
     
     LOG_D(E3AP, "[SPECTRUM_ENC] Successfully encoded spectrum indication: %zu bytes\n", *encoded_size);
-    return SM_SUCCESS;
+    return E3_SUCCESS;
+}
+
+int spectrum_encode_ran_function_data(uint8_t **encoded_data, size_t *encoded_size)
+{
+    if (!encoded_data || !encoded_size) {
+        return E3_SM_ERROR_INVALID_PARAM;
+    }
+
+    *encoded_data = NULL;
+    *encoded_size = 0;
+
+    Spectrum_RanFunctionData_t rf_data;
+    memset(&rf_data, 0, sizeof(rf_data));
+
+    const size_t name_len = strlen(SPECTRUM_RAN_FUNCTION_NAME);
+    const size_t desc_len = strlen(SPECTRUM_RAN_FUNCTION_DESCRIPTION);
+
+    rf_data.name.buf = malloc(name_len);
+    rf_data.description.buf = malloc(desc_len);
+    if (!rf_data.name.buf || !rf_data.description.buf) {
+        free(rf_data.name.buf);
+        free(rf_data.description.buf);
+        return E3_SM_ERROR_MEMORY;
+    }
+
+    memcpy(rf_data.name.buf, SPECTRUM_RAN_FUNCTION_NAME, name_len);
+    rf_data.name.size = name_len;
+    rf_data.version = SPECTRUM_RAN_FUNCTION_VERSION;
+    memcpy(rf_data.description.buf, SPECTRUM_RAN_FUNCTION_DESCRIPTION, desc_len);
+    rf_data.description.size = desc_len;
+
+    uint8_t buffer[RAN_FUNCTION_BUFFER_SIZE];
+    asn_enc_rval_t enc_ret = aper_encode_to_buffer(&asn_DEF_Spectrum_RanFunctionData,
+                                                   NULL,
+                                                   &rf_data,
+                                                   buffer,
+                                                   sizeof(buffer));
+
+    free(rf_data.name.buf);
+    free(rf_data.description.buf);
+
+    if (enc_ret.encoded == -1) {
+        return E3_ENCODE_FAILED;
+    }
+
+    *encoded_size = (enc_ret.encoded + 7) / 8;
+    *encoded_data = malloc(*encoded_size);
+    if (!(*encoded_data)) {
+        *encoded_size = 0;
+        return E3_SM_ERROR_MEMORY;
+    }
+
+    memcpy(*encoded_data, buffer, *encoded_size);
+    return E3_SUCCESS;
 }
 
 #else
@@ -126,13 +190,13 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
 int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp,
                               uint8_t **encoded_data, size_t *encoded_size) {
     if (!iq_data || iq_size == 0 || !encoded_data || !encoded_size) {
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_INVALID_PARAM;
     }
     
     // Create JSON object
     json_object *indication = json_object_new_object();
     if (!indication) {
-        return SM_ERROR_MEMORY;
+        return E3_SM_ERROR_MEMORY;
     }
     
     // Convert IQ data to base64 or hex string for JSON
@@ -141,7 +205,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     char *hex_string = malloc(hex_size);
     if (!hex_string) {
         json_object_put(indication);
-        return SM_ERROR_MEMORY;
+        return E3_SM_ERROR_MEMORY;
     }
     
     uint8_t *data_bytes = (uint8_t *)iq_data;
@@ -164,7 +228,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     if (!json_string) {
         free(hex_string);
         json_object_put(indication);
-        return SM_ERROR_INVALID_PARAM;
+        return E3_SM_ERROR_INVALID_PARAM;
     }
     
     // Allocate output buffer
@@ -173,7 +237,7 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     if (!*encoded_data) {
         free(hex_string);
         json_object_put(indication);
-        return SM_ERROR_MEMORY;
+        return E3_SM_ERROR_MEMORY;
     }
     
     memcpy(*encoded_data, json_string, *encoded_size);
@@ -183,7 +247,45 @@ int spectrum_encode_indication(void *iq_data, size_t iq_size, uint32_t timestamp
     json_object_put(indication);
     
     LOG_D(E3AP, "Encoded spectrum indication (JSON): %zu bytes\n", *encoded_size);
-    return SM_SUCCESS;
+    return E3_SUCCESS;
+}
+
+int spectrum_encode_ran_function_data(uint8_t **encoded_data, size_t *encoded_size)
+{
+    if (!encoded_data || !encoded_size) {
+        return E3_SM_ERROR_INVALID_PARAM;
+    }
+
+    *encoded_data = NULL;
+    *encoded_size = 0;
+
+    json_object *rf_data = json_object_new_object();
+    if (!rf_data) {
+        return E3_SM_ERROR_MEMORY;
+    }
+
+    json_object_object_add(rf_data, "name", json_object_new_string(SPECTRUM_RAN_FUNCTION_NAME));
+    json_object_object_add(rf_data, "version", json_object_new_int(SPECTRUM_RAN_FUNCTION_VERSION));
+    json_object_object_add(rf_data, "description",
+                           json_object_new_string(SPECTRUM_RAN_FUNCTION_DESCRIPTION));
+
+    const char *json_string = json_object_to_json_string(rf_data);
+    if (!json_string) {
+        json_object_put(rf_data);
+        return E3_ENCODE_FAILED;
+    }
+
+    *encoded_size = strlen(json_string);
+    *encoded_data = malloc(*encoded_size);
+    if (!(*encoded_data)) {
+        json_object_put(rf_data);
+        *encoded_size = 0;
+        return E3_SM_ERROR_MEMORY;
+    }
+
+    memcpy(*encoded_data, json_string, *encoded_size);
+    json_object_put(rf_data);
+    return E3_SUCCESS;
 }
 
 #endif

@@ -22,6 +22,7 @@ target_include_directories(spectrum_sm PUBLIC
     ${CMAKE_SOURCE_DIR}/common/utils/LOG
     ${CMAKE_SOURCE_DIR}/openair2/E3AP
     ${CMAKE_SOURCE_DIR}/common/utils/T/tracer  # T-tracer headers
+    ${CLIBE3_INCLUDE_DIRS}  
 )
 
 target_compile_definitions(spectrum_sm PRIVATE T_MESSAGES_PATH="${OPENAIR_DIR}/common/utils/T/T_messages.txt")

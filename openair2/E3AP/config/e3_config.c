@@ -20,8 +20,8 @@
 /*-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 #define simOpt PARAMFLAG_NOFREE|PARAMFLAG_CMDLINE_NOPREFIXENABLED
 #define E3_PARAMS_DESC {					\
-    {"link",             "Link layer for E3",        simOpt,  .strptr=&e3_configs->link,               .defstrval="posix",           TYPE_STRING,    0 },\
-    {"transport",        "Transport layer for E3",   simOpt,  .strptr=&(e3_configs->transport),        .defstrval="ipc",                 TYPE_STRING,    0 },\
+    {"link",             "Link layer for E3",        simOpt,  .strptr=&config->link,             .defstrval="posix",           TYPE_STRING,    0 },\
+    {"transport",        "Transport layer for E3",   simOpt,  .strptr=&config->transport,        .defstrval="ipc",             TYPE_STRING,    0 },\
   };
 // clang-format on
 
@@ -33,7 +33,7 @@ const char *E3_VALID_CONFIGURATIONS[][2] = {
     {"posix", "sctp"},
     {"posix", "ipc"}};
 
-void e3_readconfig(e3_config_t *e3_configs)
+void e3_readconfig(e3_cmdline_config_t *config)
 {
   paramdef_t e3_params[] = E3_PARAMS_DESC;
 
@@ -42,11 +42,11 @@ void e3_readconfig(e3_config_t *e3_configs)
 
   LOG_I(E3AP,
         "this is the configuration extracted: link %s transport %s\n",
-        e3_configs->link,
-        e3_configs->transport);
+        config->link,
+        config->transport);
 }
 
-void validate_configuration(e3_config_t *config)
+void validate_configuration(e3_cmdline_config_t *config)
 {
   if (!config) {
     LOG_E(E3AP, "Configuration is null");

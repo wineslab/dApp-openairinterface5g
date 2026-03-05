@@ -536,7 +536,7 @@ int main( int argc, char **argv ) {
 //// Init the E3 Agent
 #ifdef E3_AGENT
   printf("Init E3 Agent\n");
-  e3_agent_init();
+  e3_init();
 #endif // E3_AGENT
 
 #if T_TRACER
@@ -744,6 +744,11 @@ int main( int argc, char **argv ) {
   pthread_mutex_destroy(&nfapi_sync_mutex);
 
   time_manager_finish();
+
+#ifdef E3_AGENT
+  printf("Destroy E3 Agent\n");
+  e3_destroy();
+#endif // E3_AGENT
 
   free(pckg);
   logClean();

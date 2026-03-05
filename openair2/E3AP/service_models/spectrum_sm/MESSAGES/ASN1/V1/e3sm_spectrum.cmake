@@ -47,6 +47,8 @@ set(spectrum_sm_source
     # Spectrum SM specific generated files
     Spectrum-IQDataIndication.c
     Spectrum-PRBBlacklistControl.c
+    Spectrum-ConfigControl.c
+    Spectrum-RanFunctionData.c
 )
 
 set(spectrum_sm_headers
@@ -95,4 +97,6 @@ set(spectrum_sm_headers
     xer_support.h
     Spectrum-IQDataIndication.h
     Spectrum-PRBBlacklistControl.h
+    Spectrum-ConfigControl.h
+    Spectrum-RanFunctionData.h
 )
