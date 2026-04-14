@@ -5,76 +5,41 @@
 #include <assert.h>
 #include <pthread.h>
 
+/** @brief Mutex protecting all per-SM dapp_subs_data_t operations. */
 static pthread_mutex_t dapp_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/** @brief Mutex protecting the global Format 1 and Format 2 registries. */
 static pthread_mutex_t g_map_mtx = PTHREAD_MUTEX_INITIALIZER;
-static seq_arr_t g_all_fmt0_subs;
+
+/** @brief Global list of RIC request IDs subscribed to Format 1 (E3 data reports). */
+static seq_arr_t g_all_frmt1_subs;
+
+/** @brief Global list of RIC request IDs subscribed to Format 2 (subscription map). */
+static seq_arr_t g_all_frmt2_subs;
+
+/** @brief Guard for one-time initialization of the global lists. */
 static bool g_map_inited = false;
 
-/**
- * @brief Predicate to compare a RIC request ID with a stored uint32_t entry.
- */
-static bool eq_int_fmt0(const void *value, const void *it)
-{
-  const uint32_t ric_req_id = *(const uint32_t *)value;
-  const uint32_t *stored = (const uint32_t *)it;
-  return ric_req_id == *stored;
-}
+/* ── Helpers ── */
 
 /**
- * @brief Initialize per-SM DAPP subscription data (event triggers + fmt0 list).
- */
-void init_dapp_subs_data(dapp_subs_data_t *dapp_subs_data)
-{
-  pthread_mutex_lock(&dapp_mutex);
-  seq_arr_init(&dapp_subs_data->fmt_0_subs, sizeof(uint32_t));
-  pthread_mutex_unlock(&dapp_mutex);
-}
-
-/**
- * @brief Remove all per-SM subscription state for a given RIC request ID.
+ * @brief Predicate: compare two uint32_t values for equality.
  *
- * This function:
- *  - Searches for @p ric_req_id in the per-SM fmt_0_subs list.
- *  - If found, erases the entry from the local list and then calls
- *    ric_subs_remove(ric_req_id) to drop it from the global registry.
- *  - If not found, logs a warning that an unknown RIC request ID was removed.
+ * Used with find_if() to locate a RIC request ID in a seq_arr_t.
  */
-void remove_dapp_subs_data(dapp_subs_data_t *dapp_subs_data, uint32_t ric_req_id)
+static bool eq_uint32(const void *value, const void *it)
 {
-  pthread_mutex_lock(&dapp_mutex);
-
-  // Look for ric_req_id only in the fmt_0_subs list
-  elm_arr_t elm_fmt0 = find_if(&dapp_subs_data->fmt_0_subs, &ric_req_id, eq_int_fmt0);
-  const bool had_fmt0 = (elm_fmt0.it != NULL);
-
-  if (had_fmt0) {
-    seq_arr_erase(&dapp_subs_data->fmt_0_subs, elm_fmt0.it);
-  } else {
-    printf("[E2 AGENT][WARN] Tried to remove unknown RIC request ID: %u\n", ric_req_id);
-  }
-
-  pthread_mutex_unlock(&dapp_mutex);
-
-  if (had_fmt0) {
-    ric_subs_remove(ric_req_id);
-  }
+  return *(const uint32_t *)value == *(const uint32_t *)it;
 }
 
 /**
- * @brief One-time initialization of the global list of fmt0 subscriptions.
+ * @brief Check whether a seq_arr_t contains a given uint32_t value.
+ *
+ * @param s  The sequence to search.
+ * @param v  The value to look for.
+ * @return   true if found, false otherwise.
  */
-static void subs_init_once(void)
-{
-  if (!g_map_inited) {
-    seq_arr_init(&g_all_fmt0_subs, sizeof(uint32_t));
-    g_map_inited = true;
-  }
-}
-
-/**
- * @brief Check if a sequence of uint32_t contains a given RIC request ID.
- */
-static bool seq_contains_req_id(const seq_arr_t *s, uint32_t v)
+static bool seq_contains(const seq_arr_t *s, uint32_t v)
 {
   for (void *it = seq_arr_front((seq_arr_t *)s); it != seq_arr_end((seq_arr_t *)s); it = seq_arr_next(s, it))
     if (*(uint32_t *)it == v)
@@ -83,20 +48,25 @@ static bool seq_contains_req_id(const seq_arr_t *s, uint32_t v)
 }
 
 /**
- * @brief Append a RIC request ID to a sequence if it is not already present.
+ * @brief Append a uint32_t to a seq_arr_t if not already present.
+ *
+ * @param s  The sequence to modify.
+ * @param v  The value to insert.
  */
-static void seq_push_unique_req_id(seq_arr_t *s, uint32_t v)
+static void seq_push_unique(seq_arr_t *s, uint32_t v)
 {
-  if (!seq_contains_req_id(s, v))
+  if (!seq_contains(s, v))
     seq_arr_push_back(s, &v, sizeof(v));
 }
 
 /**
- * @brief Remove the first occurrence of a RIC request ID from a sequence.
+ * @brief Remove the first occurrence of a uint32_t from a seq_arr_t.
  *
- * @return true if an element was removed, false otherwise.
+ * @param s  The sequence to modify.
+ * @param v  The value to remove.
+ * @return   true if an element was removed, false if not found.
  */
-static bool seq_remove_first_req_id(seq_arr_t *s, uint32_t v)
+static bool seq_remove_first(seq_arr_t *s, uint32_t v)
 {
   for (void *it = seq_arr_front(s); it != seq_arr_end(s); it = seq_arr_next(s, it)) {
     if (*(uint32_t *)it == v) {
@@ -108,75 +78,164 @@ static bool seq_remove_first_req_id(seq_arr_t *s, uint32_t v)
 }
 
 /**
- * @brief Track a new format-0 subscription ID in the per-SM data structure.
+ * @brief Copy all uint32_t elements from a seq_arr_t into a heap-allocated array.
+ *
+ * Must be called while g_map_mtx is held. Sets *out to NULL and returns 0
+ * if the sequence is empty or allocation fails.
+ *
+ * @param      s    The sequence to snapshot.
+ * @param[out] out  Set to the allocated array of IDs.
+ * @return          Number of elements copied.
  */
-void insert_fmt_0_ric_id(dapp_subs_data_t *d, uint32_t ric_req_id)
+static size_t seq_snapshot_locked(seq_arr_t *s, uint32_t **out)
 {
-  pthread_mutex_lock(&dapp_mutex);
-  seq_arr_push_back(&d->fmt_0_subs, &ric_req_id, sizeof(ric_req_id));
-  pthread_mutex_unlock(&dapp_mutex);
-}
-
-/**
- * @brief Add a RIC request ID to the global list of format-0 subscriptions.
- */
-void ric_subs_add(uint32_t ric_req_id)
-{
-  pthread_mutex_lock(&g_map_mtx);
-  subs_init_once();
-  seq_push_unique_req_id(&g_all_fmt0_subs, ric_req_id);
-  pthread_mutex_unlock(&g_map_mtx);
-}
-
-/**
- * @brief Snapshot all globally registered format-0 RIC subscription request IDs.
- */
-size_t ric_subs_snapshot(uint32_t **out)
-{
-  assert(out != NULL);
-  *out = NULL;
-
-  pthread_mutex_lock(&g_map_mtx);
-  subs_init_once();
-
   size_t n = 0;
-  for (void *it = seq_arr_front(&g_all_fmt0_subs);
-       it != seq_arr_end(&g_all_fmt0_subs);
-       it = seq_arr_next(&g_all_fmt0_subs, it)) {
+  for (void *it = seq_arr_front(s); it != seq_arr_end(s); it = seq_arr_next(s, it))
     ++n;
-  }
 
   if (n == 0) {
-    pthread_mutex_unlock(&g_map_mtx);
+    *out = NULL;
     return 0;
   }
 
   uint32_t *ids = malloc(n * sizeof(*ids));
   if (ids == NULL) {
-    pthread_mutex_unlock(&g_map_mtx);
+    *out = NULL;
     return 0;
   }
 
   size_t i = 0;
-  for (void *it = seq_arr_front(&g_all_fmt0_subs);
-       it != seq_arr_end(&g_all_fmt0_subs);
-       it = seq_arr_next(&g_all_fmt0_subs, it)) {
+  for (void *it = seq_arr_front(s); it != seq_arr_end(s); it = seq_arr_next(s, it))
     ids[i++] = *(uint32_t *)it;
-  }
-
-  pthread_mutex_unlock(&g_map_mtx);
 
   *out = ids;
   return n;
 }
 
 /**
- * @brief Remove a RIC request ID from the global list of format-0 subscriptions.
+ * @brief Lazily initialize both global subscription lists.
+ *
+ * Called under g_map_mtx before any global list operation.
  */
-void ric_subs_remove(uint32_t ric_req_id)
+static void subs_init_once(void)
+{
+  if (!g_map_inited) {
+    seq_arr_init(&g_all_frmt1_subs, sizeof(uint32_t));
+    seq_arr_init(&g_all_frmt2_subs, sizeof(uint32_t));
+    g_map_inited = true;
+  }
+}
+
+/* ── Per-SM init / remove ── */
+
+void init_dapp_subs_data(dapp_subs_data_t *dapp_subs_data)
+{
+  pthread_mutex_lock(&dapp_mutex);
+  seq_arr_init(&dapp_subs_data->frmt_1_subs, sizeof(uint32_t));
+  seq_arr_init(&dapp_subs_data->frmt_2_subs, sizeof(uint32_t));
+  pthread_mutex_unlock(&dapp_mutex);
+}
+
+void remove_dapp_subs_data(dapp_subs_data_t *dapp_subs_data, uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&dapp_mutex);
+
+  elm_arr_t elm_f1 = find_if(&dapp_subs_data->frmt_1_subs, &ric_req_id, eq_uint32);
+  const bool had_f1 = (elm_f1.it != NULL);
+
+  elm_arr_t elm_f2 = find_if(&dapp_subs_data->frmt_2_subs, &ric_req_id, eq_uint32);
+  const bool had_f2 = (elm_f2.it != NULL);
+
+  if (had_f1)
+    seq_arr_erase(&dapp_subs_data->frmt_1_subs, elm_f1.it);
+  if (had_f2)
+    seq_arr_erase(&dapp_subs_data->frmt_2_subs, elm_f2.it);
+
+  if (!had_f1 && !had_f2)
+    printf("[E2 AGENT][WARN] Tried to remove unknown RIC request ID: %u\n", ric_req_id);
+
+  pthread_mutex_unlock(&dapp_mutex);
+
+  if (had_f1)
+    ric_subs_frmt1_remove(ric_req_id);
+  if (had_f2)
+    ric_subs_frmt2_remove(ric_req_id);
+}
+
+/* ── Per-SM insert ── */
+
+void insert_frmt_1_ric_id(dapp_subs_data_t *d, uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&dapp_mutex);
+  seq_arr_push_back(&d->frmt_1_subs, &ric_req_id, sizeof(ric_req_id));
+  pthread_mutex_unlock(&dapp_mutex);
+}
+
+void insert_frmt_2_ric_id(dapp_subs_data_t *d, uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&dapp_mutex);
+  seq_arr_push_back(&d->frmt_2_subs, &ric_req_id, sizeof(ric_req_id));
+  pthread_mutex_unlock(&dapp_mutex);
+}
+
+/* ── Global Format 1 ── */
+
+void ric_subs_frmt1_add(uint32_t ric_req_id)
 {
   pthread_mutex_lock(&g_map_mtx);
   subs_init_once();
-  (void)seq_remove_first_req_id(&g_all_fmt0_subs, ric_req_id);
+  seq_push_unique(&g_all_frmt1_subs, ric_req_id);
+  pthread_mutex_unlock(&g_map_mtx);
+}
+
+size_t ric_subs_frmt1_snapshot(uint32_t **out)
+{
+  assert(out != NULL);
+  *out = NULL;
+
+  pthread_mutex_lock(&g_map_mtx);
+  subs_init_once();
+  size_t n = seq_snapshot_locked(&g_all_frmt1_subs, out);
+  pthread_mutex_unlock(&g_map_mtx);
+
+  return n;
+}
+
+void ric_subs_frmt1_remove(uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&g_map_mtx);
+  subs_init_once();
+  (void)seq_remove_first(&g_all_frmt1_subs, ric_req_id);
+  pthread_mutex_unlock(&g_map_mtx);
+}
+
+/* ── Global Format 2 ── */
+
+void ric_subs_frmt2_add(uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&g_map_mtx);
+  subs_init_once();
+  seq_push_unique(&g_all_frmt2_subs, ric_req_id);
+  pthread_mutex_unlock(&g_map_mtx);
+}
+
+size_t ric_subs_frmt2_snapshot(uint32_t **out)
+{
+  assert(out != NULL);
+  *out = NULL;
+
+  pthread_mutex_lock(&g_map_mtx);
+  subs_init_once();
+  size_t n = seq_snapshot_locked(&g_all_frmt2_subs, out);
+  pthread_mutex_unlock(&g_map_mtx);
+
+  return n;
+}
+
+void ric_subs_frmt2_remove(uint32_t ric_req_id)
+{
+  pthread_mutex_lock(&g_map_mtx);
+  subs_init_once();
+  (void)seq_remove_first(&g_all_frmt2_subs, ric_req_id);
   pthread_mutex_unlock(&g_map_mtx);
 }

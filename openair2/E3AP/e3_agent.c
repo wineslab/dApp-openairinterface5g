@@ -41,6 +41,14 @@ static void e2_e3_bridge(uint32_t dapp_id,
 #endif
 }
 
+void on_dapp_status_changed(void)
+{
+  LOG_I(E3AP, "dApp status changed, triggering RIC Service Update\n");
+#ifdef E2_AGENT
+  notify_dapp_status_changed();
+#endif
+}
+
 
 int e3_init()
 {
@@ -121,6 +129,14 @@ int e3_init()
     e3.agent = NULL;
     return -1;
   }
+
+  err = e3_agent_set_dapp_status_changed_handler(e3.agent, on_dapp_status_changed);
+  if (err != 0) {
+    LOG_E(E3AP, "Failed to set dApp status changed handler (err=%d: %s)\n", err, e3_error_to_string(err));
+    e3_agent_destroy(e3.agent);
+    e3.agent = NULL;
+    return -1;
+  }
   
   // Register the SMs
   // SM Spectrum
@@ -190,4 +206,62 @@ int e3_send_xapp_control(uint32_t dapp_id,
     return -1;
   }
   return 0;
+}
+
+e3_dapp_subscription_map_t e3_get_dapp_subscription_map(void)
+{
+  e3_dapp_subscription_map_t map = {0};
+
+  if (!e3.agent) {
+    LOG_W(E3AP, "E3 agent not initialized: cannot query dApp subscriptions\n");
+    return map;
+  }
+
+  size_t num_dapps = 0;
+  uint32_t *dapp_ids = e3_agent_get_registered_dapps(e3.agent, &num_dapps);
+  if (!dapp_ids || num_dapps == 0) {
+    e3_agent_free_uint32_array(dapp_ids);
+    return map;
+  }
+
+  map.dapps = (e3_dapp_info_t *)calloc(num_dapps, sizeof(e3_dapp_info_t));
+  if (!map.dapps) {
+    LOG_E(E3AP, "Failed to allocate dApp subscription map\n");
+    e3_agent_free_uint32_array(dapp_ids);
+    return map;
+  }
+  map.num_dapps = num_dapps;
+
+  for (size_t i = 0; i < num_dapps; i++) {
+    map.dapps[i].dapp_id = dapp_ids[i];
+
+    size_t num_subs = 0;
+    uint32_t *subs = e3_agent_get_dapp_subscriptions(e3.agent, dapp_ids[i], &num_subs);
+
+    if (subs && num_subs > 0) {
+      map.dapps[i].e3_ran_func_ids = subs; // transfer ownership from libe3 malloc
+      map.dapps[i].num_e3_ran_funcs = num_subs;
+    } else {
+      map.dapps[i].e3_ran_func_ids = NULL;
+      map.dapps[i].num_e3_ran_funcs = 0;
+      e3_agent_free_uint32_array(subs);
+    }
+  }
+
+  e3_agent_free_uint32_array(dapp_ids);
+  return map;
+}
+
+void e3_free_dapp_subscription_map(e3_dapp_subscription_map_t *map)
+{
+  if (!map || !map->dapps)
+    return;
+
+  for (size_t i = 0; i < map->num_dapps; i++) {
+    e3_agent_free_uint32_array(map->dapps[i].e3_ran_func_ids);
+  }
+  free(map->dapps);
+
+  map->dapps = NULL;
+  map->num_dapps = 0;
 }

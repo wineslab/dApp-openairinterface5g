@@ -12,4 +12,7 @@ void generate_e2_indication_from_e3_dapp_report(uint32_t ran_function_id,
                                                 uint32_t dapp_id,
                                                 size_t report_size,
                                                 const uint8_t *report_data);
+
+void notify_dapp_status_changed(void);
+
 #endif
