@@ -9,10 +9,11 @@ else()
 endif()
 
 message(STATUS "Selected SPECTRUM_SM_VERSION: ${SPECTRUM_SM_RELEASE}")
-add_custom_command(OUTPUT ${spectrum_sm_source} ${spectrum_sm_headers}
-  COMMAND ${ASN1C_EXEC} -pdu=all -gen-APER -gen-UPER -no-gen-JER -no-gen-BER -no-gen-OER -fno-include-deps -fcompound-names -findirect-choice -no-gen-example -D ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${SPECTRUM_SM_GRAMMAR}
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SPECTRUM_SM_GRAMMAR}
-  COMMENT "Generating Spectrum SM source files from ${CMAKE_CURRENT_SOURCE_DIR}/${SPECTRUM_SM_GRAMMAR}"
+run_asn1c(${CMAKE_CURRENT_SOURCE_DIR}/${SPECTRUM_SM_GRAMMAR}
+          ""
+          OUTPUT ${spectrum_sm_source} ${spectrum_sm_headers}
+          OPTIONS -pdu=all -gen-APER -gen-UPER -no-gen-JER -no-gen-BER -no-gen-OER -fno-include-deps -fcompound-names -findirect-choice -no-gen-example
+          COMMENT "Spectrum SM source files"
 )
 
 
