@@ -5,8 +5,6 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
-#define UNUSED(x) (void)x
-
 void new_thread(void *(*f)(void *), void *data);
 void sleepms(int ms);
 void bps(char *out, float v, char *suffix);

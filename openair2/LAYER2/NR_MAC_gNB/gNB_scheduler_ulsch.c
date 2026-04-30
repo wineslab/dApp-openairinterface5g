@@ -110,6 +110,15 @@ const NR_tda_info_t *get_best_ul_tda(const gNB_MAC_INST *nrmac, int beam, const 
     int start = check_rb_start;
     int len = check_rb_len;
     uint16_t tda_mask = SL_to_bitmap(tdas->startSymbolIndex, tdas->nrOfSymbols);
+
+#ifdef E3_AGENT
+    // Skip TDAs that use symbol 12 in slot 8 (reserved for spectrum sensing)
+    if (slot == 8 && (tda_mask & (1 << 12))) {
+      LOG_D(NR_MAC, "%4d.%2d skipping TDA (mask 0x%04x) overlapping spectrum sensing symbol\n", frame, slot, tda_mask);
+      continue;
+    }
+#endif
+
     get_max_rb_range(vrb_map_UL, nrmac->ulprbbl, tda_mask, &start, &len);
     uint64_t s = (uint64_t)tdas->nrOfSymbols * len;
     if (s > score) {
