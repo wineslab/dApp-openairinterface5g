@@ -1099,7 +1099,13 @@ void nr_rrc_config_ul_tda(NR_ServingCellConfigCommon_t *scc, int min_fb_delay, i
   asn1cSeqAdd(&tda_list->list, tda);
 
   // UL TDA index 1 in case of SRS
-  if (do_SRS) {
+  bool need_no_sym12_tda = do_SRS;
+#ifdef E3_AGENT
+  // E3 spectrum sensing reads symbol 12 of slot 8, so a TDA without symbol 12
+  // must always be available for get_best_ul_tda() to pick in slot 8.
+  need_no_sym12_tda = true;
+#endif
+  if (need_no_sym12_tda) {
     tda = set_TimeDomainResourceAllocation(k2, get_SLIV(0, 12));
     asn1cSeqAdd(&tda_list->list, tda);
   }
@@ -1153,7 +1159,7 @@ void nr_rrc_config_ul_tda(NR_ServingCellConfigCommon_t *scc, int min_fb_delay, i
       for (int i = k2 + 1; i <= N_ul; ++i) {
         tda = set_TimeDomainResourceAllocation(i, get_SLIV(0, 13));
         asn1cSeqAdd(&tda_list->list, tda);
-        if (do_SRS) {
+        if (need_no_sym12_tda) {
           tda = set_TimeDomainResourceAllocation(i, get_SLIV(0, 12));
           asn1cSeqAdd(&tda_list->list, tda);
         }
