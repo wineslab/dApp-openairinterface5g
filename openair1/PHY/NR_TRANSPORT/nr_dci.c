@@ -27,6 +27,19 @@ static void nr_pdcch_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint3
     out[i] = in[i] ^ seq[i];
 }
 
+static inline uint16_t get_dci_ant_port_index(const nfapi_v4_pdcch_pdu_parameters_t *p, int dci_index)
+{
+  uint16_t dci_ant_idx = 0;
+  for (uint_fast16_t i = 0; i < p->numSpatialStreams; i++) {
+    if (dci_index == p->dci_spatialStreamIndices[i].dci_index) {
+      // Return at first find because DCIs use only one antenna port at the moment
+      dci_ant_idx = p->dci_spatialStreamIndices[i].spatial_stream_index;
+      break;
+    }
+  }
+  return dci_ant_idx;
+}
+
 void nr_generate_dci(PHY_VARS_gNB *gNB,
                      const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
                      NR_DL_FRAME_PARMS *frame_parms,
@@ -59,13 +72,21 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
     uint32_t cset_nsymb = pdcch_pdu_rel15->DurationSymbols;
     int dci_idx = 0;
     // multi-beam number (for concurrent beams)
-    int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
-    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                        dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                        &gNB->common_vars,
-                                        slot,
-                                        frame_parms->symbols_per_slot,
-                                        bitmap);
+    uint16_t symb_bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
+    uint16_t beam_id = dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    uint16_t dci_spatial_stream_index = get_first_ant_idx(gNB->enable_analog_das,
+                                                          frame_parms->nb_antennas_tx / gNB->common_vars.num_beams_period,
+                                                          beam_id,
+                                                          get_dci_ant_port_index(&pdcch_pdu_rel15->param_v4, d));
+
+    beam_index_allocation(beam_id,
+                          dci_spatial_stream_index,
+                          1, // Only one antenna port for DCI
+                          frame_parms->symbols_per_slot,
+                          slot,
+                          symb_bitmap,
+                          frame_parms->nb_antennas_tx,
+                          gNB->common_vars.beam_id);
 
     LOG_D(NR_PHY_DCI, "pdcch: Coreset rb_offset %d, nb_rb %d BWP Start %d\n", rb_offset, n_rb, pdcch_pdu_rel15->BWPStart);
     LOG_D(NR_PHY_DCI,
@@ -154,7 +175,7 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
 
     /// Resource mapping
     uint16_t amp = gNB->TX_AMP;
-    c16_t *txdataF = gNB->common_vars.txdataF[beam_nb][0];
+    c16_t *txdataF = gNB->common_vars.txdataF[dci_spatial_stream_index];
 
     int num_regs = dci_pdu->AggregationLevel * NR_NB_REG_PER_CCE / pdcch_pdu_rel15->DurationSymbols;
     /*Mapping the encoded DCI along with the DMRS */

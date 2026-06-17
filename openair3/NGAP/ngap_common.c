@@ -190,12 +190,40 @@ pdusession_level_qos_parameter_t fill_qos(uint8_t qfi, const NGAP_QosFlowLevelQo
   AssertFatal(qosChar != NULL, "QoS characteristics are NULL\n");
   if (qosChar->present == NGAP_QosCharacteristics_PR_nonDynamic5QI) {
     AssertFatal(qosChar->choice.nonDynamic5QI != NULL, "nonDynamic5QI is NULL\n");
+    const NGAP_NonDynamic5QIDescriptor_t *nonDyn = qosChar->choice.nonDynamic5QI;
+    non_dynamic_5qi_t *out_non_dyn = &out.qos_characteristics.non_dynamic;
     out.fiveQI_type = NON_DYNAMIC;
-    out.fiveQI = qosChar->choice.nonDynamic5QI->fiveQI;
+    /** For NonDynamic5QI, fiveQI is mandatory and indicates standardized or pre-configured 5QI
+     * (5G QoS characteristics are not signaled, they are derived from the 5QI value) */
+    out_non_dyn->fiveQI = nonDyn->fiveQI;
+    // Extract priorityLevelQos if present (optional for NonDynamic5QI)
+    if (nonDyn->priorityLevelQos != NULL) {
+      out_non_dyn->qos_priority = calloc_or_fail(1, sizeof(*out_non_dyn->qos_priority));
+      *out_non_dyn->qos_priority = *nonDyn->priorityLevelQos;
+      DevAssert(*out_non_dyn->qos_priority >= MIN_QOS_PRIORITY_LEVEL && *out_non_dyn->qos_priority <= MAX_QOS_PRIORITY_LEVEL);
+    }
   } else if (qosChar->present == NGAP_QosCharacteristics_PR_dynamic5QI) {
     AssertFatal(qosChar->choice.dynamic5QI != NULL, "dynamic5QI is NULL\n");
+    const NGAP_Dynamic5QIDescriptor_t *dyn = qosChar->choice.dynamic5QI;
+    dynamic_5qi_t *out_dyn = &out.qos_characteristics.dynamic;
     out.fiveQI_type = DYNAMIC;
-    out.fiveQI = *qosChar->choice.dynamic5QI->fiveQI;
+    /** Extract fiveQI if present (optional for Dynamic5QI)
+     * For Dynamic5QI, fiveQI is optional and indicates dynamically assigned 5QI
+     * (5G QoS characteristics are signaled as part of the QoS profile) */
+    if (dyn->fiveQI != NULL) {
+      out_dyn->fiveQI = calloc_or_fail(1, sizeof(*out_dyn->fiveQI));
+      *out_dyn->fiveQI = *dyn->fiveQI;
+    }
+    // Extract priorityLevelQos (mandatory)
+    out_dyn->qos_priority = dyn->priorityLevelQos;
+    DevAssert(out_dyn->qos_priority >= MIN_QOS_PRIORITY_LEVEL && out_dyn->qos_priority <= MAX_QOS_PRIORITY_LEVEL);
+    /** Extract packetDelayBudget (mandatory)
+     * Note: Per 3GPP TS 38.413 §9.3.1.18, this IE is ignored if Extended Packet Delay Budget
+     * is present in iE_Extensions. Extended Packet Delay Budget parsing is not yet implemented. */
+    out_dyn->packet_delay_budget = dyn->packetDelayBudget;
+    // Extract packetErrorRate (mandatory)
+    out_dyn->per.scalar = dyn->packetErrorRate.pERScalar;
+    out_dyn->per.exponent = dyn->packetErrorRate.pERExponent;
   } else {
     AssertFatal(0, "Unsupported QoS Characteristics present value: %d\n", qosChar->present);
   }
@@ -204,6 +232,19 @@ pdusession_level_qos_parameter_t fill_qos(uint8_t qfi, const NGAP_QosFlowLevelQo
   out.arp.priority_level = arp->priorityLevelARP;
   out.arp.pre_emp_capability = arp->pre_emptionCapability;
   out.arp.pre_emp_vulnerability = arp->pre_emptionVulnerability;
+
+  // Extract GBR QoS Flow Information (optional - only for GBR flows)
+  if (params->gBR_QosInformation != NULL) {
+    const NGAP_GBR_QosInformation_t *gBR = params->gBR_QosInformation;
+    out.gbr_qos_flow_information = calloc_or_fail(1, sizeof(*out.gbr_qos_flow_information));
+    gbr_qos_flow_information_t *gbr_info = out.gbr_qos_flow_information;
+
+    // Extract bit rates (NGAP_BitRate_t is INTEGER_t, requires conversion function)
+    asn_INTEGER2ulong(&gBR->guaranteedFlowBitRateDL, &gbr_info->dl.guaranteedFlowBitRate);
+    asn_INTEGER2ulong(&gBR->maximumFlowBitRateDL, &gbr_info->dl.maximumFlowBitRate);
+    asn_INTEGER2ulong(&gBR->guaranteedFlowBitRateUL, &gbr_info->ul.guaranteedFlowBitRate);
+    asn_INTEGER2ulong(&gBR->maximumFlowBitRateUL, &gbr_info->ul.maximumFlowBitRate);
+  }
 
   return out;
 }

@@ -118,6 +118,7 @@ typedef struct {
 
 typedef struct {
   uint8_t harq_pid;
+  uint8_t cw_idx;
   uint8_t ack_nack;
   uint32_t pdu_length;
   uint8_t* pdu;
@@ -467,6 +468,17 @@ typedef struct {
 typedef enum{vrb_to_prb_mapping_non_interleaved = 0, vrb_to_prb_mapping_interleaved = 1} vrb_to_prb_mapping_t;
 
 typedef struct {
+  uint8_t mcs;
+  bool new_data_indicator;
+  uint8_t rv;
+  uint16_t targetCodeRate;
+  uint8_t qamModOrder;
+  uint32_t TBS;
+  uint8_t ldpcBaseGraph;
+  uint8_t Nl;
+} fapi_nr_dl_cw_info_t;
+
+typedef struct {
   uint16_t BWPSize;
   uint16_t BWPStart;
   uint8_t SubcarrierSpacing;
@@ -482,15 +494,8 @@ typedef struct {
   uint8_t prb_bundling_size_ind;
   uint8_t rate_matching_ind;
   uint8_t zp_csi_rs_trigger;
-  uint8_t mcs;
-  bool new_data_indicator;
-  uint8_t rv;
-  uint16_t targetCodeRate;
-  uint8_t qamModOrder;
-  uint32_t TBS;
-  uint8_t tb2_mcs;
-  bool tb2_new_data_indicator;
-  uint8_t tb2_rv;
+  uint8_t n_codewords;
+  fapi_nr_dl_cw_info_t cw_info[2];
   uint8_t harq_process_nbr;
   vrb_to_prb_mapping_t vrb_to_prb_mapping;
   uint8_t dai;
@@ -523,7 +528,6 @@ typedef struct {
   uint16_t dlDataScramblingId;
   uint16_t pduBitmap;
   uint32_t k1_feedback;
-  uint8_t ldpcBaseGraph;
   uint8_t numCsiRsForRateMatching;
   fapi_nr_dl_config_csirs_pdu_rel15_t csiRsForRateMatching[NFAPI_MAX_NUM_CSI_RATEMATCH];
 } fapi_nr_dl_config_dlsch_pdu_rel15_t;

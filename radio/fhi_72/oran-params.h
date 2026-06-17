@@ -108,13 +108,21 @@
 }
 // clang-format on
 
+#define COMP_HDR_TYPE_CHECK                                                     \
+  &(checkedparam_t)                                                             \
+  {                                                                             \
+    .s3a = { config_checkstr_assign_integer, {"dynamic", "static"}, {0, 1}, 2 } \
+  }
+
 #define CONFIG_STRING_ORAN_RU "ru_config"
 
+#define ORAN_RU_COMP_HDR_TYPE "comp_hdr_type"
 #define ORAN_RU_CONFIG_IQWIDTH "iq_width" // not needed if M-plane used
 #define ORAN_RU_CONFIG_IQWIDTH_PRACH "iq_width_prach" // not needed if M-plane used
 
 // clang-format off
 #define ORAN_RU_DESC {\
+  {ORAN_RU_COMP_HDR_TYPE,        "Compression header type\n",                 0,                   .strptr=NULL, .defstrval="static", TYPE_STRING, 0, COMP_HDR_TYPE_CHECK}, \
   {ORAN_RU_CONFIG_IQWIDTH,       "sample IQ width (16=uncompressed)\n",       PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
   {ORAN_RU_CONFIG_IQWIDTH_PRACH, "PRACH sample IQ width (16=uncompressed)\n", PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
 }

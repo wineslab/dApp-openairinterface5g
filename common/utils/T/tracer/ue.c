@@ -229,8 +229,7 @@ static void ue_main_gui(ue_gui *e, gui *g, event_handler *h, void *database,
   e->pdsch_iq_ue_xy_plot = w;
   widget_add_child(g, line, w, -1);
   xy_plot_set_range(g, w, -500, 500, -500, 500);
-  l = new_iqlog(h, database, "UE_PHY_PDSCH_IQ", "nb_rb",
-      "N_RB_UL", "symbols_per_tti", "pusch_comp");
+  l = new_iqlog(h, database, "UE_PHY_PDSCH_IQ", "nb_rb", "N_RB_DL", "symbols_per_tti", "pdsch_comp");
   v = new_view_xy(100*12*14,10,g,w,new_color(g,"#000"),XY_FORCED_MODE);
   logger_add_view(l, v);
   e->pdsch_iq_ue_logger = l;

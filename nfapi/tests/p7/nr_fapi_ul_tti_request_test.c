@@ -4,6 +4,7 @@
 #include "dci_payload_utils.h"
 #include "nr_fapi_p7.h"
 #include "nr_fapi_p7_utils.h"
+#include "nr_fapi_common_util_test.h"
 
 static void fill_ul_tti_request_beamforming(nfapi_nr_ul_beamforming_t *beamforming_pdu)
 {
@@ -28,6 +29,8 @@ static void fill_ul_tti_request_prach_pdu(nfapi_nr_prach_pdu_t *pdu)
   pdu->prach_start_symbol = rand8_range(0, 13);
   pdu->num_cs = rand16_range(0, 419);
   fill_ul_tti_request_beamforming(&pdu->beamforming);
+  pdu->param_v4.numSpatialStreamIndices = get_num_spatial_streams();
+  fill_spatial_streams(pdu->param_v4.numSpatialStreamIndices, pdu->param_v4.spatialStreamIndices);
 }
 
 static void fill_ul_tti_request_pusch_pdu(nfapi_nr_pusch_pdu_t *pdu)
@@ -133,6 +136,8 @@ static void fill_ul_tti_request_pusch_pdu(nfapi_nr_pusch_pdu_t *pdu)
   fill_ul_tti_request_beamforming(&pdu->beamforming);
   pdu->maintenance_parms_v3.ldpcBaseGraph = rand8();
   pdu->maintenance_parms_v3.tbSizeLbrmBytes = rand32();
+  pdu->param_v4.numSpatialStreamIndices = get_num_spatial_streams();
+  fill_spatial_streams(pdu->param_v4.numSpatialStreamIndices, pdu->param_v4.spatialStreamIndices);
 }
 
 static void fill_ul_tti_request_pucch_pdu(nfapi_nr_pucch_pdu_t *pdu)
@@ -247,6 +252,8 @@ static void fill_ul_tti_request_pucch_pdu(nfapi_nr_pucch_pdu_t *pdu)
   }
 
   fill_ul_tti_request_beamforming(&pdu->beamforming);
+  pdu->param_v4.numSpatialStreamIndices = get_num_spatial_streams();
+  fill_spatial_streams(pdu->param_v4.numSpatialStreamIndices, pdu->param_v4.spatialStreamIndices);
 }
 
 static void fill_ul_tti_request_srs_parameters(nfapi_v4_srs_parameters_t *params, const uint8_t num_symbols){
@@ -427,7 +434,7 @@ static void test_copy(const nfapi_nr_ul_tti_request_t *msg)
   free_ul_tti_request(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

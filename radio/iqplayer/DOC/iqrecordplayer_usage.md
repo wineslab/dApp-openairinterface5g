@@ -162,5 +162,3 @@ The replay feature is implemented as a oai device.
 
 ### iq's file format
 The recorder adds a header containing the device type, the bandwith and a format identifier. Using these information when replaying a file has not yet been implemented, so the player only supports USRP B2xx device and 40MHz bandwith 3/4 sampling. 
-
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

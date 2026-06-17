@@ -462,11 +462,10 @@ static void configure_prach_occasions(NR_UE_MAC_INST_t *mac, int scs)
     for (int s = 0; s < prach_info.N_RA_sfn; s++) { // subframe/60kHz slot occasions in period
       while (((temp_s_map >> sf) & 0x01) == 0)
         sf++;
-      int sl = sf;
+      int sl = scs == 1 || scs == 3 ? sf * 2 : sf;
       for (int i = 0; i < prach_slots_in_sf; i++) { // slot per subframe/60kHz slot
         int add_slot = i;
         if (scs == 1 || scs == 3) {
-          sl *= 2;
           // if only 1 slot per subframe (or 60kHz slot) in case of 30 or 120kHz it's the odd one
           // as defined in 5.3.2 of 211
           if (((prach_info.format & 0xff) > 3) && prach_slots_in_sf == 1)
@@ -528,6 +527,14 @@ static void configure_prach_occasions(NR_UE_MAC_INST_t *mac, int scs)
   LOG_D(NR_MAC, "PRACH configuration period %d association period %d\n", config_period, ra->association_periods);
 
   select_prach_occasion(ra, mac->ssb_list.nb_tx_ssb, max_num_occasions, ra_occasions_period, num_ra_occasions_period);
+  const prach_occasion_info_t *pi = &ra->sched_ro_info;
+  LOG_I(NR_MAC,
+        "[UE %d] selected PRACH occasion: start_symbol %d fdm %d slot %d format %d\n",
+        mac->ue_id,
+        pi->start_symbol,
+        pi->fdm,
+        pi->slot,
+        pi->format);
 }
 
 /* TS 38.321 subclause 7.3 - return DELTA_PREAMBLE values in dB */
@@ -1190,7 +1197,7 @@ void trigger_MAC_UE_RA(NR_UE_MAC_INST_t *mac, dci_pdu_rel15_t *pdcch_order)
 
 void prepare_msg4_msgb_feedback(NR_UE_MAC_INST_t *mac, int pid, int ack_nack)
 {
-  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[pid];
+  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[pid][0]; // single cw for MSG4
   int sched_slot = current_harq->ul_slot;
   int sched_frame = current_harq->ul_frame;
   PUCCH_sched_t pucch = {.n_CCE = current_harq->n_CCE,
@@ -1204,9 +1211,10 @@ void prepare_msg4_msgb_feedback(NR_UE_MAC_INST_t *mac, int pid, int ack_nack)
 
   RA_config_t *ra = &mac->ra;
   ra->ra_pucch = calloc_or_fail(1, sizeof(*ra->ra_pucch));
-  ra->ra_pucch->pucch_sched = pucch;
   ra->ra_pucch->sched_frame = sched_frame;
   ra->ra_pucch->sched_slot = sched_slot;
+  int ret = nr_ue_configure_pucch(mac, sched_slot, sched_frame, ra->t_crnti, &pucch, &ra->ra_pucch->pucch_pdu);
+  AssertFatal(ret == 0, "Couldn't configure PUCCH for MSG4\n");
 }
 
 void reset_ra(NR_UE_MAC_INST_t *nr_mac, bool free_prach)

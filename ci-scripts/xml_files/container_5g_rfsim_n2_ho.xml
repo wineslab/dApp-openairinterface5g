@@ -43,6 +43,17 @@
 
   <testCase>
     <class>Ping</class>
+    <desc>UL ping ext-dn from NR-UE</desc>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <ping_args>-c 20 -i0.5</ping_args>
+    <ping_packetloss_threshold>80</ping_packetloss_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Ping</class>
     <desc>Ping NR-UE from ext-dn</desc>
     <id>rfsim5g_ext_dn</id>
     <node>localhost</node>

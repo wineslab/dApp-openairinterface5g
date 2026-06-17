@@ -207,7 +207,7 @@ nfapi_nr_pm_list_t init_DL_MIMO_codebook(gNB_MAC_INST *gNB, nr_pdsch_AntennaPort
   int O2 = N2 > 1 ? 4 : 1; //Vertical beam oversampling (1 or 4)
   int O1 = num_antenna_ports > 2 ? 4 : 1; //Horizontal beam oversampling (1 or 4)
 
-  int max_mimo_layers = (num_antenna_ports < NR_MAX_NB_LAYERS) ? num_antenna_ports : NR_MAX_NB_LAYERS;
+  int max_mimo_layers = min(num_antenna_ports, NR_MAX_NB_LAYERS);
   AssertFatal(max_mimo_layers <= 4, "Max number of layers supported is 4\n");
   AssertFatal(num_antenna_ports < 16, "Max number of antenna ports supported is currently 16\n");
 
@@ -704,7 +704,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   // logical antenna ports
   nr_pdsch_AntennaPorts_t pdsch_AntennaPorts = config->pdsch_AntennaPorts;
   int num_pdsch_antenna_ports = pdsch_AntennaPorts.N1 * pdsch_AntennaPorts.N2 * pdsch_AntennaPorts.XP;
-  cfg->carrier_config.num_tx_ant.value = num_pdsch_antenna_ports;
+  cfg->carrier_config.num_tx_ant.value = num_pdsch_antenna_ports * nrmac->beam_info.beams_per_period;
   AssertFatal(num_pdsch_antenna_ports > 0 && num_pdsch_antenna_ports < 33, "pdsch_AntennaPorts in 1...32\n");
   cfg->carrier_config.num_tx_ant.tl.tag = NFAPI_NR_CONFIG_NUM_TX_ANT_TAG;
 
@@ -727,7 +727,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   }
 
   int pusch_AntennaPorts = config->pusch_AntennaPorts;
-  cfg->carrier_config.num_rx_ant.value = pusch_AntennaPorts;
+  cfg->carrier_config.num_rx_ant.value = pusch_AntennaPorts * nrmac->beam_info.beams_per_period;
   AssertFatal(pusch_AntennaPorts > 0 && pusch_AntennaPorts < 13, "pusch_AntennaPorts in 1...12\n");
   cfg->carrier_config.num_rx_ant.tl.tag = NFAPI_NR_CONFIG_NUM_RX_ANT_TAG;
   LOG_I(NR_MAC,
@@ -844,7 +844,7 @@ static void initialize_beam_information(NR_beam_info_t *beam_info, int mu, int s
   }
 }
 
-static void config_sched_ctrlSIB1(gNB_MAC_INST *nr_mac)
+static int config_sched_ctrlSIB1(gNB_MAC_INST *nr_mac)
 {
   const NR_MIB_t *mib = nr_mac->common_channels[0].mib->message.choice.mib;
   NR_ServingCellConfigCommon_t *scc = nr_mac->common_channels[0].ServingCellConfigCommon;
@@ -888,16 +888,23 @@ static void config_sched_ctrlSIB1(gNB_MAC_INST *nr_mac)
   fill_coresetZero(&sched_ctrlCommon->coreset, &type0_PDCCH_CSS_config);
   nr_mac->cset0_bwp_start = type0_PDCCH_CSS_config.cset_start_rb;
   nr_mac->cset0_bwp_size = type0_PDCCH_CSS_config.num_rbs;
+  int bwp_size = NRRIV2BW(scc->downlinkConfigCommon->initialDownlinkBWP->genericParameters.locationAndBandwidth, MAX_BWP_SIZE);
+  int num_symb_cset = type0_PDCCH_CSS_config.num_symbols;
   if (type0_PDCCH_CSS_config.type0_pdcch_ss_mux_pattern > 1) {
     int bwp_start = NRRIV2PRBOFFSET(scc->downlinkConfigCommon->initialDownlinkBWP->genericParameters.locationAndBandwidth,
                                     MAX_BWP_SIZE);
-    int bwp_size = NRRIV2BW(scc->downlinkConfigCommon->initialDownlinkBWP->genericParameters.locationAndBandwidth, MAX_BWP_SIZE);
     // we need to configure a commonControlResourceSet != 0
     // because CSET0 would start from a symbol != 0 and that's unwanted for anything but SIB1
     // The network configures the commonControlResourceSet in SIB1 so that it is contained in the bandwidth of CSET0
     bool do_TCI = nr_mac->radio_config.do_TCI;
-    configure_coreset_for_mux23(scc, nr_mac->cset0_bwp_start - bwp_start, nr_mac->cset0_bwp_size, bwp_start, bwp_size, do_TCI);
+    num_symb_cset = configure_coreset_for_mux23(scc,
+                                                nr_mac->cset0_bwp_start - bwp_start,
+                                                nr_mac->cset0_bwp_size,
+                                                bwp_start,
+                                                bwp_size,
+                                                do_TCI);
   }
+  return num_symb_cset;
 }
 
 /**
@@ -966,9 +973,17 @@ void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, c
 
   find_SSB_and_RO_available(nrmac);
 
+  int num_symb_cset = 1;
   if (IS_SA_MODE(get_softmodem_params()))
-    config_sched_ctrlSIB1(nrmac);
+    num_symb_cset = config_sched_ctrlSIB1(nrmac);
 
+  const nr_mac_config_t *rc = &nrmac->radio_config;
+  const NR_DownlinkConfigCommon_t *dlcc = scc->downlinkConfigCommon;
+  nr_rrc_config_dl_tda(dlcc->initialDownlinkBWP->pdsch_ConfigCommon->choice.setup->pdsch_TimeDomainAllocationList,
+                       get_frame_type((int)*dlcc->frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing),
+                       scc->tdd_UL_DL_ConfigurationCommon,
+                       num_symb_cset);
+  nr_rrc_config_ul_tda(scc, rc->minRXTXTIME, rc->do_SRS);
   seq_arr_init(&nrmac->ul_tda, sizeof(NR_tda_info_t));
   init_ul_tda_info(scc->uplinkConfigCommon->initialUplinkBWP->pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList, &nrmac->ul_tda);
 }

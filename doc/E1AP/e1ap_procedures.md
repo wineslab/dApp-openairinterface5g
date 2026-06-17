@@ -65,36 +65,3 @@ sequenceDiagram
   u->>c: BEARER CONTEXT MODIFICATION RESPONSE
   Note over c: e1apCUCP_handle_BEARER_CONTEXT_MODIFICATION_RESPONSE
 ```
-
-## PDU Session Release
-
-```mermaid
-sequenceDiagram
-    participant AMF
-    participant CUCP
-    participant CUUP
-    participant DU
-    participant UE
-
-    AMF->>CUCP: NG PDU SESSION RESOURCE RELEASE COMMAND
-    Note over CUCP: ngap_gNB_handle_pdusession_release_command
-    CUCP->>CUCP: rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND
-    Note over CUCP: set status PDU_SESSION_STATUS_TORELEASE
-    CUCP->>CUUP: E1 Bearer Context Modification Request
-    Note over CUUP: release_gtpu_tunnel (GTP tunnel, PDCP, SDAP)
-    CUUP->>CUCP: E1 Bearer Context Modification Response
-    Note over CUCP: rrc_gNB_send_f1_drb_release_request
-    CUCP->>DU: F1 UE Context Modification Request
-    Note over DU: handle_ue_context_drbs_release (release in MAC/RLC)
-    DU->>CUCP: F1 UE Context Modification Response
-    Note over CUCP: rrc_CU_process_ue_context_modification_response
-    Note over CUCP: replace existing CellGroupConfig
-    Note over CUCP: rrc_gNB_generate_dedicatedRRCReconfiguration
-    CUCP->>UE: RRCReconfiguration (DRB release list, NAS PDU)
-    UE->>CUCP: RRCReconfigurationComplete
-    Note over CUCP: handle_rrcReconfigurationComplete
-    Note over CUCP: rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE
-    CUCP->>AMF: NG PDU SESSION RESOURCE RELEASE RESPONSE
-    Note over CUCP: rm_drbs_by_pdusession (from stored RRC list)
-    Note over CUCP: rm_pduSession (from stored RRC list)
-```

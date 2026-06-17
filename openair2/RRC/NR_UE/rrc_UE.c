@@ -1681,15 +1681,21 @@ NR_UE_RRC_INST_t* nr_rrc_init_ue(char* uecap_file, int instance_id, int num_ant_
   if (uecap_file)
     f = fopen(uecap_file, "r");
   if (f) {
-    char UE_NR_Capability_xer[65536];
-    size_t size = fread(UE_NR_Capability_xer, 1, sizeof UE_NR_Capability_xer, f);
-    if (size == 0 || size == sizeof UE_NR_Capability_xer) {
-      LOG_E(NR_RRC, "UE Capabilities XER file %s is too large (%ld)\n", uecap_file, size);
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    rewind(f);
+    AssertFatal(file_size <= 1024 * 1024,
+                "UE Capabilities XER file %s is too large (%ld bytes, max 1MB)\n", uecap_file, file_size);
+    char *UE_NR_Capability_xer = malloc_or_fail(file_size);
+    size_t size = fread(UE_NR_Capability_xer, 1, file_size, f);
+    if (size == 0) {
+      LOG_E(NR_RRC, "UE Capabilities XER file %s: read error\n", uecap_file);
     } else {
       asn_dec_rval_t dec_rval =
           xer_decode(0, &asn_DEF_NR_UE_NR_Capability, (void *)&rrc->UECap.UE_NR_Capability, UE_NR_Capability_xer, size);
       assert(dec_rval.code == RC_OK);
     }
+    free(UE_NR_Capability_xer);
     fclose(f);
     /* Verify consistency of num PHY antennas vs UE Capabilities */
     verify_ue_cap(rrc->UECap.UE_NR_Capability, num_ant_tx);
@@ -2066,7 +2072,7 @@ static void nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(NR_UE_RRC_INST_t *rrc,
 static void rrc_ue_generate_RRCSetupComplete(const NR_UE_RRC_INST_t *rrc, const uint8_t Transaction_id)
 {
   uint8_t buffer[100];
-  as_nas_info_t initialNasMsg;
+  as_nas_info_t initialNasMsg = {0};
 
   if (IS_SA_MODE(get_softmodem_params())) {
     nr_ue_nas_t *nas = get_ue_nas_info(rrc->ue_id);
@@ -2555,9 +2561,10 @@ static void nr_rrc_ue_process_ueCapabilityEnquiry(NR_UE_RRC_INST_t *rrc, NR_UECa
       ue_CapabilityRAT_Container->rat_Type = NR_RAT_Type_nr;
       OCTET_STRING_fromBuf(&ue_CapabilityRAT_Container->ue_CapabilityRAT_Container, (const char *)rrc->UECap.sdu, rrc->UECap.sdu_size);
       asn1cSeqAdd(&UEcapList->list, ue_CapabilityRAT_Container);
-      uint8_t buffer[500];
-      asn_enc_rval_t enc_rval = uper_encode_to_buffer(&asn_DEF_NR_UL_DCCH_Message, NULL, (void *)&ul_dcch_msg, buffer, 500);
-      AssertFatal (enc_rval.encoded > 0, "ASN1 message encoding failed (%s, %jd)!\n", enc_rval.failed_type->name, enc_rval.encoded);
+      uint8_t buffer[MAX_UE_NR_CAPABILITY_SIZE + 16];
+      asn_enc_rval_t enc_rval =
+          uper_encode_to_buffer(&asn_DEF_NR_UL_DCCH_Message, NULL, (void *)&ul_dcch_msg, buffer, sizeof(buffer));
+      AssertFatal(enc_rval.encoded > 0, "ASN1 message encoding failed (%s, %jd)!\n", enc_rval.failed_type->name, enc_rval.encoded);
 
       if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
         xer_fprint(stdout, &asn_DEF_NR_UL_DCCH_Message, (void *)&ul_dcch_msg);

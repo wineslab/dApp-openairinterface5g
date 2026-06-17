@@ -276,4 +276,3 @@ The telnet server includes a `log` command which can be used to dymically modify
 [telnet server ***softmodem log*** commands](../../telnetsrv/DOC/telnetlog.md)
 
 [logging facility  main page](log.md)
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

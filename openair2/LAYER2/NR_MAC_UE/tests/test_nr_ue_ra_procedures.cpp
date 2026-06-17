@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 extern "C" {
+#include "common/platform_types.h"
 #include "openair2/LAYER2/NR_MAC_UE/mac_proto.h"
 #include "executables/softmodem-common.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
@@ -16,15 +17,26 @@ softmodem_params_t *get_softmodem_params(void)
 }
 void nr_mac_rrc_ra_ind(const module_id_t mod_id, bool success)
 {
+  UNUSED(mod_id);
+  UNUSED(success);
 }
 void nr_mac_rrc_msg3_ind(const module_id_t mod_id, const int rnti, bool prepare_payload)
 {
+  UNUSED(mod_id);
+  UNUSED(rnti);
+  UNUSED(prepare_payload);
 }
 void nr_mac_rlc_status_ind(uint16_t ue_id, frame_t frame, int n_ch, const logical_chan_id_t *ch, mac_rlc_status_resp_t *ret)
 {
+  UNUSED(ue_id);
+  UNUSED(frame);
+  UNUSED(n_ch);
+  UNUSED(ch);
+  UNUSED(ret);
 }
 void nr_mac_rrc_inactivity_timer_ind(const module_id_t mod_id)
 {
+  UNUSED(mod_id);
 }
 tbs_size_t nr_mac_rlc_data_req(const module_id_t module_idP,
                                const uint16_t ue_id,
@@ -33,6 +45,12 @@ tbs_size_t nr_mac_rlc_data_req(const module_id_t module_idP,
                                const tb_size_t tb_sizeP,
                                char *buffer_pP)
 {
+  UNUSED(module_idP);
+  UNUSED(ue_id);
+  UNUSED(gnb_flagP);
+  UNUSED(channel_idP);
+  UNUSED(tb_sizeP);
+  UNUSED(buffer_pP);
   return 0;
 }
 void nr_mac_rlc_data_ind(const module_id_t module_idP,
@@ -41,26 +59,42 @@ void nr_mac_rlc_data_ind(const module_id_t module_idP,
                          const nr_rlc_data_ind_t *data,
                          int num_data)
 {
+  UNUSED(module_idP);
+  UNUSED(ue_id);
+  UNUSED(gnb_flagP);
+  UNUSED(data);
+  UNUSED(num_data);
 }
 void nr_mac_rrc_verification_failed(const module_id_t mod_id)
 {
+  UNUSED(mod_id);
 }
 bool nr_rlc_activate_srb0(int ue_id,
                           void *data,
                           void (*send_initial_ul_rrc_message)(int ue_id, const uint8_t *sdu, sdu_size_t sdu_len, void *data))
 {
+  UNUSED(ue_id);
+  UNUSED(data);
+  UNUSED(send_initial_ul_rrc_message);
   return true;
 }
 int nr_rlc_module_init(nr_rlc_op_mode_t mode)
 {
+  UNUSED(mode);
   return 0;
 }
 MessageDef *itti_alloc_new_message(task_id_t origin_task_id, instance_t originInstance, MessagesIds message_id)
 {
+  UNUSED(origin_task_id);
+  UNUSED(originInstance);
+  UNUSED(message_id);
   return NULL;
 }
 int itti_send_msg_to_task(task_id_t task_id, instance_t instance, MessageDef *message)
 {
+  UNUSED(task_id);
+  UNUSED(instance);
+  UNUSED(message);
   return 0;
 }
 typedef uint32_t channel_t;
@@ -77,10 +111,23 @@ int8_t nr_mac_rrc_data_ind_ue(const module_id_t module_id,
                               const uint8_t *pduP,
                               const sdu_size_t pdu_len)
 {
+  UNUSED(module_id);
+  UNUSED(CC_id);
+  UNUSED(gNB_index);
+  UNUSED(hfn);
+  UNUSED(frame);
+  UNUSED(slot);
+  UNUSED(rnti);
+  UNUSED(cellid);
+  UNUSED(arfcn);
+  UNUSED(channel);
+  UNUSED(pduP);
+  UNUSED(pdu_len);
   return 0;
 }
 bool check_csi_report_consistency(const NR_CSI_MeasConfig_t *meas)
 {
+  UNUSED(meas);
   return true;
 }
 void nr_mac_rrc_meas_ind_ue(module_id_t module_id,
@@ -90,6 +137,12 @@ void nr_mac_rrc_meas_ind_ue(module_id_t module_id,
                             bool is_neighboring_cell,
                             int rsrp_dBm)
 {
+  UNUSED(module_id);
+  UNUSED(gNB_index);
+  UNUSED(Nid_cell);
+  UNUSED(csi_meas);
+  UNUSED(is_neighboring_cell);
+  UNUSED(rsrp_dBm);
 }
 }
 #include <cstdio>

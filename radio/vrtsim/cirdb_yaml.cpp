@@ -96,6 +96,11 @@ int cirdb_yaml_select(const cirdb_select_req_t *req, cirdb_entry_meta_t *out)
 
     float ds_ns = e["ds_ns"].as<float>(0.0f);
     float sp = e["speed_mps"].as<float>(0.0f);
+    float aoa = e["los_aoa_deg"].as<float>(0.0f);
+
+    // STRICT: AoA exact match when entry has los_aoa_deg field
+    if (e["los_aoa_deg"].IsDefined() && dabs(aoa - req->want_aoa_deg) > 0.01)
+      continue;
 
     // FLEXIBLE: delay spread and speed - find closest match using cost function
     double cds = 0.0;

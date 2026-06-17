@@ -57,7 +57,8 @@ COPY ./docker/scripts/check-prach-io.sh ./check-prach-io.sh
 
 COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/librfsimulator.so \
-    /oai-ran/cmake_targets/ran_build/build/liboai_transpro.so \
+    /oai-ran/cmake_targets/ran_build/build/liboran_fhlib_5g.so \
+    /oai-ran/cmake_targets/ran_build/build/liboran_fhlib_5g_mplane.so \
     /oai-ran/cmake_targets/ran_build/build/libcoding.so \
     /oai-ran/cmake_targets/ran_build/build/libparams_libconfig.so \
     /oai-ran/cmake_targets/ran_build/build/libdfts.so \
@@ -65,7 +66,16 @@ COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/libtelnetsrv.so \
     /oai-ran/cmake_targets/ran_build/build/libtelnetsrv_ci.so \
     /oai-ran/cmake_targets/ran_build/build/libparams_yaml.so \
-    /usr/local/lib/
+    /usr/local/lib/libnetconf2.so \
+    /usr/local/lib/libyang.so \
+    /usr/local/lib
+
+# default is CUS (no M plane)
+RUN ln -s /usr/local/lib/liboran_fhlib_5g.so /usr/local/lib/liboai_transpro.so
+
+COPY --from=gnb-build \
+    /oai-ran/radio/fhi_72/mplane/yang/models/ \
+    /oai-ran/radio/fhi_72/mplane/yang/models/
 
 ## Libxran library
 COPY --from=gnb-build \

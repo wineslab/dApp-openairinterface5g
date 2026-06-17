@@ -97,7 +97,7 @@ int test[] = {
 #include TEST
 };
 
-void deliver_sdu_enb_am(void *deliver_sdu_data, struct rlc_entity_t *_entity,
+void deliver_sdu_enb_am(void *deliver_sdu_data, rlc_entity_t *_entity,
                         char *buf, int size)
 {
   rlc_entity_am_t *entity = (rlc_entity_am_t *)_entity;
@@ -107,7 +107,7 @@ void deliver_sdu_enb_am(void *deliver_sdu_data, struct rlc_entity_t *_entity,
   printf("]\n");
 }
 
-void deliver_sdu_enb_um(void *deliver_sdu_data, struct rlc_entity_t *_entity,
+void deliver_sdu_enb_um(void *deliver_sdu_data, rlc_entity_t *_entity,
                         char *buf, int size)
 {
   rlc_entity_um_t *entity = (rlc_entity_um_t *)_entity;
@@ -133,7 +133,7 @@ void max_retx_reached_enb(void *max_retx_reached_data, rlc_entity_t *_entity)
   exit(1);
 }
 
-void deliver_sdu_ue_am(void *deliver_sdu_data, struct rlc_entity_t *_entity,
+void deliver_sdu_ue_am(void *deliver_sdu_data, rlc_entity_t *_entity,
                        char *buf, int size)
 {
   rlc_entity_am_t *entity = (rlc_entity_am_t *)_entity;
@@ -143,7 +143,7 @@ void deliver_sdu_ue_am(void *deliver_sdu_data, struct rlc_entity_t *_entity,
   printf("]\n");
 }
 
-void deliver_sdu_ue_um(void *deliver_sdu_data, struct rlc_entity_t *_entity,
+void deliver_sdu_ue_um(void *deliver_sdu_data, rlc_entity_t *_entity,
                        char *buf, int size)
 {
   rlc_entity_um_t *entity = (rlc_entity_um_t *)_entity;

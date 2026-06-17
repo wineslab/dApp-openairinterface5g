@@ -3033,7 +3033,7 @@ uint16_t nr_dci_size(const NR_UE_DL_BWP_t *DL_BWP,
       size += 8;
       // TB2
       long *maxCWperDCI = pdsch_Config ? pdsch_Config->maxNrofCodeWordsScheduledByDCI : NULL;
-      if ((maxCWperDCI != NULL) && (*maxCWperDCI == 2)) {
+      if (maxCWperDCI && (*maxCWperDCI == NR_PDSCH_Config__maxNrofCodeWordsScheduledByDCI_n2)) {
         size += 8;
       }
       // HARQ process number – 5 bits if higher layer parameter harq-ProcessNumberSizeDCI-1-1 is configured;
@@ -4129,19 +4129,16 @@ uint16_t compute_pucch_prb_size(uint8_t format,
               O_crc,
               nr_prbs);
 
-  if (format==2){
-    // TODO fix this for multiple CSI reports
-    for (int i = nr_prbs; i > 0; i--) {
-      // compute code rate factor for next prb value
-      int next_prb_factor = (i - 1) * n_symb * Qm * n_re_ctrl * r;
-      // if it does not sa
-      if (O_tot > next_prb_factor)
-        return i;
-    }
+  // TODO fix this for multiple CSI reports
+  for (int i = nr_prbs; i > 0; i--) {
+    // compute code rate factor for next prb value
+    int next_prb_factor = (i - 1) * n_symb * Qm * n_re_ctrl * r;
+    // if it does not sa
+    if (O_tot > next_prb_factor)
+      return i;
   }
-  else{
-    AssertFatal(1==0,"Not yet implemented");
-  }
+
+  AssertFatal(false , "Couldn't find adequate number of PRBs\n");
   return 0;
 }
 
@@ -4623,11 +4620,11 @@ static void compute_cqi_bitlen(const NR_CSI_ReportConfig_t *csi_reportconfig, ui
   struct NR_CodebookConfig__codebookType__type1 *type1 = NULL;
   if (codebookConfig && codebookConfig->codebookType.present == NR_CodebookConfig__codebookType_PR_type1)
     type1 = codebookConfig->codebookType.choice.type1;
-  else
+  else if (codebookConfig)
     LOG_E(NR_MAC, "Only type1 codebook configuration is supported\n");
   if (type1 && type1->subType.present == NR_CodebookConfig__codebookType__type1__subType_PR_typeI_SinglePanel)
     type1single = type1->subType.choice.typeI_SinglePanel;
-  else
+  else if (codebookConfig)
     LOG_E(NR_MAC, "Only type1 single panel codebook configuration is supported\n");
 
   struct NR_CSI_ReportConfig__reportFreqConfiguration *freq_config = csi_reportconfig->reportFreqConfiguration;

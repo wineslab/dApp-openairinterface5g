@@ -15,86 +15,6 @@ if(PHYSIM_CHECK_FILES)
   endforeach()
 endif()
 
-define_property(TEST PROPERTY TEST_DESCRIPTION
-                BRIEF_DOCS "A human-readable description of this test"
-                FULL_DOCS "A human-readable description of this test")
-
-define_property(TEST PROPERTY CHECK_COUNT
-                BRIEF_DOCS "helper property to enumerate checks in environment"
-                FULL_DOCS "the property counts the number of threshold checks, used to enumerate environment variables given to analyze-timing.sh")
-
-function(add_physim_test test_name test_description test_exec)
-  # catch all the arguments past the last expected arqument and store them in the options_list
-  if (NOT TARGET ${test_exec})
-    message(FATAL_ERROR "test executable ${test_exec} is not an executable")
-  endif()
-  set(test_invocation $<TARGET_FILE:${test_exec}> ${ARGN})
-  add_test(
-    NAME ${test_name}
-    COMMAND ${CMAKE_COMMAND} "-DTEST_CMD=${test_invocation}" "-DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/analyze-timing.sh" -P ${CMAKE_CURRENT_SOURCE_DIR}/RunTimedTest.cmake
-  )
-  set_tests_properties(${test_name} PROPERTIES
-    LABELS "${test_exec}"
-    TEST_DESCRIPTION "${test_description}"
-    # pass test description also through environment variable: for cmake < 3.30,
-    # in JSON export, we cannot recover the description otherwise
-    # see also https://gitlab.kitware.com/cmake/cmake/-/issues/21490
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};TEST_DESCRIPTION=${test_description}"
-  )
-  set_tests_properties(${test_name} PROPERTIES CHECK_COUNT 0)
-  add_dependencies(tests ${test_exec})
-endfunction()
-
-function(check_threshold testname threshold condition)
-  # check that threshold and condition don't have a colon (;), because that
-  # would interfere with cmake's list management
-  string(FIND "${threshold}" ";" pos)
-  if (pos GREATER -1)
-    message(FATAL_ERROR "colon not allowed in threshold, but have \"${threshold}\"")
-  endif()
-  string(FIND "${condition}" ";" pos)
-  if (pos GREATER -1)
-    message(FATAL_ERROR "colon not allowed in condition, but have \"${condition}\"")
-  endif()
-  set(THRCOND "${threshold}\;${condition}")
-
-  get_test_property(${testname} CHECK_COUNT count)
-  #message(STATUS "add check ${count} ${THRCOND}")
-  if (${count} GREATER 10)
-    message(FATAL_ERROR "only maximum of 10 checks per test allowed")
-  endif()
-
-  # add a new environment variable CHECK_X with this threshold+condition, then
-  # increase test property regarding check count
-  set_property(TEST ${testname} APPEND PROPERTY ENVIRONMENT "CHECK_${count}=${THRCOND}")
-  MATH(EXPR count "${count}+1")
-  set_tests_properties(${testname} PROPERTIES CHECK_COUNT ${count})
-endfunction()
-
-function(check_threshold_range testname threshold)
-  cmake_parse_arguments(RANGE "" "LOWER;UPPER" "" ${ARGN})
-  if (NOT RANGE_LOWER AND NOT RANGE_UPPER)
-    message(FATAL_ERROR "need at least one LOWER or one UPPER threshold")
-  endif()
-  if (RANGE_LOWER)
-    check_threshold(${testname} ${threshold} "> ${RANGE_LOWER}")
-  endif()
-  if (RANGE_UPPER)
-    check_threshold(${testname} ${threshold} "< ${RANGE_UPPER}")
-  endif()
-endfunction()
-
-function(check_threshold_variance testname threshold)
-  cmake_parse_arguments(VARIANCE "" "AVG;ABS_VAR" "" ${ARGN})
-  if (NOT VARIANCE_AVG AND NOT VARIANCE_ABS_VAR)
-    message(FATAL_ERROR "need both AVG and ABS_VAR")
-  endif()
-  MATH(EXPR upper "${VARIANCE_AVG}+${VARIANCE_ABS_VAR}")
-  MATH(EXPR lower "${VARIANCE_AVG}-${VARIANCE_ABS_VAR}")
-  check_threshold_range(${testname} ${threshold} LOWER ${lower} UPPER ${upper})
-endfunction()
-
-
 ####################################################################################
 ######                           dlsim unit test                              ######
 ####################################################################################
@@ -439,7 +359,7 @@ endif()
 ######                           cuda-specific tests                       ######
 ####################################################################################
 
-if (CUDA_ENABLE)
+if (ENABLE_CHANNEL_SIM_CUDA)
 
 # --- Test Suite 1: 61440 samples, 2/4/8/32 TX - 2/4/8/32 RX  ---
 add_physim_test(cuda.5g.channelsim.test_channel_scalability.test1  "16 channels 61440 samples 2T2R Batch"  test_channel_scalability -c 16 -t 2 -r 2 -s 61440 -l 32 -m batch  -n 12)

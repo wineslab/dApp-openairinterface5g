@@ -17,6 +17,7 @@
 #include "executables/softmodem-common.h"
 #include "nr_phy_common.h"
 #include "openair1/PHY/TOOLS/phy_scope_interface.h"
+#include "T.h"
 
 //#define DEBUG_CH
 //#define DEBUG_PUSCH
@@ -32,7 +33,7 @@ typedef struct puschAntennaProc_s {
   unsigned char symbol;
   unsigned short bwp_start_subcarrier;
   int aarx;
-  int beam_nb;
+  uint16_t ant_port_start;
   int numAntennas;
   const nfapi_nr_pusch_pdu_t *pusch_pdu;
   int *max_ch;
@@ -43,7 +44,7 @@ typedef struct puschAntennaProc_s {
   int chest_freq;
   NR_gNB_PUSCH *pusch_vars;
   NR_DL_FRAME_PARMS *frame_parms;
-  c16_t ***rxdataF;
+  c16_t **rxdataF;
   task_ans_t *ans;
   scopeData_t *scope;
   c16_t *pusch_ch_est_dmrs_pos_slot_mem;
@@ -99,12 +100,13 @@ static void nr_pusch_antenna_processing(void *arg)
   const int symbol_offset = symbolSize * symbol;
   const int k0 = bwp_start_subcarrier;
   const int nb_rb_pusch = pusch_pdu->rb_size;
-  const int beam_nb = rdata->beam_nb;
+  const int aa_start = rdata->ant_port_start;
+  const uint8_t num_sp_streams = rdata->pusch_pdu->param_v4.numSpatialStreamIndices;
   for (int antenna = aarx; antenna < aarx + numAntennas; antenna++) {
     c16_t ul_ls_est[symbolSize] __attribute__((aligned(32)));
     memset(ul_ls_est, 0, sizeof(c16_t) * symbolSize);
-    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[beam_nb][antenna][symbol_offset + slot_offset];
-    c16_t *ul_ch = &ul_ch_estimates[nl * frame_parms->nb_antennas_rx + antenna][symbol_offset];
+    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[aa_start + antenna][symbol_offset + slot_offset];
+    c16_t *ul_ch = &ul_ch_estimates[nl * num_sp_streams + antenna][symbol_offset];
     memset(ul_ch, 0, sizeof(*ul_ch) * symbolSize);
 
     LOG_D(PHY,
@@ -219,7 +221,7 @@ static void nr_pusch_antenna_processing(void *arg)
 
       // Revert delay
       pilot_cnt = 0;
-      ul_ch = &ul_ch_estimates[nl * frame_parms->nb_antennas_rx + antenna][symbol_offset];
+      ul_ch = &ul_ch_estimates[nl * num_sp_streams + antenna][symbol_offset];
       int inv_delay_idx = get_delay_idx(-delay->est_delay, MAX_DELAY_COMP);
       c16_t *ul_inv_delay_table = frame_parms->delay_table[inv_delay_idx];
       for (int n = 0; n < 3 * nb_rb_pusch; n++) {
@@ -431,7 +433,7 @@ static void nr_pusch_antenna_processing(void *arg)
     }
 
 #ifdef DEBUG_PUSCH
-    ul_ch = &ul_ch_estimates[nl * gNB->frame_parms.nb_antennas_rx + aarx][symbol_offset];
+    ul_ch = &ul_ch_estimates[nl * num_sp_streams + aarx][symbol_offset];
     for (int idxP = 0; idxP < ceil((float)nb_rb_pusch * 12 / 8); idxP++) {
       for (int idxI = 0; idxI < 8; idxI++) {
         printf("%d\t%d\t", ul_ch[idxP * 8 + idxI].r, ul_ch[idxP * 8 + idxI].i);
@@ -446,14 +448,14 @@ static void nr_pusch_antenna_processing(void *arg)
   completed_task_ans(rdata->ans);
 }
 
-
 int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                                 unsigned char Ns,
                                 int nl,
                                 unsigned short p,
+                                uint8_t lp,
                                 unsigned char symbol,
                                 NR_gNB_PUSCH *pusch_vars,
-                                int beam_nb,
+                                uint16_t ant_port_start,
                                 unsigned short bwp_start_subcarrier,
                                 const nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
@@ -486,7 +488,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                      gold,
                      pilot,
                      (1000 + p),
-                     0,
+                     lp % 2,
                      nb_rb_pusch,
                      (pusch_pdu->bwp_start + pusch_pdu->rb_start) * NR_NB_SC_PER_RB,
                      pusch_pdu->dmrs_config_type,
@@ -537,7 +539,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
   delay_t *delay = &pusch_vars->delay;
   memset(delay, 0, sizeof(*delay));
 
-  int nb_antennas_rx = fp->nb_antennas_rx;
+  int nb_antennas_rx = pusch_pdu->param_v4.numSpatialStreamIndices;
   delay_t delay_arr[nb_antennas_rx];
   uint64_t noise_amp2_arr[nb_antennas_rx];
   int max_ch_arr[nb_antennas_rx];
@@ -554,7 +556,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
   initNotifiedFIFO(&respPuschAarx);
   start_meas(&gNB->pusch_channel_estimation_antenna_processing_stats);
   int numAntennas = gNB->dmrs_num_antennas_per_thread;
-  int num_jobs = CEILIDIV(fp->nb_antennas_rx, numAntennas);
+  int num_jobs = CEILIDIV(nb_antennas_rx, numAntennas);
   puschAntennaProc_t rdatas[num_jobs];
   memset(rdatas, 0, sizeof(rdatas));
   task_ans_t ans;
@@ -577,7 +579,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
     rdata->nest_count = &nest_count_arr[rdata->aarx];
     rdata->noise_amp2 = &noise_amp2_arr[rdata->aarx];
     rdata->delay = &delay_arr[rdata->aarx];
-    rdata->beam_nb = beam_nb;
+    rdata->ant_port_start = ant_port_start;
     rdata->frame_parms = fp;
     rdata->pusch_vars = pusch_vars;
     rdata->chest_freq = gNB->chest_freq;
@@ -598,14 +600,14 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
   join_task_ans(&ans);
 
   stop_meas(&gNB->pusch_channel_estimation_antenna_processing_stats);
-  for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
+  for (int aarx = 0; aarx < nb_antennas_rx; aarx++) {
     *max_ch = max(*max_ch, max_ch_arr[aarx]);
     noise_amp2 += noise_amp2_arr[aarx];
     nest_count += nest_count_arr[aarx];
   }
   // get the maximum delay
   *delay = delay_arr[0];
-  for (int aarx = 1; aarx < fp->nb_antennas_rx; aarx++) {
+  for (int aarx = 1; aarx < nb_antennas_rx; aarx++) {
     if (delay_arr[aarx].est_delay >= delay->est_delay) {
       *delay = delay_arr[aarx];
     }
@@ -650,6 +652,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                               NR_gNB_PUSCH *pusch_vars,
                               uint8_t nr_tti_rx,
                               unsigned char symbol,
+                              int nb_rx_ant,
                               uint32_t nb_re_pusch)
 {
   int32_t *ptrs_re_symbol = NULL;
@@ -664,7 +667,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
   uint8_t ptrsReOffset = rel15_ul->pusch_ptrs.ptrs_ports_list[0].ptrs_re_offset;
 
   /* loop over antennas */
-  for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
+  for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
     c16_t *phase_per_symbol = (c16_t *)pusch_vars->ptrs_phase_per_slot[aarx];
     ptrs_re_symbol = &pusch_vars->ptrs_re_per_slot;
     *ptrs_re_symbol = 0;
@@ -731,7 +734,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
           printf("[PHY][UL][PTRS]: Rotate Symbol %2d with  %d + j* %d\n", i, phase_per_symbol[i].r, phase_per_symbol[i].i);
 #endif
           rotate_cpx_vector(&pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
-                            &phase_per_symbol[i],
+                            phase_per_symbol[i],
                             &pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
                             (nb_rb * NR_NB_SC_PER_RB),
                             15);
@@ -900,8 +903,7 @@ void nr_srs_noise_power_estimation(uint16_t ofdm_symbol_size,
 #endif
 }
 
-int nr_srs_channel_interpolation(int ant,
-                                 int p_index,
+int nr_srs_channel_interpolation(int p_index,
                                  uint16_t ofdm_symbol_size,
                                  uint16_t first_carrier_offset,
                                  uint8_t N_symb_SRS,
@@ -933,7 +935,7 @@ int nr_srs_channel_interpolation(int ant,
     uint16_t srs_symbol_offset = srs_symb * ofdm_symbol_size;
 
 #ifdef SRS_DEBUG
-    LOG_I(NR_PHY, "====================== UE port %d --> gNB Rx antenna %i ======================\n", p_index, ant);
+    LOG_I(NR_PHY, "============================== UE port %d ====================================\n", p_index);
     LOG_I(NR_PHY, "============================== SRS symbol index %d ===========================\n", srs_symb);
 #endif
 

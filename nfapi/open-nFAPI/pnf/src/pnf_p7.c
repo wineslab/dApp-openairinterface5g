@@ -470,6 +470,7 @@ int pnf_p7_send_message(pnf_p7_t* pnf_p7, uint8_t* msg, uint32_t len)
 
 int pnf_p7_pack_and_send_p7_message(pnf_p7_t* pnf_p7, nfapi_p7_message_header_t* header, uint32_t msg_len)
 {
+  UNUSED(msg_len)
 	header->m_segment_sequence = NFAPI_P7_SET_MSS(0, 0, pnf_p7->sequence_number);
 
 	// Need to guard against different threads calling the encode function at the same time
@@ -671,6 +672,7 @@ int nr_pnf_p7_get_msgs(pnf_p7_t* pnf_p7,
                        nfapi_nr_ul_dci_request_t* ret_ul_dci,
                        nfapi_nr_tx_data_request_t* ret_tx_data)
 {
+  UNUSED(phy_id)
   if (pthread_mutex_lock(&(pnf_p7->mutex)) != 0) {
     NFAPI_TRACE(NFAPI_TRACE_INFO, "failed to lock mutex\n");
     return -1;
@@ -794,6 +796,7 @@ int nr_pnf_p7_get_msgs(pnf_p7_t* pnf_p7,
 
 int pnf_p7_subframe_ind(pnf_p7_t* pnf_p7, uint16_t phy_id, uint16_t sfn_sf)
 {
+  UNUSED(phy_id)
 	// We could either send an event to the p7 thread have have it run the
 	// subframe or we could handle it here and lock access to the subframe
 	// buffers. If we do it on the p7 thread then we run the risk of blocking

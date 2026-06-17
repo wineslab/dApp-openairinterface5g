@@ -50,17 +50,16 @@ def OC_logout(cmd):
 
 class Cluster:
 	def __init__(self):
-		self.eNBSourceCodePath = ""
+		self.workspace = ""
 		self.OCUserName = ""
 		self.OCPassword = ""
 		self.OCProjectName = ""
 		self.OCUrl = OCUrl
 		self.OCRegistry = OCRegistry
-		self.ranRepository = ""
-		self.ranBranch = ""
-		self.ranCommitID = ""
-		self.ranAllowMerge = False
-		self.ranTargetBranch = ""
+		self.repository = ""
+		self.branch = ""
+		self.merge = False
+		self.targetBranch = ""
 		self.cmd = None
 
 	def _recreate_entitlements(self):
@@ -101,7 +100,7 @@ class Cluster:
 	def _start_build(self, name):
 		# will return "immediately" but build runs in background
 		# if multiple builds are started at the same time, this can take some time, however
-		ret = self.cmd.run(f'oc start-build {name} --from-dir={self.eNBSourceCodePath} --exclude=""')
+		ret = self.cmd.run(f'oc start-build {name} --from-dir={self.workspace} --exclude=""')
 		regres = re.search(r'build.build.openshift.io/(?P<jobname>[a-zA-Z0-9\-]+) started', ret.stdout)
 		if ret.returncode != 0 or ret.stdout.count('Uploading finished') != 1 or regres is None:
 			logging.error(f"error during oc start-build: {ret.stdout}")
@@ -157,7 +156,7 @@ class Cluster:
 				OC_logout(cmd)
 				HTML.CreateHtmlTestRow('N/A', 'KO', CONST.OC_LOGIN_FAIL)
 				return False
-			tag = cls_containerize.CreateTag(self.ranCommitID, self.ranBranch, self.ranAllowMerge)
+			tag = self.branch
 			registry = f'{self.OCRegistry}/{CI_OC_RAN_NAMESPACE}'
 			success, msg = cls_containerize.Containerize.Pull_Image(cmd, images, tag, tag_prefix, registry, None, None)
 			OC_logout(cmd)
@@ -174,12 +173,12 @@ class Cluster:
 		return (image, archiveArtifact(self.cmd, ctx, fn))
 
 	def BuildClusterImage(self, ctx, node, HTML):
-		if self.ranRepository == '' or self.ranBranch == '' or self.ranCommitID == '':
+		if self.repository == '' or self.branch == '':
 			HELP.GenericHelp(CONST.Version)
-			raise ValueError(f'Insufficient Parameter: ranRepository {self.ranRepository} ranBranch {ranBranch} ranCommitID {self.ranCommitID}')
-		lSourcePath = self.eNBSourceCodePath
+			raise ValueError(f'Insufficient Parameter: repository {self.repository} branch {self.branch}')
+		lSourcePath = self.workspace
 		if node == '' or lSourcePath == '':
-			raise ValueError('Insufficient Parameter: eNBSourceCodePath missing')
+			raise ValueError('Insufficient Parameter: workspace missing')
 		ocUserName = self.OCUserName
 		ocPassword = self.OCPassword
 		ocProjectName = self.OCProjectName
@@ -200,22 +199,22 @@ class Cluster:
 
 		baseTag = 'develop'
 		forceBaseImageBuild = False
-		if self.ranAllowMerge: # merging MR branch into develop -> temporary image
-			branchName = self.ranBranch.replace('/','-')
-			imageTag = f'{branchName}-{self.ranCommitID[0:8]}'
-			if self.ranTargetBranch == 'develop':
+		if self.merge: # merging MR branch into develop -> temporary image
+			branchName = self.branch.replace('/','-')
+			imageTag = f'{branchName}'
+			if self.targetBranch == 'develop':
 				ret = self.cmd.run(f'git diff HEAD..origin/develop -- cmake_targets/build_oai cmake_targets/tools/build_helper docker/Dockerfile.base.rhel9 | grep --colour=never -i INDEX')
 				result = re.search('index', ret.stdout)
 				if result is not None:
 					forceBaseImageBuild = True
 					baseTag = 'ci-temp'
 			# if the branch name contains integration_20xx_wyy, let rebuild ran-base
-			result = re.search('integration_20([0-9]{2})_w([0-9]{2})', self.ranBranch)
+			result = re.search('integration_20([0-9]{2})_w([0-9]{2})', self.branch)
 			if not forceBaseImageBuild and result is not None:
 				forceBaseImageBuild = True
 				baseTag = 'ci-temp'
 		else:
-			imageTag = f'develop-{self.ranCommitID[0:8]}'
+			imageTag = self.branch
 			forceBaseImageBuild = True
 
 		# logging to OC Cluster and then switch to corresponding project

@@ -84,7 +84,7 @@ static void test_copy(const nfapi_nr_srs_indication_t *msg)
   free_srs_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

@@ -21,6 +21,7 @@ To run individual unit tests, start them like so:
     python tests/log-analysis.py -v
     python tests/ping-iperf.py -v
     python tests/pull-clean-int-registry.py -v
+    python tests/script-deployment.py -v
 
 The logs will indicate if all tests passed. `tests/deployment.py` requires
 these images to be present:

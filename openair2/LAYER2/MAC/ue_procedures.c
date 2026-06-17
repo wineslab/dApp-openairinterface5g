@@ -32,6 +32,7 @@
 #include "assertions.h"
 
 #include "SIMULATION/TOOLS/sim.h" // for taus
+#include "openair1/PHY/phy_extern_ue.h"
 
 #define DEBUG_HEADER_PARSING 1
 #define ENABLE_MAC_PAYLOAD_DEBUG 1
@@ -357,6 +358,7 @@ ue_send_sdu(module_id_t module_idP,
   (VCD_SIGNAL_DUMPER_FUNCTIONS_UE_SEND_SDU, VCD_FUNCTION_IN);
   //LOG_D(MAC,"sdu: %x.%x.%x\n",sdu[0],sdu[1],sdu[2]);
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = sdu,
                     .pdu_buffer_size = sdu_len,
                     .ueid = module_idP,
@@ -562,6 +564,7 @@ void ue_decode_si_mbms(module_id_t module_idP, int CC_id, frame_t frameP,
   stop_UE_TIMING(UE_mac_inst[module_idP].rx_si);
 
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = pdu,
                     .pdu_buffer_size = len,
                     .ueid = module_idP,
@@ -589,6 +592,7 @@ ue_decode_si(module_id_t module_idP, int CC_id, frame_t frameP,
   (VCD_SIGNAL_DUMPER_FUNCTIONS_UE_DECODE_SI, VCD_FUNCTION_OUT);
   stop_UE_TIMING(UE_mac_inst[module_idP].rx_si);
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = pdu,
                     .pdu_buffer_size = len,
                     .ueid = module_idP,
@@ -616,6 +620,7 @@ ue_decode_p(module_id_t module_idP, int CC_id, frame_t frameP,
   (VCD_SIGNAL_DUMPER_FUNCTIONS_UE_DECODE_PCCH, VCD_FUNCTION_OUT);
   stop_UE_TIMING(UE_mac_inst[module_idP].rx_p);
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = pdu,
                     .pdu_buffer_size = len,
                     .ueid = module_idP,
@@ -2850,6 +2855,7 @@ ue_get_sdu(module_id_t module_idP, int CC_id, frame_t frameP,
   (VCD_SIGNAL_DUMPER_FUNCTIONS_UE_GET_SDU, VCD_FUNCTION_OUT);
   stop_UE_TIMING(UE_mac_inst[module_idP].tx_ulsch_sdu);
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = ulsch_buffer,
                     .pdu_buffer_size = buflen,
                     .ueid = module_idP,

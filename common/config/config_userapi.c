@@ -126,37 +126,101 @@ int config_getlist(configmodule_interface_t *cfg, paramlist_def_t *ParamList, pa
   }
   const int ret = cfg->getlist(cfg, ParamList, params, numparams, prefix);
 
-  if (ret >= 0 && params) {
-    char *newprefix;
-
-    if (prefix) {
-      int rc = asprintf(&newprefix, "%s.%s", prefix, ParamList->listname);
-
-      if (rc < 0) newprefix = NULL;
-    } else {
-      newprefix = ParamList->listname;
-    }
-
-    char cfgpath[MAX_OPTNAME_SIZE*2 + 6]; /* prefix.listname.[listindex] */
-
-    for (int i = 0; i < ParamList->numelt; ++i) {
-      // TODO config_process_cmdline?
-      sprintf(cfgpath, "%s.[%i]", newprefix, i);
-      config_process_cmdline(cfg, ParamList->paramarray[i], numparams, cfgpath);
-      if (cfg->rtflags & CONFIG_SAVERUNCFG) {
-        cfg->set(ParamList->paramarray[i], numparams, cfgpath);
-      }
-      config_execcheck(cfg, ParamList->paramarray[i], numparams, cfgpath);
-    }
-
-    if (prefix)
-      free(newprefix);
+  /* build newprefix OUTSIDE the params check so we can use it below too */
+  char *newprefix = NULL;
+  if (prefix) {
+    int rc = asprintf(&newprefix, "%s.%s", prefix, ParamList->listname);
+    if (rc < 0)
+      newprefix = NULL;
+  } else {
+    newprefix = ParamList->listname;
   }
 
-  return ret;
+  char cfgpath[MAX_OPTNAME_SIZE * 2 + 6]; /* prefix.listname.[listindex] */
+
+  if (ret >= 0 && params) {
+    for (int i = 0; i < ParamList->numelt; ++i) {
+      sprintf(cfgpath, "%s.[%i]", newprefix, i);
+      config_process_cmdline(cfg, ParamList->paramarray[i], numparams, cfgpath);
+      if (cfg->rtflags & CONFIG_SAVERUNCFG)
+        cfg->set(ParamList->paramarray[i], numparams, cfgpath);
+      config_execcheck(cfg, ParamList->paramarray[i], numparams, cfgpath);
+    }
+  }
+
+  if (params && newprefix && (ret >= 0 || ParamList->numelt == 0)) {
+    sprintf(cfgpath, "%s", newprefix);
+    char searchstr[MAX_OPTNAME_SIZE * 2 + 10];
+    snprintf(searchstr, sizeof(searchstr), "--%s.", cfgpath);
+    char *endptr;
+    int valid_idx = ParamList->numelt;
+
+    for (int i = 1; i < cfg->argc; i++) {
+      char *res = strstr(cfg->argv[i], searchstr);
+      if (res != NULL) {
+        char *bracket = strchr(res + strlen(searchstr), '[');
+        if (bracket == NULL)
+          continue;
+        bracket++;
+        long num = strtol(bracket, &endptr, 10);
+        if (num < valid_idx)
+          continue;
+        if (valid_idx == num) {
+          valid_idx++;
+        } else if (num > valid_idx) {
+          LOG_E(HW, "Out of Order Element Creation\n index: %s, valid_idx: %d, num: %ld\n", cfg->argv[i], valid_idx, num);
+          return -1;
+        } else {
+          LOG_E(HW, "[CONFIG] Invalid Configuration\n index: %s, valid_idx: %d, num: %ld\n", cfg->argv[i], valid_idx, num);
+          return -1;
+        }
+      }
+    }
+
+    while (ParamList->numelt < valid_idx) {
+      int new_idx = ParamList->numelt;
+      sprintf(cfgpath, "%s.[%i]", newprefix, new_idx);
+      paramdef_t **old = ParamList->paramarray;
+      ParamList->paramarray = config_allocate_new(cfg, (new_idx + 1) * sizeof(paramdef_t *), true);
+      if (new_idx > 0 && old != NULL) {
+        memcpy(ParamList->paramarray, old, new_idx * sizeof(paramdef_t *));
+      }
+      ParamList->paramarray[new_idx] = config_allocate_new(cfg, numparams * sizeof(paramdef_t), true);
+      memcpy(ParamList->paramarray[new_idx], params, sizeof(paramdef_t) * numparams);
+
+      for (int p = 0; p < numparams; p++) {
+        ParamList->paramarray[new_idx][p].voidptr = NULL;
+      }
+
+      ParamList->numelt++;
+      fprintf(stderr, "[CONFIG] Created new array parameter %s.[%d]\n", newprefix, new_idx);
+      config_process_cmdline(cfg, ParamList->paramarray[new_idx], numparams, cfgpath);
+
+      for (int p = 0; p < numparams; p++) {
+        paramdef_t *pd = &ParamList->paramarray[new_idx][p];
+        if (pd->paramflags & PARAMFLAG_PARAMSET)
+          continue;
+        config_common_getdefault(cfg, pd, cfgpath);
+      }
+
+      config_execcheck(cfg, ParamList->paramarray[new_idx], numparams, cfgpath);
+
+      for (int p = 0; p < numparams; p++) {
+        if (ParamList->paramarray[new_idx][p].paramflags & PARAMFLAG_PARAMSET)
+          fprintf(stderr, "[CONFIG] New parameter set: %s\n", ParamList->paramarray[new_idx][p].optname);
+      }
+    }
+  }
+
+  if (prefix)
+    free(newprefix);
+
+  /* when added parameters via CLI, return numelt instead of original ret */
+  return (ParamList->numelt > 0) ? (int)ParamList->numelt : ret;
 }
 
-int config_isparamset(paramdef_t *params,int paramidx) {
+int config_isparamset(paramdef_t *params, int paramidx)
+{
   if ((params[paramidx].paramflags & PARAMFLAG_PARAMSET) != 0) {
     return 1;
   } else {

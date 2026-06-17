@@ -80,10 +80,14 @@
 
 ## Pipelines
 
-### [RAN-Container-Parent](https://jenkins-oai.eurecom.fr/job/RAN-Container-Parent/)
+### [RAN-GitHub-Container-Parent](https://jenkins-oai.eurecom.fr/job/RAN-GitHub-Container-Parent/)
 
-**Purpose**: automatically triggered tests on MR creation or push, from Gitlab
-Webhook ~documentation ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
+**Purpose**: automatically triggered tests on pull request creation or push
+https://github.com/duranta-project/openairinterface5g/labels/documentation
+https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+https://github.com/duranta-project/openairinterface5g/labels/nrUE
 
 This pipeline has basically two main stages, as follows. For the image build,
 please also refer to the [dedicated documentation](../docker/README.md) for
@@ -92,12 +96,18 @@ information on how the images are built.
 #### Image Build pipelines
 
 - [RAN-ARM-Cross-Compile-Builder](https://jenkins-oai.eurecom.fr/job/RAN-ARM-Cross-Compile-Builder/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - orion: Cross-compilation from Intel to ARM
   - base image from `Dockerfile.base.ubuntu.cross-arm64`
   - build image from `Dockerfile.build.ubuntu.cross-arm64` (no target images)
-- [RAN-RHEL8-Cluster-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-RHEL8-Cluster-Image-Builder/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
+- [RAN-RHEL-Cluster-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-RHEL-Cluster-Image-Builder/)
+  https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - cluster (`Asterix-OC-oaicicd-session` resource): RHEL image build using the OpenShift Cluster (using gcc/clang)
   - base image from `Dockerfile.build.rhel9`
   - build image from `Dockerfile.build.rhel9`, followed by
@@ -112,10 +122,13 @@ information on how the images are built.
   - build image from `Dockerfile.phySim.rhel9` (creates as direct target physical simulator
     image)
   - build image from `Dockerfile.clang.rhel9` (compilation only, artifacts not used currently)
-- [RAN-Ubuntu18-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu18-Image-Builder/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
+- [RAN-Ubuntu-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu-Image-Builder/)
+  https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - run formatting check from `ci-scripts/docker/Dockerfile.formatting.ubuntu`
-  - obelix: Ubuntu image build using docker (Note: builds Ubuntu images of newer version while pipeline is named U18!)
+  - obelix: Ubuntu image build using docker
   - base image from `Dockerfile.base.ubuntu`
   - build image from `Dockerfile.build.ubuntu`, followed by
     - target image from `Dockerfile.eNB.ubuntu`
@@ -129,7 +142,10 @@ information on how the images are built.
     - target image from `Dockerfile.gNB.fhi72.ubuntu`
   - build unit tests from `ci-scripts/docker/Dockerfile.unittest.ubuntu`, and run them
 - [RAN-Ubuntu-ARM-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu-ARM-Image-Builder/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - gracehopper3-oai: ARM Ubuntu image build using docker
   - base image from `Dockerfile.base.ubuntu`
   - build image from `Dockerfile.build.ubuntu`, followed by
@@ -138,7 +154,10 @@ information on how the images are built.
     - target image from `Dockerfile.nrUE.ubuntu`
     - target image from `Dockerfile.gNB.aerial.ubuntu`
 - [RAN-Ubuntu-Jetson-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu-Jetson-Image-Builder/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/BUILD-ONLY
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - jetson3-oai: ARMv8 Ubuntu image build using docker
   - base image from `Dockerfile.base.ubuntu`
   - build image from `Dockerfile.build.ubuntu`, followed by
@@ -149,106 +168,112 @@ information on how the images are built.
 #### Image Test pipelines
 
 - [OAI-CN5G-COTS-UE-Test](https://jenkins-oai.eurecom.fr/job/OAI-CN5G-COTS-UE-Test/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - using 5GC bench (resources `Cetautomatix`, `Dogmatix`): Attach/Detach of UE with multiple PDU sessions
-- [OAI-FLEXRIC-RAN-Integration-Test](https://jenkins-oai.eurecom.fr/job/OAI-FLEXRIC-RAN-Integration-Test/) ~5G-NR ~nrUE
+- [OAI-FLEXRIC-RAN-Integration-Test](https://jenkins-oai.eurecom.fr/job/OAI-FLEXRIC-RAN-Integration-Test/)
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - selfix (gNB, nrUE, OAI 5GC, FlexRIC)
   - uses RFsimulator, tests FlexRIC/E2 interface and xApps
 - [RAN-gNB-N300-Timing-Phytest-LDPC](https://jenkins-oai.eurecom.fr/view/RAN/job/RAN-gNB-N300-Timing-Phytest-LDPC/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - caracal + N310
   - pure performance test through phy-test scheduler, see command line for more details
 - [RAN-L2-Sim-Test-4G](https://jenkins-oai.eurecom.fr/job/RAN-L2-Sim-Test-4G/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - obelix (eNB, 1x UE, OAI EPC)
   - L2simulator: skips physical layer and uses proxy between eNB and UE
 - [RAN-LTE-FDD-LTEBOX-Container](https://jenkins-oai.eurecom.fr/job/RAN-LTE-FDD-LTEBOX-Container/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - hutch + B210, nano w/ ltebox + 2x UE
   - tests RRC inactivity timers, different bandwidths, IF4p5 fronthaul
 - [RAN-LTE-FDD-OAIUE-OAICN4G-Container](https://jenkins-oai.eurecom.fr/job/RAN-LTE-FDD-OAIUE-OAICN4G-Container/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - hutch + B210 (eNB), carabe + B210 (4G UE), nano w/ OAI 4GC
   - tests OAI 4G for 10 MHz/TM1; known to be unstable
 - [RAN-LTE-TDD-2x2-Container](https://jenkins-oai.eurecom.fr/view/RAN/job/RAN-LTE-TDD-2x2-Container/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - obelix + N310, porcepix, up2 + Quectel
   - TM1 and TM2 test, IF4p5 fronthaul
 - [RAN-LTE-TDD-LTEBOX-Container](https://jenkins-oai.eurecom.fr/job/RAN-LTE-TDD-LTEBOX-Container/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - starsky + B210, nano w/ ltebox + 2x UE
   - TM1 over bandwidths 5, 10, 20 MHz in Band 40, default scheduler for 20 MHz
 - [RAN-NSA-B200-Module-LTEBOX-Container](https://jenkins-oai.eurecom.fr/job/RAN-NSA-B200-Module-LTEBOX-Container/)
-  ~4G-LTE ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - nepes + B200 (eNB), ofqot + B200 (gNB), idefix + Quectel, nepes w/ ltebox
   - basic NSA test
 - [RAN-PhySim-Cluster-4G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-Cluster-4G/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - tests 4G physical simulators (`nr_dlsim`, etc.) in OpenShift Cluster (x86)
   - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
 - [RAN-PhySim-Cluster-5G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-Cluster-5G/)
-  ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - tests 5G physical simulators (`nr_dlsim`, etc.) in OpenShift Cluster (x86)
   - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
 - [RAN-PhySim-GraceHopper-5G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-GraceHopper-5G/)
-  ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - tests 5G physical simulators (`nr_dlsim`, etc.) on Nvidia GraceHopper (ARMv9)
   - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
 - [RAN-RF-Sim-Test-4G](https://jenkins-oai.eurecom.fr/job/RAN-RF-Sim-Test-4G/)
-  ~4G-LTE
+  https://github.com/duranta-project/openairinterface5g/labels/4G-LTE
   - acamas (eNB, lteUE, OAI EPC)
   - uses RFsimulator, for FDD 5, 10, 20MHz with core, 5MHz noS1
 - [RAN-RF-Sim-Test-5G](https://jenkins-oai.eurecom.fr/job/RAN-RF-Sim-Test-5G/)
-  ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - acamas (gNB, nrUE, OAI 5GC)
   - uses RFsimulator, TDD 40MHz, FDD 40MHz, F1 split
 - [RAN-SA-AW2S-CN5G](https://jenkins-oai.eurecom.fr/job/RAN-SA-AW2S-CN5G/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - 5G-NR SA test setup: avra + AW2S, amariue, OAI CN5G
   - uses OpenShift cluster for CN deployment and container images for gNB deployment
   - multi UE testing using Amarisoft UE simulator
 - [RAN-SA-B200-Module-SABOX-Container](https://jenkins-oai.eurecom.fr/job/RAN-SA-B200-Module-SABOX-Container/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - ofqot + B200, idefix + Quectel, nepes w/ sabox
   - basic SA test (20 MHz TDD), F1, reestablishment, ...
 - [RAN-SA-OAIUE-CN5G](https://jenkins-oai.eurecom.fr/job/RAN-SA-OAIUE-CN5G/)
-  ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - 5G-NR SA test setup: gNB on avra + N310, OAIUE on caracal + N310, OAI CN5G
   - OpenShift cluster for CN deployment and container images for gNB and UE deployment
 - [RAN-SA-AERIAL-CN5G](https://jenkins-oai.eurecom.fr/job/RAN-SA-AERIAL-CN5G/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - 5G-NR SA test setup: OAI VNF + PNF/NVIDIA CUBB on gracehopper1-oai + Foxconn RU, up2 + COTS UE (Quectel RM520N), OAI CN5G
   - container images for gNB deployment
 - [RAN-SA-Multi-Antenna-CN5G](https://jenkins-oai.eurecom.fr/view/RAN/job/RAN-SA-Multi-Antenna-CN5G/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - matix + N310 (gNB), up2 + COTS UE (Quectel RM520N), OAI 5GC deployed in docker on matix
   - NR performance tests: 2x2 configuration, 60 MHz and 100 MHz bandwidth
 - [RAN-SA-FHI72-CN5G](https://jenkins-oai.eurecom.fr/view/RAN/job/RAN-SA-FHI72-CN5G/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - cacofonix + FHI72 + Metanoia (gNB), up2 (Quectel RM520N UE), OAI CN5G
   - OpenShift cluster for CN deployment
   - FHI 7.2 testing with 100 MHz bandwidth, 2 layers in DL
 - [RAN-SA-Handover-CN5G](https://jenkins-oai.eurecom.fr/job/RAN-SA-Handover-CN5G/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - groot (CU+DU0) + B210, rocket (DU1) + B210, raspix (Quectel RM520N UE), OAI CN5G
   - OpenShift cluster for CN deployment
   - Attenuator (mini circuits RC4DAT-6G-60) - controlled from rocket
 - [RAN-Channel-Simulation](https://jenkins-oai.eurecom.fr/job/RAN-Channel-Simulation/)
-  ~5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
   - gracehopper1-oai
   - run channel simulation on CPU and GPU using test_channel_scalability
 - [RAN-SA-AERIAL-OAIUE-CN5G](https://jenkins-oai.eurecom.fr/job/RAN-SA-AERIAL-OAIUE-CN5G/)
-  ~5G-NR ~nrUE
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  https://github.com/duranta-project/openairinterface5g/labels/nrUE
   - 5G-NR SA test setup: OAI VNF + PNF/NVIDIA CUBB on gracehopper1-oai + WNC RU, OAIUE on jetson1-oai + B210, OAI CN5G
   - OpenShift cluster for CN deployment and container images for gNB and UE deployment
-
-### RAN-CI-NSA-Trigger
-
-***DEFUNCT***: longer-running over-the-air LTE, NSA, and SA tests. To be integrated into RAN-Container-Parent.
-
-- [RAN-NSA-2x2-Module-OAIEPC](https://jenkins-oai.eurecom.fr/job/RAN-NSA-2x2-Module-OAIEPC/)
-  - obelix + N310 (eNB), asterix + N310 (gNB), nrmodule2 + Quectel, porcepix w/ Magma EPC
-  - LTE 2x2 and NR 2x2 (non-standalone)
+- [RAN-SA-FHI72-MPLANE-CN5G](https://jenkins-oai.eurecom.fr/view/RAN/job/RAN-SA-FHI72-MPLANE-CN5G/)
+  https://github.com/duranta-project/openairinterface5g/labels/5G-NR
+  - cacofonix + FHI72 + Benetel550 (gNB), AmarisoftUE, OAI CN5G
+  - OpenShift cluster for CN deployment
+  - FHI 7.2 testing with 40 MHz, 4x4 MIMO configuration and 100 MHz, 2x2 MIMO configuration
+  - FHI 7.2 Configuration and Performance Management via NETCONF session of an O-RU
 
 ## How to reproduce CI results
 

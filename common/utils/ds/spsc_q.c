@@ -8,7 +8,7 @@
 
 #include "spsc_q.h"
 
-spsc_q_t spsc_q_alloc(size_t cnt, size_t elsiz)
+bool spsc_q_alloc(spsc_q_t *rbn, size_t cnt, size_t elsiz)
 {
   /* internally, use one element more: the ringbuffer is full if
    * (write_idx + 1) % cnt == read_idx, so it's full if one element is still
@@ -17,7 +17,8 @@ spsc_q_t spsc_q_alloc(size_t cnt, size_t elsiz)
   cnt += 1;
   spsc_q_t rb = {.cnt = cnt, .elsiz = elsiz};
   rb.buf = calloc(cnt, elsiz);
-  return rb;
+  *rbn = rb;
+  return rb.buf != NULL;
 }
 
 void spsc_q_free(spsc_q_t *rb)

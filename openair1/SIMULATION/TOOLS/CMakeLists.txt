@@ -3,17 +3,16 @@
 add_library(noise_device noise_device.c)
 target_link_libraries(noise_device PRIVATE log_headers SIMU)
 target_include_directories(noise_device PUBLIC ./)
-set(CHANNEL_PIPELINE_SOURCES channel_pipeline.c)
-if (CUDA_ENABLE)
-  list(APPEND CHANNEL_PIPELINE_SOURCES channel_pipeline_v2.cu)
+add_library(channel_pipeline channel_pipeline.c)
+if (ENABLE_CHANNEL_SIM_CUDA)
+  target_sources(channel_pipeline PRIVATE channel_pipeline_v2.cu)
 endif()
-add_library(channel_pipeline ${CHANNEL_PIPELINE_SOURCES})
 target_link_libraries(channel_pipeline PUBLIC thread-pool noise_device)
-if (CUDA_ENABLE)
+if (ENABLE_CHANNEL_SIM_CUDA)
   target_link_libraries(channel_pipeline PUBLIC CUDA::toolkit)
 endif()
 
-if(CUDA_ENABLE)
+if(ENABLE_CHANNEL_SIM_CUDA)
     add_library(oai_cuda_lib STATIC
         multipath_channel.cu
         phase_noise.cu

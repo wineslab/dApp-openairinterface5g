@@ -44,6 +44,14 @@ up2-aerial:
   IF: wwan0
   MTU: 1500
 
+up3:
+  Host: up3
+  AttachScript: /opt/mbim/start_quectel_mbim.sh
+  DetachScript: /opt/mbim/stop_quectel_mbim.sh
+  NetworkScript: ip a show dev wwan0
+  IF: wwan0
+  MTU: 1500
+
 adb_ue_1:
   Host: nano
   InitScript: /home/oaicicd/ci_ctl_adb.sh initialize R3CM40LZPHT
@@ -85,6 +93,14 @@ oc-cn5g-20897:
   Undeploy: "! scripts/oc-cn5g-undeploy.sh /opt/oai-cn5g-fed-develop-2026-apr oaicicd-core-for-fhi72"
   LogCollect: "! scripts/oc-cn5g-logcollect.sh /opt/oai-cn5g-fed-develop-2026-apr oaicicd-core-for-fhi72 %%log_dir%%"
 
+oc-cn5g-00105:
+  Host: cacofonix
+  NetworkScript: echo "inet 172.21.6.118"
+  RunIperf3Server: False
+  Deploy: "! scripts/oc-cn5g-deploy.sh /opt/oai-cn5g-fed-develop-2026-apr-00105 oaicicd-core-for-fhi72"
+  Undeploy: "! scripts/oc-cn5g-undeploy.sh /opt/oai-cn5g-fed-develop-2026-apr-00105 oaicicd-core-for-fhi72"
+  LogCollect: "! scripts/oc-cn5g-logcollect.sh /opt/oai-cn5g-fed-develop-2026-apr-00105 oaicicd-core-for-fhi72 %%log_dir%%"
+
 oc-cn5g-00103-ho:
   Host: groot
   NetworkScript: echo "inet 172.21.6.111"
@@ -108,6 +124,19 @@ oc-cn5g-00104:
   Deploy: "! scripts/oc-cn5g-deploy.sh /opt/oai-cn5g-fed-develop-00104 oaicicd-core-for-nvidia-aerial"
   Undeploy: "! scripts/oc-cn5g-undeploy.sh /opt/oai-cn5g-fed-develop-00104 oaicicd-core-for-nvidia-aerial"
   LogCollect: "! scripts/oc-cn5g-logcollect.sh /opt/oai-cn5g-fed-develop-00104 oaicicd-core-for-nvidia-aerial %%log_dir%%"
+
+oc-cn5g-20897-stonechat:
+  Host: stonechat
+  NetworkScript: echo "inet 172.21.6.105"
+  RunIperf3Server: False
+  Deploy: "! scripts/oc-cn5g-deploy.sh /opt/oai-cn5g-fed-develop-2025-jan oaicicd-core-for-fhi72"
+  Undeploy: "! scripts/oc-cn5g-undeploy.sh /opt/oai-cn5g-fed-develop-2025-jan oaicicd-core-for-fhi72"
+  LogCollect: "! scripts/oc-cn5g-logcollect.sh /opt/oai-cn5g-fed-develop-2025-jan oaicicd-core-for-fhi72  %%log_dir%%"
+
+oc-cn5g-20899-always-on:
+  Host: stonechat
+  NetworkScript: echo "inet 172.21.6.12"
+  RunIperf3Server: False
 
 matix-cn5g:
   Host: matix
@@ -181,6 +210,16 @@ amarisoft_ue:
 amarisoft_ue_2x2:
   Host: amariue
   InitScript: /root/lteue-linux-2025-03-15/lteue /root/oaicicd/ran_sa_aw2s_asue_20MHz_2x2/aw2s-multi-00102-2x2-v2.cfg &
+  TermScript: /root/lteue-linux-2025-03-15/ws.js -t 10 127.0.0.1:9002 '{"message":"quit"}' || killall -KILL lteue-avx2
+  NetworkScript: ip netns exec ue1 ip a show dev pdn0
+amarisoft_00105_40MHz:
+  Host: amariue
+  InitScript: /root/lteue-linux-2025-03-15/lteue /root/oaicicd/ran_sa_fhi72_mplane_40MHz/multi-00105-40.cfg &
+  TermScript: /root/lteue-linux-2025-03-15/ws.js -t 10 127.0.0.1:9002 '{"message":"quit"}' || killall -KILL lteue-avx2
+  NetworkScript: ip netns exec ue1 ip a show dev pdn0
+amarisoft_00105_100MHz:
+  Host: amariue
+  InitScript: /root/lteue-linux-2025-03-15/lteue /root/oaicicd/ran_sa_fhi72_mplane_100MHz/multi-00105-100.cfg &
   TermScript: /root/lteue-linux-2025-03-15/ws.js -t 10 127.0.0.1:9002 '{"message":"quit"}' || killall -KILL lteue-avx2
   NetworkScript: ip netns exec ue1 ip a show dev pdn0
 amarisoft_ue_1:

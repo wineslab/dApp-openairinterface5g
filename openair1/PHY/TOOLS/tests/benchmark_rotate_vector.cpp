@@ -33,7 +33,7 @@ static void BM_rotate_cpx_vector(benchmark::State &state)
   output.resize(vector_size);
   int shift = 2;
   for (auto _ : state) {
-    rotate_cpx_vector(input_complex_16.data(), input_alpha.data(), output.data(), vector_size, shift);
+    rotate_cpx_vector(input_complex_16.data(), input_alpha.data()[0], output.data(), vector_size, shift);
   }
 }
 

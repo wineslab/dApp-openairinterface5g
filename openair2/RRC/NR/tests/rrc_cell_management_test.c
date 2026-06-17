@@ -50,6 +50,7 @@ softmodem_params_t *get_softmodem_params(void)
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
+  UNUSED(assert);
   printf("detected error at %s:%d:%s: %s\n", file, line, function, s);
   abort();
 }

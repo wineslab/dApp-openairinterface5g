@@ -558,8 +558,8 @@ static int UE_dl_preprocessing(PHY_VARS_NR_UE *UE,
     if (phy_data->dlsch[0].active
         && (phy_data->dlsch[0].rnti_type == TYPE_C_RNTI_ || phy_data->dlsch[0].rnti_type == TYPE_RA_RNTI_)) {
       // indicate to tx thread to wait for DLSCH decoding
-      if (phy_data->dlsch[0].dlsch_config.k1_feedback) {  // if feedback is 0 there is no HARQ associated with this DLSCH
-        const int ack_nack_slot = (proc->nr_slot_rx + phy_data->dlsch[0].dlsch_config.k1_feedback) % fp->slots_per_frame;
+      if (phy_data->dlsch_config.k1_feedback) {  // if feedback is 0 there is no HARQ associated with this DLSCH
+        const int ack_nack_slot = (proc->nr_slot_rx + phy_data->dlsch_config.k1_feedback) % fp->slots_per_frame;
         tx_wait_for_dlsch[ack_nack_slot]++;
       }
     }
@@ -806,7 +806,6 @@ void *UE_thread(void *arg)
           /* For IQ recorder-player we force synchronization to happen in a fixed duration so that
              the replay runs in sync with recorded samples.
           */
-          extern openair0_config_t openair0_cfg[MAX_CARDS];
           openair0_config_t *cfg0 = &openair0_cfg[UE->rf_map.card];
           const unsigned int sync_in_frames = cfg0->recplay_conf->u_f_sync;
           while (trashed_frames != sync_in_frames) {

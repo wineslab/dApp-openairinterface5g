@@ -13,6 +13,8 @@
 #include "PHY/MODULATION/modulation_UE.h"
 #include "PHY/NR_UE_ESTIMATION/nr_estimation.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
+#include "PHY/CODING/nrPolar_tools/nr_polar_psbch_defs.h"
+#include "openair1/PHY/nr_phy_common/inc/nr_phy_common.h"
 
 void nr_fill_sl_indication(nr_sidelink_indication_t *sl_ind,
                            sl_nr_rx_indication_t *rx_ind,
@@ -85,66 +87,107 @@ void nr_fill_sl_rx_indication(sl_nr_rx_indication_t *rx_ind,
   rx_ind->number_pdus = n_pdus;
 }
 
-static int nr_ue_psbch_procedures(PHY_VARS_NR_UE *ue,
-                                  NR_DL_FRAME_PARMS *fp,
-                                  const UE_nr_rxtx_proc_t *proc,
-                                  int estimateSz,
-                                  struct complex16 dl_ch_estimates[][estimateSz],
-                                  nr_phy_data_t *phy_data,
-                                  c16_t rxdataF[][fp->samples_per_slot_wCP])
+static void nr_psbch_symbol_process(PHY_VARS_NR_UE *ue,
+                                    const UE_nr_rxtx_proc_t *proc,
+                                    const int symbol,
+                                    const c16_t rxdataF[][ue->frame_parms.ofdm_symbol_size],
+                                    int *psbch_e_rx_offset,
+                                    int16_t psbch_e_rx[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2],
+                                    int16_t psbch_unClipped[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2],
+                                    c16_t dl_ch_estimates_time[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size])
 {
-  int ret = 0;
-  DevAssert(ue);
-
-  int frame_rx = proc->frame_rx;
-  int nr_slot_rx = proc->nr_slot_rx;
-
   sl_nr_ue_phy_params_t *sl_phy_params = &ue->SL_UE_PHY_PARAMS;
-  uint16_t rx_slss_id = sl_phy_params->sl_config.sl_sync_source.rx_slss_id;
+  NR_DL_FRAME_PARMS *fp = &sl_phy_params->sl_frame_params;
+  int slss_id = sl_phy_params->sl_config.sl_sync_source.rx_slss_id;
 
-  LOG_D(NR_PHY,
-        "[UE  %d] Frame %d Slot %d, Trying PSBCH (SLSS ID %d)\n",
-        ue->Mod_id,
-        frame_rx,
-        nr_slot_rx,
-        sl_phy_params->sl_config.sl_sync_source.rx_slss_id);
+  __attribute__((aligned(32))) c16_t dl_ch_estimates[fp->nb_antennas_rx][fp->ofdm_symbol_size];
+  start_meas(&sl_phy_params->channel_estimation_stats);
+  for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
+    nr_pbch_channel_estimation(fp,
+                               &ue->SL_UE_PHY_PARAMS,
+                               dl_ch_estimates[aarx],
+                               proc,
+                               symbol,
+                               0,
+                               0,
+                               fp->ssb_start_subcarrier,
+                               rxdataF[aarx],
+                               true,
+                               slss_id);
+    if (symbol == 12) {
+      freq2time(ue->frame_parms.ofdm_symbol_size, (int16_t *)&dl_ch_estimates[aarx], (int16_t *)&dl_ch_estimates_time[aarx]);
+    }
+  }
+  stop_meas(&sl_phy_params->channel_estimation_stats);
 
-  uint8_t decoded_pdu[4] = {0};
-  ret = nr_rx_psbch(ue,
-                    proc,
-                    estimateSz,
-                    dl_ch_estimates,
-                    fp,
-                    decoded_pdu,
-                    rxdataF,
-                    sl_phy_params->sl_config.sl_sync_source.rx_slss_id);
+  if (symbol == 12)
+    UEscopeCopy(ue,
+                psbchDlChEstimateTime,
+                (void *)dl_ch_estimates_time,
+                sizeof(c16_t),
+                fp->nb_antennas_rx,
+                fp->ofdm_symbol_size,
+                0);
 
-  nr_sidelink_indication_t sl_indication;
-  sl_nr_rx_indication_t rx_ind = {0};
-  uint16_t number_pdus = 1;
+  nr_generate_psbch_llr(fp, rxdataF, dl_ch_estimates, symbol, psbch_e_rx_offset, psbch_e_rx, psbch_unClipped);
 
-  uint8_t *result = NULL;
-  if (ret) {
-    sl_phy_params->psbch.rx_errors++;
-    LOG_E(NR_PHY, "%d:%d PSBCH RX: NOK \n", proc->frame_rx, proc->nr_slot_rx);
-  } else {
-    result = decoded_pdu;
-    sl_phy_params->psbch.rx_ok++;
-    LOG_I(NR_PHY,
-          "[UE%d] %d:%d PSBCH RX:OK. RSRP: %d dB/RE\n",
-          ue->Mod_id,
-          proc->frame_rx,
-          proc->nr_slot_rx,
-          sl_phy_params->psbch.rsrp_dB_per_RE);
+  ue->adjust_rxgain = nr_sl_psbch_rsrp_measurements(ue, sl_phy_params, fp, symbol, rxdataF, false);
+}
+
+static unsigned int get_psbch_symbol_bitmap(const int num_symbols)
+{
+  unsigned int b = 0;
+  for (int s = 0; s < num_symbols;) {
+    b |= (0x1 << s);
+    s = (s == 0) ? 5 : s + 1;
+  }
+  return b;
+}
+
+static bool is_psbch_symbol(const unsigned bitmap, const unsigned int symbol)
+{
+  return ((bitmap >> symbol) == 1);
+}
+
+static int nr_psbch_process(PHY_VARS_NR_UE *ue,
+                            nr_phy_data_t *phy_data,
+                            const UE_nr_rxtx_proc_t *proc,
+                            const int symbol,
+                            const c16_t rxdataF[][ue->frame_parms.ofdm_symbol_size],
+                            int *psbch_e_rx_offset,
+                            int16_t psbch_e_rx[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2],
+                            int16_t psbch_unClipped[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2],
+                            c16_t dl_ch_estimates_time[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size])
+{
+  sl_nr_ue_phy_params_t *sl_phy_params = &ue->SL_UE_PHY_PARAMS;
+  NR_DL_FRAME_PARMS *fp = &sl_phy_params->sl_frame_params;
+  const unsigned int numsymb = (fp->Ncp) ? SL_NR_NUM_SYMBOLS_SSB_EXT_CP : SL_NR_NUM_SYMBOLS_SSB_NORMAL_CP;
+  const unsigned int symbol_bitmap = get_psbch_symbol_bitmap(numsymb);
+  if (!is_psbch_symbol(symbol_bitmap, symbol)) {
+    return 0;
   }
 
-  nr_fill_sl_indication(&sl_indication, &rx_ind, NULL, proc, ue, phy_data);
-  nr_fill_sl_rx_indication(&rx_ind, SL_NR_RX_PDU_TYPE_SSB, ue, number_pdus, (void *)result, rx_slss_id);
+  const unsigned int last_symbol = numsymb - 1;
+  int sampleShift = 0;
 
-  if (ue->if_inst && ue->if_inst->sl_indication)
-    ue->if_inst->sl_indication(&sl_indication);
+  nr_psbch_symbol_process(ue, proc, symbol, rxdataF, psbch_e_rx_offset, psbch_e_rx, psbch_unClipped, dl_ch_estimates_time);
 
-  return ret;
+  if (symbol == last_symbol) {
+    const int slss_id = sl_phy_params->sl_config.sl_sync_source.rx_slss_id;
+    uint8_t decoded_pdu[4] = {0};
+    const int psbchSuccess = nr_psbch_decode(ue, psbch_e_rx, proc, *psbch_e_rx_offset, slss_id, phy_data, decoded_pdu);
+
+    /* SV: Is this needed? */
+    if (ue->no_timing_correction == 0 && psbchSuccess == 0) {
+      LOG_D(NR_PHY, "start adjust sync slot = %d no timing %d\n", proc->nr_slot_rx, ue->no_timing_correction);
+      sampleShift = nr_adjust_synch_ue(fp, ue, dl_ch_estimates_time, proc->frame_rx, proc->nr_slot_rx, 16384);
+    }
+  }
+
+  UEscopeCopy(ue, psbchRxdataF_comp, psbch_unClipped, sizeof(c16_t), fp->nb_antennas_rx, *psbch_e_rx_offset / 2, 0);
+  UEscopeCopy(ue, psbchLlr, psbch_e_rx, sizeof(int16_t), fp->nb_antennas_rx, *psbch_e_rx_offset, 0);
+
+  return sampleShift;
 }
 
 int psbch_pscch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_data_t *phy_data)
@@ -163,62 +206,24 @@ int psbch_pscch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr
   __attribute__((aligned(32))) c16_t rxdataF[fp->nb_antennas_rx][rxdataF_sz];
 
   if (phy_data->sl_rx_action == SL_NR_CONFIG_TYPE_RX_PSBCH) {
-    const int estimateSz = fp->symbols_per_slot * fp->ofdm_symbol_size;
-
     LOG_D(NR_PHY, " ----- PSBCH RX TTI: frame.slot %d.%d ------  \n", frame_rx % 1024, nr_slot_rx);
 
-    __attribute__((aligned(32))) struct complex16 dl_ch_estimates[fp->nb_antennas_rx][estimateSz];
     __attribute__((aligned(32))) struct complex16 dl_ch_estimates_time[fp->nb_antennas_rx][fp->ofdm_symbol_size];
 
-    // 0 for Normal Cyclic Prefix and 1 for EXT CyclicPrefix
-    const int numsym = (fp->Ncp) ? SL_NR_NUM_SYMBOLS_SSB_EXT_CP : SL_NR_NUM_SYMBOLS_SSB_NORMAL_CP;
-
-    for (int sym = 0; sym < numsym;) {
+    int16_t psbch_e_rx[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2] = {0};
+    int16_t psbch_unClippled[SL_NR_POLAR_PSBCH_E_NORMAL_CP + 2] = {0};
+    int e_rx_offset = 0;
+    /* TODO: Remove loop over symbols in later commit. */
+    for (int sym = 0; sym < NR_SYMBOLS_PER_SLOT; sym++) {
       nr_slot_fep(ue, fp, proc->nr_slot_rx, sym, rxdataF, link_type_sl, 0, ue->common_vars.rxdata);
-
-      start_meas(&sl_phy_params->channel_estimation_stats);
-      nr_pbch_channel_estimation(fp,
-                                 &ue->SL_UE_PHY_PARAMS,
-                                 estimateSz,
-                                 dl_ch_estimates,
-                                 dl_ch_estimates_time,
-                                 proc,
-                                 sym,
-                                 sym,
-                                 0,
-                                 0,
-                                 fp->ssb_start_subcarrier,
-                                 rxdataF,
-                                 true,
-                                 sl_phy_params->sl_config.sl_sync_source.rx_slss_id);
-      stop_meas(&sl_phy_params->channel_estimation_stats);
-      if (sym == 12)
-        UEscopeCopy(ue,
-                    psbchDlChEstimateTime,
-                    (void *)dl_ch_estimates_time,
-                    sizeof(c16_t),
-                    fp->nb_antennas_rx,
-                    fp->ofdm_symbol_size,
-                    0);
-
-      // PSBCH present in symbols 0, 5-12 for normal cp
-      sym = (sym == 0) ? 5 : sym + 1;
-    }
-
-    ue->adjust_rxgain = nr_sl_psbch_rsrp_measurements(ue, sl_phy_params, fp, rxdataF, false);
-
-    LOG_D(NR_PHY, " ------  Decode SL-MIB: frame.slot %d.%d ------  \n", frame_rx % 1024, nr_slot_rx);
-
-    const int psbchSuccess = nr_ue_psbch_procedures(ue, fp, proc, estimateSz, dl_ch_estimates, phy_data, rxdataF);
-
-    if (ue->no_timing_correction == 0 && psbchSuccess == 0) {
-      LOG_D(NR_PHY, "start adjust sync slot = %d no timing %d\n", nr_slot_rx, ue->no_timing_correction);
+      __attribute__((aligned(32))) c16_t rxdataF_symb[fp->nb_antennas_rx][fp->ofdm_symbol_size];
+      for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
+        /* TODO: Remove this buffer reshaping in later commit after rxdataF is in right format */
+        memcpy(rxdataF_symb[aarx], &rxdataF[aarx][sym * fp->ofdm_symbol_size], sizeof(c16_t) * fp->ofdm_symbol_size);
+      }
       sampleShift =
-          nr_adjust_synch_ue(fp, ue, fp->ofdm_symbol_size, dl_ch_estimates_time, frame_rx, nr_slot_rx, 16384);
+          nr_psbch_process(ue, phy_data, proc, sym, rxdataF_symb, &e_rx_offset, psbch_e_rx, psbch_unClippled, dl_ch_estimates_time);
     }
-
-    LOG_D(NR_PHY, "Doing N0 measurements in %s\n", __FUNCTION__);
-    //    nr_ue_rrc_measurements(ue, proc, rxdataF);
 
     if (frame_rx % 64 == 0) {
       LOG_I(NR_PHY, "============================================\n");
@@ -235,9 +240,6 @@ int psbch_pscch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr
       LOG_I(NR_PHY, "============================================\n");
     }
   }
-
-  UEscopeCopy(ue, commonRxdataF, rxdataF, sizeof(int32_t), fp->nb_antennas_rx, rxdataF_sz, 0);
-
   return sampleShift;
 }
 

@@ -63,7 +63,7 @@ sudo uhd_images_downloader
 
 ```bash
 # Get openairinterface5g source code
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g
 git checkout develop
 

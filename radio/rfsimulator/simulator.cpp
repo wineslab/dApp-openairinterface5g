@@ -1324,7 +1324,7 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
           rxAddInput(input, temp_array[aarx], aarx, ptr->channel_model, nsamps);
         }
       } else {
-        if (is_first_beam && is_first_peer && (ptr->nbAnt == 1 || nbAnt == 1)) {
+        if (is_first_beam && is_first_peer && (ptr->nbAnt == 1 && nbAnt == 1)) {
           // optimization: The buffer is uninitialized so samples can be written directly in the buffer
           combine_received_beams(t, ptr->received_packets, timestamp - t->chan_offset, 1, nsamps, rx_beam_id, samples);
         } else {
@@ -1363,7 +1363,7 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
     int16_t noise_power = (int16_t)(32767.0 / powf(10.0, .05 * -get_noise_power_dBFS()));
     for (int a = 0; a < nbAnt; a++) {
       for (int i = 0; i < nsamps; i++) {
-        temp_array[a][i].r += noise_power + gaussZiggurat(0.0, 1.0);
+        temp_array[a][i].r += noise_power * gaussZiggurat(0.0, 1.0);
         temp_array[a][i].i += noise_power * gaussZiggurat(0.0, 1.0);
       }
     }

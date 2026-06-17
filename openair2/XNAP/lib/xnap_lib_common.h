@@ -9,11 +9,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdbool.h>
 #include "openair3/UTILS/conversions.h"
 #include "common/utils/oai_asn1.h"
 #include "common/utils/utils.h"
+#include "common/utils/assertions.h"
 #include "common/utils/eq_check.h"
+#include "common/utils/LOG/log.h"
 #include "xnap_messages_types.h"
 #include "xnap_lib_includes.h"
 
@@ -35,6 +36,10 @@
   } while (0)
 
 /* Function Prototypes */
+bool eq_transport_layer_addr(const transport_layer_addr_t *a, const transport_layer_addr_t *b);
+bool eq_nr_guami(const nr_guami_t *a, const nr_guami_t *b);
+bool eq_xnap_ngran_cgi(const xnap_ngran_cgi_t *a, const xnap_ngran_cgi_t *b);
+bool eq_gtpu_tunnel(const gtpu_tunnel_t *a, const gtpu_tunnel_t *b);
 bool eq_xnap_plmn(const plmn_id_t *a, const plmn_id_t *b);
 bool eq_xnap_snssai(const nssai_t *a, const nssai_t *b);
 bool eq_xnap_tai_support(const xnap_tai_support_t *a, const xnap_tai_support_t *b);
@@ -43,5 +48,11 @@ bool eq_xnap_cause(const xnap_cause_t *a, const xnap_cause_t *b);
 
 int xnap_gNB_set_cause(XNAP_Cause_t *cause_p,const xnap_cause_t *in);
 xnap_cause_t decode_xnap_cause(const XNAP_Cause_t *in);
+
+XNAP_S_NSSAI_t xnap_encode_snssai(const nssai_t *in);
+bool decode_xnap_snssai(const XNAP_S_NSSAI_t *in, nssai_t *out);
+
+XNAP_Target_CGI_t xnap_encode_target_cgi(const xnap_ngran_cgi_t *in);
+bool xnap_decode_target_cgi(const XNAP_Target_CGI_t *in, xnap_ngran_cgi_t *out);
 
 #endif /* XNAP_LIB_COMMON_H_ */

@@ -2265,8 +2265,10 @@ void init_channelmod(void) {
   int numparams = sizeofArray(channelmod_params);
   int ret = config_get(config_get_if(), channelmod_params, numparams, CHANNELMOD_SECTION);
   AssertFatal(ret >= 0, "configuration couldn't be performed");
-  defined_channels=calloc(max_chan,sizeof( channel_desc_t *));
-  AssertFatal(defined_channels!=NULL, "couldn't allocate %u channel descriptors\n",max_chan);
+  if (defined_channels == NULL) {
+    defined_channels = calloc(max_chan, sizeof(channel_desc_t *));
+    AssertFatal(defined_channels != NULL, "couldn't allocate %u channel descriptors\n", max_chan);
+  }
   /* look for telnet server, if it is loaded, add the channel modeling commands to it */
   add_telnetcmd_func_t addcmd = (add_telnetcmd_func_t)get_shlibmodule_fptr("telnetsrv", TELNET_ADDCMD_FNAME);
 

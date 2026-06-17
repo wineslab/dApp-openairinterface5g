@@ -5,5 +5,3 @@ The oai web server is an optional monitoring and debugging tool. Purpose is to g
 * [Using the web server](websrvuse.md)
 * [enhancing the webserver](websrvdev.md)
 * [web server architecture ](websrvarch.md)
-
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

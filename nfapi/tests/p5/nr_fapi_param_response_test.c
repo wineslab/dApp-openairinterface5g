@@ -238,7 +238,7 @@ void test_copy(const nfapi_nr_param_response_scf_t *msg)
   free_param_response(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
   nfapi_nr_param_response_scf_t req = {.header.message_id = NFAPI_NR_PHY_MSG_TYPE_PARAM_RESPONSE};

@@ -55,8 +55,9 @@ then
        IS_OAI_LICENCE_PRESENT=`grep -E -c "SPDX-License-Identifier: LicenseRef-CSSL-1.0" $FILE || true`
        IS_BSD_LICENCE_PRESENT=`grep -E -c "the terms of the BSD Licence|License-Identifier: BSD-2-Clause|License-Identifier: BSD-3-Clause" $FILE || true`
        IS_MIT_LICENCE_PRESENT=`grep -E -c "SPDX-License-Identifier: MIT" $FILE || true`
+       IS_APACHE_LICENSE_PRESENT=`grep -E -c "SPDX-License-Identifier: Apache-2.0" $FILE || true`
        IS_EXCEPTION=`echo $FILE | grep -E -c "common/utils/collection/tree.h|common/utils/collection/queue.h|openair2/UTIL/OPT/packet-rohc.h|openair3/NAS/COMMON/milenage.h|openair1/PHY/CODING/crc.h|openair1/PHY/CODING/crcext.h|openair1/PHY/CODING/types.h" || true`
-       if [ $IS_OAI_LICENCE_PRESENT -eq 0 ] && [ $IS_BSD_LICENCE_PRESENT -eq 0 ] && [ $IS_MIT_LICENCE_PRESENT -eq 0 ]
+       if [ $IS_OAI_LICENCE_PRESENT -eq 0 ] && [ $IS_BSD_LICENCE_PRESENT -eq 0 ] && [ $IS_MIT_LICENCE_PRESENT -eq 0 ] && [ $IS_APACHE_LICENSE_PRESENT -eq 0 ]
        then
            if [ $IS_NFAPI -eq 0 ] && [ $IS_EXCEPTION -eq 0 ]
            then
@@ -166,8 +167,9 @@ do
             IS_OAI_LICENCE_PRESENT=`grep -E -c "SPDX-License-Identifier: LicenseRef-CSSL-1.0" $FULLFILE || true`
             IS_BSD_LICENCE_PRESENT=`grep -E -c "the terms of the BSD Licence|License-Identifier: BSD-2-Clause|License-Identifier: BSD-3-Clause" $FULLFILE || true`
             IS_MIT_LICENCE_PRESENT=`grep -E -c "SPDX-License-Identifier: MIT" $FULLFILE || true`
+            IS_APACHE_LICENSE_PRESENT=`grep -E -c "SPDX-License-Identifier: Apache-2.0" $FULLFILE || true`
             IS_EXCEPTION=`echo $FULLFILE | grep -E -c "common/utils/collection/tree.h|common/utils/collection/queue.h|openair2/UTIL/OPT/packet-rohc.h|openair3/NAS/COMMON/milenage.h|openair1/PHY/CODING/crc.h|openair1/PHY/CODING/crcext.h|openair1/PHY/CODING/types.h" || true`
-            if [ $IS_OAI_LICENCE_PRESENT -eq 0 ] && [ $IS_BSD_LICENCE_PRESENT -eq 0 ] && [ $IS_MIT_LICENCE_PRESENT -eq 0 ]
+            if [ $IS_OAI_LICENCE_PRESENT -eq 0 ] && [ $IS_BSD_LICENCE_PRESENT -eq 0 ] && [ $IS_MIT_LICENCE_PRESENT -eq 0 ] && [ $IS_APACHE_LICENSE_PRESENT -eq 0 ]
             then
                 if [ $IS_NFAPI -eq 0 ] && [ $IS_EXCEPTION -eq 0 ]
                 then

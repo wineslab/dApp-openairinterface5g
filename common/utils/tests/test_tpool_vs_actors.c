@@ -6,6 +6,7 @@
 #include "thread-pool.h"
 #include "task.h"
 #include "log.h"
+#include <stdio.h>
 #include <time.h>
 
 #define NUM_THREADS 10
@@ -15,6 +16,8 @@ typedef struct {
   struct timespec ts;
   int actor_index;
 } actor_task_t;
+
+struct timespec ts_arr[NUM_JOBS];
 
 long long delay_table[NUM_THREADS] = {0};
 
@@ -32,7 +35,6 @@ void tpool_function(void* args)
 {
   int worker_id = get_tpool_worker_index();
   calculate_delay((struct timespec*)args, worker_id);
-  free(args);
 }
 
 void actor_function(void* args)
@@ -62,7 +64,7 @@ int main()
 
   // Push tasks to the thread pool
   for (int i = 0; i < NUM_JOBS; i++) {
-    struct timespec* ts = malloc(sizeof(struct timespec));
+    struct timespec* ts = &ts_arr[i];
     clock_gettime(CLOCK_MONOTONIC, ts);
     task.args = ts;
     pushTpool(&pool, task);
@@ -77,7 +79,6 @@ int main()
   }
   float average_delay = sum_delay / (NUM_JOBS * 1.0f);
   printf("Average task delay on tpool: %.2f ns\n", average_delay);
-
 
   memset(delay_table, 0, sizeof(delay_table));
 

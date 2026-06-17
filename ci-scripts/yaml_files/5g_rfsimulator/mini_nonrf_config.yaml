@@ -43,6 +43,12 @@ nfs:
     n4:
       interface_name: eth0
       port: 8805
+  pcf:
+    host: oai-pcf
+    sbi:
+      port: 8080
+      api_version: v1
+      interface_name: eth0
 
   upf:
     host: oai-upf
@@ -77,6 +83,10 @@ database:
 snssais:
   - &embb_slice1
     sst: 1
+    sd: "FFFFFF"
+  - &embb_slice2
+    sst: 1
+    sd: "123456"
 
 ############## NF-specific configuration
 amf:
@@ -103,6 +113,7 @@ amf:
       tac: 0x0001
       nssai:
         - *embb_slice1
+        - *embb_slice2
   supported_integrity_algorithms:
     - "NIA0"
     - "NIA1"
@@ -116,7 +127,7 @@ smf:
   ue_mtu: 1500
   support_features:
     use_local_subscription_info: yes # Use infos from local_subscription_info or from UDM
-    use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
+    use_local_pcc_rules: no # Enforce PCC rules from PCF
   upfs:
     - host: oai-upf
       port: 8805
@@ -144,6 +155,9 @@ smf:
       - sNssai: *embb_slice1
         dnnSmfInfoList:
           - dnn: "oai"
+      - sNssai: *embb_slice2
+        dnnSmfInfoList:
+          - dnn: "openairinterface"
   local_subscription_infos:
     - single_nssai: *embb_slice1
       dnn: "oai"
@@ -151,6 +165,19 @@ smf:
         5qi: 9
         session_ambr_ul: "200Mbps"
         session_ambr_dl: "400Mbps"
+    - single_nssai: *embb_slice2
+      dnn: "openairinterface"
+      qos_profile:
+        5qi: 9
+        session_ambr_ul: "200Mbps"
+        session_ambr_dl: "400Mbps"
+
+pcf:
+  local_policy:
+    policy_decisions_path: /openair-pcf/policies/policy_decisions
+    pcc_rules_path: /openair-pcf/policies/pcc_rules
+    traffic_rules_path: /openair-pcf/policies/traffic_rules
+    qos_data_path: /openair-pcf/policies/qos_data
 
 upf:
   support_features:
@@ -162,9 +189,15 @@ upf:
       - sNssai: *embb_slice1
         dnnUpfInfoList:
           - dnn: "oai"
+      - sNssai: *embb_slice2
+        dnnUpfInfoList:
+          - dnn: "openairinterface"
 
 ## DNN configuration
 dnns:
   - dnn: "oai"
     pdu_session_type: "IPV4"
     ipv4_subnet: "12.1.1.0/24"
+  - dnn: "openairinterface"
+    pdu_session_type: "IPV4"
+    ipv4_subnet: "12.1.2.0/24"

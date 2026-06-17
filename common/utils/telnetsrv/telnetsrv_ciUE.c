@@ -19,13 +19,12 @@
 #include "openair1/PHY/defs_nr_common.h"
 #include "openair1/PHY/defs_nr_UE.h"
 #include "openair3/NAS/NR_UE/nr_nas_msg.h"
+#include "openair1/PHY/phy_extern_nr_ue.h"
 
 #define TELNETSERVERCODE
 #include "telnetsrv.h"
 
 #define ERROR_MSG_RET(mSG, aRGS...) do { prnt(mSG, ##aRGS); return 1; } while (0)
-
-extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
 
 /* UE L2 state string */
 const char* NR_UE_L2_STATE_STR[] = {
@@ -125,7 +124,7 @@ static int get_dl_toa(char *buf, int debug, telnet_printfunc_t prnt)
   int rsc_id = 0;
   int ant = 0;
 
-  PHY_VARS_NR_UE *UE = PHY_vars_UE_g[0][0];
+  PHY_VARS_NR_UE *UE = nrPHY_vars_UE_g[0][0];
   if (!UE || !UE->prs_vars[gNB_id])
     ERROR_MSG_RET("no UE/prs_vars found!\n");
   NR_PRS_RESOURCE_t *prs_res = &UE->prs_vars[gNB_id]->prs_resource[rsc_id];

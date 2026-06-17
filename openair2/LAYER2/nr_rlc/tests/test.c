@@ -7,6 +7,7 @@
 #include "../nr_rlc_entity_um.h"
 #include "../nr_rlc_entity_tm.h"
 
+#include "common/platform_types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,6 +114,7 @@ int test[] = {
 
 void deliver_sdu_gnb_am(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: GNB: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -122,6 +124,7 @@ void deliver_sdu_gnb_am(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *
 
 void deliver_sdu_gnb_um(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_um_t *entity = (nr_rlc_entity_um_t *)_entity;
   printf("TEST: GNB: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -131,6 +134,7 @@ void deliver_sdu_gnb_um(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *
 
 void deliver_sdu_gnb_tm(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_tm_t *entity = (nr_rlc_entity_tm_t *)_entity;
   printf("TEST: GNB: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -141,6 +145,7 @@ void deliver_sdu_gnb_tm(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *
 void successful_delivery_gnb(void *successful_delivery_data,
                              nr_rlc_entity_t *_entity, int sdu_id)
 {
+  UNUSED(successful_delivery_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: GNB: %"PRIu64": SDU %d was successfully delivered.\n",
          entity->t_current, sdu_id);
@@ -149,6 +154,7 @@ void successful_delivery_gnb(void *successful_delivery_data,
 void max_retx_reached_gnb(void *max_retx_reached_data,
                           nr_rlc_entity_t *_entity)
 {
+  UNUSED(max_retx_reached_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: GNB: %"PRIu64": max RETX reached! radio link failure!\n",
          entity->t_current);
@@ -157,6 +163,7 @@ void max_retx_reached_gnb(void *max_retx_reached_data,
 
 void deliver_sdu_ue_am(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: UE: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -166,6 +173,7 @@ void deliver_sdu_ue_am(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *b
 
 void deliver_sdu_ue_um(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_um_t *entity = (nr_rlc_entity_um_t *)_entity;
   printf("TEST: UE: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -175,6 +183,7 @@ void deliver_sdu_ue_um(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *b
 
 void deliver_sdu_ue_tm(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
   nr_rlc_entity_tm_t *entity = (nr_rlc_entity_tm_t *)_entity;
   printf("TEST: UE: %"PRIu64": deliver SDU size %d [",
          entity->t_current, size);
@@ -185,6 +194,7 @@ void deliver_sdu_ue_tm(void *deliver_sdu_data, nr_rlc_entity_t *_entity, char *b
 void successful_delivery_ue(void *successful_delivery_data,
                             nr_rlc_entity_t *_entity, int sdu_id)
 {
+  UNUSED(successful_delivery_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: UE: %"PRIu64": SDU %d was successfully delivered.\n",
          entity->t_current, sdu_id);
@@ -193,6 +203,7 @@ void successful_delivery_ue(void *successful_delivery_data,
 void max_retx_reached_ue(void *max_retx_reached_data,
                          nr_rlc_entity_t *_entity)
 {
+  UNUSED(max_retx_reached_data);
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   printf("TEST: UE: %"PRIu64", max RETX reached! radio link failure!\n",
          entity->t_current);

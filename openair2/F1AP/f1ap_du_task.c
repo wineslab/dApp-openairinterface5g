@@ -12,9 +12,6 @@
 #include "f1ap_du_task.h"
 #include <openair3/ocp-gtpu/gtp_itf.h>
 
-//Fixme: Uniq dirty DU instance, by global var, datamodel need better management
-instance_t DUuniqInstance=0;
-
 static instance_t du_create_gtpu_instance_to_cu(const f1ap_net_config_t *nc)
 {
   openAddr_t tmp = {0};
@@ -121,7 +118,6 @@ void *F1AP_DU_task(void *arg)
         instance_t gtpInst = du_create_gtpu_instance_to_cu(nc);
         AssertFatal(gtpInst > 0, "cannot create DU F1-U GTP module\n");
         getCxt(myInstance)->gtpInst = gtpInst;
-        DUuniqInstance = gtpInst;
       } break;
 
       case F1AP_RESET_ACK:

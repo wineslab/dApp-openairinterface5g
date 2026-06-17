@@ -27,17 +27,15 @@ def GenericHelp(vers):
 	print('  --local Force local execution: rewrites the test xml script before running to always execute on localhost. Assumes')
 	print('          images are available locally, will not remove any images and will run inside the current repo directory')
 
-def GitSrvHelp(repository,branch,commit,mergeallow,targetbranch):
-	print('  --ranRepository=[OAI RAN Repository URL]                                      -- ' + repository)
-	print('  --ranBranch=[OAI RAN Repository Branch]                                       -- ' + branch)
-	print('  --ranCommitID=[OAI RAN Repository Commit SHA-1]                               -- ' + commit)
+def GitSrvHelp(repository,branch,mergeallow,targetbranch):
+	print('  --repository=[OAI RAN Repository URL]                                      -- ' + repository)
+	print('  --branch=[OAI RAN Repository Branch]                                       -- ' + branch)
 	print('  --ranAllowMerge=[Allow Merge Request (with target branch) (true or false)]    -- ' + mergeallow)
-	print('  --ranTargetBranch=[Target Branch in case of a Merge Request]                  -- ' + targetbranch)
+	print('  --targetBranch=[Target Branch in case of a Merge Request]                  -- ' + targetbranch)
 
-def eNBSrvHelp(sourcepath):
-	print('  --eNBSourceCodePath=[eNB\'s Source Code Path]            -- ' + sourcepath)
+def SrvHelp(sourcepath):
+	print('  --workspace=[directory for workspaces on remote hosts]            -- ' + sourcepath)
 
 def XmlHelp(filename):
 	print('  --XMLTestFile=[XML Test File to be run]                  -- ' + filename)
 	print('	Note: multiple xml files can be specified (--XMLFile=File1 ... --XMLTestFile=FileN) when HTML headers are created ("InitiateHtml" mode)')
-

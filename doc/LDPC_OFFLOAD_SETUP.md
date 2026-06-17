@@ -182,12 +182,12 @@ Baseband devices using DPDK-compatible driver
 
 ## Building OAI with ORAN-AAL
 OTA deployment is precisely described in the following tutorial:
-- [NR_SA_Tutorial_COTS_UE](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/NR_SA_Tutorial_COTS_UE.md)
+- [NR_SA_Tutorial_COTS_UE](./NR_SA_Tutorial_COTS_UE.md)
 Instead of section *3.2 Build OAI gNB* from the tutorial, run the following commands:
 
 ```bash
 # Get openairinterface5g source code
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g
 git checkout develop
 

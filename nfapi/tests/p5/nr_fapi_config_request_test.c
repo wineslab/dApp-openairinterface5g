@@ -495,7 +495,7 @@ static void test_config_req_fdd(void)
   free_config_request(&req);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
   test_config_req_rand();

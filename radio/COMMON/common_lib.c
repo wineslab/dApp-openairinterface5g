@@ -5,6 +5,7 @@
 /*!
  * \brief common APIs for different RF frontend device
  */
+#include <pthread.h>
 #include <stdio.h>
 #include <strings.h>
 #include <dlfcn.h>
@@ -126,6 +127,8 @@ int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_
   } else
     AssertFatal(false, "can't open the radio device: %s\n", get_devname(device->type));
 
+  pthread_mutex_init(&device->reOrder.mutex_store, NULL);
+  pthread_mutex_init(&device->reOrder.mutex_write, NULL);
   return rc;
 }
 
@@ -223,15 +226,15 @@ int openair0_write_reorder_common(nrue_ru_write_t nrue_ru_write,
   int wroteSamples = 0;
   re_order_t *ctx = &device->reOrder;
   LOG_D(HW, "received write order ts: %lu, nb samples %d, next ts %luflags %d\n", timestamp, nsamps, timestamp + nsamps, flags);
+  pthread_mutex_lock(&ctx->mutex_store);
   if (!ctx->initDone) {
     ctx->nextTS = timestamp;
-    pthread_mutex_init(&ctx->mutex_write, NULL);
-    pthread_mutex_init(&ctx->mutex_store, NULL);
     for (int i = 0; i < WRITE_QUEUE_SZ; i++) {
       ctx->queue[i].txp = malloc(sizeof(void *) * NB_ANTENNAS_TX);
     }
     ctx->initDone = true;
   }
+  pthread_mutex_unlock(&ctx->mutex_store);
   if (pthread_mutex_trylock(&ctx->mutex_write) == 0) {
     // We have the write exclusivity
     if (llabs(timestamp - ctx->nextTS) < MAX_GAP) { // We are writing in sequence of the previous write
@@ -274,13 +277,13 @@ void openair0_write_reorder_clear_context(openair0_device_t *device)
     return;
   if (pthread_mutex_trylock(&ctx->mutex_write) != 0)
     LOG_E(HW, "write_reorder_clear_context call while still writing on the device\n");
-  pthread_mutex_destroy(&ctx->mutex_write);
+  else
+    pthread_mutex_unlock(&ctx->mutex_write);
   pthread_mutex_lock(&ctx->mutex_store);
   for (int i = 0; i < WRITE_QUEUE_SZ; i++) {
     ctx->queue[i].active = false;
     free(ctx->queue[i].txp);
   }
-  pthread_mutex_unlock(&ctx->mutex_store);
-  pthread_mutex_destroy(&ctx->mutex_store);
   ctx->initDone = false;
+  pthread_mutex_unlock(&ctx->mutex_store);
 }

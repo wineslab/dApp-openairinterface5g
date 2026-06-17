@@ -87,6 +87,10 @@ typedef struct SL_NR_SYNC_PARAMS {
 } SL_NR_SYNC_PARAMS_t;
 
 typedef struct SL_NR_UE_PSBCH {
+  // SUM POWER OF PSBCH DMRS
+  int16_t rsrp_sum;
+  // SUM NUM RE
+  int16_t rsrp_re_sum;
   // AVG POWER OF PSBCH DMRS in dB/RE
   int16_t rsrp_dB_per_RE;
   // AVG POWER OF PSBCH DMRS in dBm/RE

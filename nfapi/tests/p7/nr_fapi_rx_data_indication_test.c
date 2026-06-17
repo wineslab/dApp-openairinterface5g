@@ -75,7 +75,7 @@ static void test_copy(const nfapi_nr_rx_data_indication_t *msg)
   free_rx_data_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

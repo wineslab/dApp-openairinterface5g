@@ -19,9 +19,9 @@
 #include "nfapi_nr_interface.h"
 #include "nfapi_nr_interface_scf.h"
 #include "pnf.h"
-
-#include <socket/include/socket_common.h>
-
+#ifdef ENABLE_SOCKET
+#include "nfapi/oai_integration/socket/include/socket_common.h"
+#endif
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi.h"
 
 # if 1 // for hard-code (remove later)
@@ -40,7 +40,7 @@
 #include "NR_MIB.h"
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_mac_common.h"
 #ifdef ENABLE_WLS
-#include "wls_integration/include/wls_pnf.h"
+#include "nfapi/oai_integration/wls_integration/include/wls_pnf.h"
 #endif
 #endif
 

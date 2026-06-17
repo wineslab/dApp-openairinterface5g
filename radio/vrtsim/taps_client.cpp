@@ -3,184 +3,207 @@
  */
 #include <nanomsg/nn.h>
 #include <nanomsg/pubsub.h>
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include "pthread.h"
+#include <unistd.h>
 #include "taps_generated.h"
 #include "SIMULATION/TOOLS/sim.h"
 extern "C" {
 #include "assertions.h"
 #include "common/utils/LOG/log.h"
 #include "sim.h"
-#include "utils.h"
 }
 #include <cfloat>
+#include <cmath>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
 
-#define NUM_TAPS_BUFFERS 4
+#define NUM_TAPS_BUFFERS 16
+#define MAX_NUM_IDS 4
 #define MAX_TAPS_LEN 100
-#define MAX_TAPS_MSG_SIZE (sizeof(struct complexf) * MAX_TAPS_LEN * 4 * 4 + 20)
+#define MAX_TX_RX_ANTENNAS 8
+#define MAX_TAPS_MSG_SIZE (sizeof(struct complexf) * MAX_TAPS_LEN * MAX_TX_RX_ANTENNAS * MAX_TX_RX_ANTENNAS + 256)
 
-static pthread_t client_thread;
-static bool should_run = true;
-typedef struct {
-  int id;
-  int sock;
-  uint32_t num_tx_antennas;
-  uint32_t num_rx_antennas;
-  channel_desc_t **channel_desc;
-} client_thread_args_t;
+struct taps_client_t {
+  int sock_;
+  std::atomic<bool> should_run_;
 
-typedef struct {
-  void *taps_msg;
-  channel_desc_t *channel_desc;
-} taps_buffer_t;
+  // Raw message buffer pool
+  std::vector<std::unique_ptr<uint8_t[]>> buffer_storage_;
+  std::queue<uint8_t *> free_buffers_;
 
-typedef struct {
-  taps_buffer_t taps_buffers[NUM_TAPS_BUFFERS];
-  int current_buffer;
-} taps_storage_t;
+  // Per-ID incoming queue and buffer currently backing channel_desc ch_ps
+  std::queue<uint8_t *> read_buffers_[MAX_NUM_IDS];
+  uint8_t *current_buffers_[MAX_NUM_IDS];
 
-void ascii_line_plot(const float *data, size_t size, char *buffer)
-{
-  const char levels[] = "_.-=#"; // ASCII characters for different levels
-  size_t num_levels = sizeof(levels) - 1; // Number of levels (excluding the null terminator)
+  // Per-ID channel descriptors with pre-allocated ch_ps arrays
+  channel_desc_t channel_descs_[MAX_NUM_IDS];
+  struct complexf *ch_ps_storage_[MAX_NUM_IDS][MAX_TX_RX_ANTENNAS * MAX_TX_RX_ANTENNAS];
 
-  // Calculate min and max values from the data
-  float min_val = FLT_MAX;
-  float max_val = FLT_MIN;
-  for (size_t i = 0; i < size; i++) {
-    if (data[i] < min_val)
-      min_val = data[i];
-    if (data[i] > max_val)
-      max_val = data[i];
-  }
+  std::mutex mutex_;
+  std::thread thread_;
 
-  // Handle edge case where all values are the same
-  if (min_val == max_val) {
-    min_val -= 1.0f;
-    max_val += 1.0f;
-  }
+  uint num_tx_ant_;
+  uint num_rx_ant_;
 
-  // Normalize and map data to levels
-  for (size_t i = 0; i < size; i++) {
-    float normalized = (data[i] - min_val) / (max_val - min_val); // Normalize to [0, 1]
-    size_t level_index = (size_t)(normalized * num_levels); // Map to level index
-    if (level_index > num_levels)
-      level_index = num_levels; // Clamp to valid range
-    snprintf(buffer + i, 2, "%c", levels[level_index]);
-  }
-}
+  taps_client_t(const char *socket_path, int num_tx_ant, int num_rx_ant)
+      : should_run_(true), num_tx_ant_(num_tx_ant), num_rx_ant_(num_rx_ant)
+  {
+    memset(current_buffers_, 0, sizeof(current_buffers_));
+    memset(channel_descs_, 0, sizeof(channel_descs_));
 
-static void init_taps_storage(taps_storage_t *storage, int num_tx_antennas, int num_rx_antennas)
-{
-  for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
-    storage->taps_buffers[i].taps_msg = calloc_or_fail(1, MAX_TAPS_MSG_SIZE);
-    storage->taps_buffers[i].channel_desc = (channel_desc_t *)calloc_or_fail(1, sizeof(channel_desc_t));
-    storage->taps_buffers[i].channel_desc->ch_ps =
-        (struct complexf **)calloc_or_fail(num_rx_antennas * num_tx_antennas, sizeof(struct complexf *));
-  }
-  storage->current_buffer = 0;
-}
+    for (int i = 0; i < MAX_NUM_IDS; i++)
+      channel_descs_[i].ch_ps = ch_ps_storage_[i];
 
-static taps_storage_t taps_storage;
-
-void *client_thread_func(void *args)
-{
-  client_thread_args_t *client_thread_args = (client_thread_args_t *)args;
-  while (should_run) {
-    int next_buffer = (taps_storage.current_buffer + 1) % NUM_TAPS_BUFFERS;
-    taps_buffer_t *taps_buffer = &taps_storage.taps_buffers[next_buffer];
-    int ret = nn_recv(client_thread_args->sock, taps_buffer->taps_msg, MAX_TAPS_MSG_SIZE, NN_DONTWAIT);
-    if (ret < 0) {
-      if (errno == EAGAIN) {
-      // Timeout: no message available, sleep briefly and continue
-      usleep(100);
-      continue;
-      }
-      LOG_E(HW, "nn_recv() failed: errno: %d, %s\n", errno, strerror(errno));
-      continue;
+    buffer_storage_.reserve(NUM_TAPS_BUFFERS);
+    for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
+      buffer_storage_.push_back(std::make_unique<uint8_t[]>(MAX_TAPS_MSG_SIZE));
+      free_buffers_.push(buffer_storage_.back().get());
     }
-    auto taps_message = Phy::GetTaps(taps_buffer->taps_msg);
-    if (taps_message->num_rx_antennas() != client_thread_args->num_rx_antennas
-        || taps_message->num_tx_antennas() != client_thread_args->num_tx_antennas) {
-      LOG_E(HW,
-            "Number of antennas mismatch: expected %d x %d, got %d x %d\n",
-            client_thread_args->num_rx_antennas,
-            client_thread_args->num_tx_antennas,
-            taps_message->num_rx_antennas(),
-            taps_message->num_tx_antennas());
-      continue;
-    }
-    channel_desc_t *channel_desc = taps_buffer->channel_desc;
-    const flatbuffers::Vector<float> *taps = taps_message->taps();
-    struct complexf *base_pointer = (struct complexf *)taps->data();
-    int taps_len = taps_message->taps_len();
-    AssertFatal(taps_len < MAX_TAPS_LEN, "Too many samples in the taps array, taps_len = %d\n", taps_len);
-    for (unsigned int aarx = 0U; aarx < client_thread_args->num_rx_antennas; aarx++) {
-      for (unsigned int aatx = 0U; aatx < client_thread_args->num_tx_antennas; aatx++) {
-        channel_desc->ch_ps[aarx + (client_thread_args->num_rx_antennas * aatx)] =
-            &base_pointer[(aarx + (client_thread_args->num_rx_antennas * aatx)) * taps_len];
-      }
-    }
-    channel_desc->path_loss_dB = 0;
-    channel_desc->channel_length = taps_len;
-    *client_thread_args->channel_desc = channel_desc;
-    taps_storage.current_buffer = next_buffer;
-    LOG_A(HW, "Receved new taps message, channel_length %d, buffer %d\n", channel_desc->channel_length, next_buffer);
-    for (unsigned int aarx = 0; aarx < client_thread_args->num_rx_antennas; aarx++) {
-      for (unsigned int aatx = 0; aatx < client_thread_args->num_tx_antennas; aatx++) {
-        char buffer[MAX_TAPS_LEN + 1];
-        memset(buffer, 0, sizeof(buffer));
-        float magnitudes[MAX_TAPS_LEN];
-        cf_t *channel = channel_desc->ch_ps[aarx + (client_thread_args->num_rx_antennas * aatx)];
-        for (int i = 0; i < channel_desc->channel_length; i++) {
-          magnitudes[i] = sqrtf(powf(channel[i].r, 2) + powf(channel[i].i, 2));
+
+    sock_ = nn_socket(AF_SP, NN_SUB);
+    AssertFatal(sock_ >= 0, "nn_socket() failed: errno: %d, %s\n", errno, strerror(errno));
+
+    int ret = nn_connect(sock_, socket_path);
+    AssertFatal(ret >= 0, "nn_connect() failed: errno: %d, %s\n", errno, strerror(errno));
+
+    ret = nn_setsockopt(sock_, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
+    AssertFatal(ret == 0, "nn_setsockopt() failed: errno: %d, %s\n", errno, strerror(errno));
+
+    thread_ = std::thread(&taps_client_t::run, this);
+  }
+
+  ~taps_client_t()
+  {
+    should_run_ = false;
+    thread_.join();
+    nn_close(sock_);
+  }
+
+  void run()
+  {
+    while (should_run_) {
+      uint8_t *buf = nullptr;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!free_buffers_.empty()) {
+          buf = free_buffers_.front();
+          free_buffers_.pop();
         }
-        ascii_line_plot(magnitudes, channel_desc->channel_length, buffer);
-        LOG_A(HW, "Taps message %d, channel %d x %d: %s\n", client_thread_args->id, aarx, aatx, buffer);
       }
+      if (!buf) {
+        usleep(100);
+        continue;
+      }
+
+      int ret = nn_recv(sock_, buf, MAX_TAPS_MSG_SIZE, NN_DONTWAIT);
+      if (ret < 0) {
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          free_buffers_.push(buf);
+        }
+        if (errno != EAGAIN)
+          LOG_E(HW, "nn_recv() failed: errno: %d, %s\n", errno, strerror(errno));
+        usleep(100);
+        continue;
+      }
+
+      auto *msg = Phy::GetTaps(buf);
+      uint32_t id = msg->id();
+      if (id >= MAX_NUM_IDS) {
+        LOG_E(HW, "Received taps message with invalid id %u (max %d)\n", id, MAX_NUM_IDS - 1);
+        std::lock_guard<std::mutex> lock(mutex_);
+        free_buffers_.push(buf);
+        continue;
+      }
+      uint32_t num_rx = msg->num_rx_antennas();
+      uint32_t num_tx = msg->num_tx_antennas();
+      if (num_tx != num_tx_ant_ || num_rx != num_rx_ant_) {
+        LOG_E(HW,
+              "Mismatch between received and expected channel model %d: %ux%u vs %ux%u\n",
+              id,
+              num_rx,
+              num_tx,
+              num_rx_ant_,
+              num_tx_ant_);
+        std::lock_guard<std::mutex> lock(mutex_);
+        free_buffers_.push(buf);
+        continue;
+      }
+
+      std::lock_guard<std::mutex> lock(mutex_);
+      read_buffers_[id].push(buf);
     }
   }
-  return NULL;
-}
 
-extern "C" void taps_client_connect(int id,
-                                    const char *socket_path,
-                                    int num_tx_antennas,
-                                    int num_rx_antennas,
-                                    channel_desc_t **channel_desc)
-{
-  // Create a socket
-  int sock = nn_socket(AF_SP, NN_SUB);
-  AssertFatal(sock >= 0, "nn_socket() failed: errno: %d, %s\n", errno, strerror(errno));
+  channel_desc_t *get_model(int id)
+  {
+    if (id < 0 || id >= MAX_NUM_IDS)
+      return nullptr;
 
-  int ret = nn_connect(sock, socket_path);
-  AssertFatal(ret >= 0, "nn_connect() failed: errno: %d, %s\n", errno, strerror(errno));
+    uint8_t *buf = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (read_buffers_[id].empty()) {
+        if (current_buffers_[id]) {
+          return &channel_descs_[id];
+        } else {
+          return nullptr;
+        }
+      }
+      buf = read_buffers_[id].front();
+      read_buffers_[id].pop();
+    }
 
-  // Subscribe to all messages
-  ret = nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
-  AssertFatal(ret == 0, "nn_setsockopt() failed, errno %d, %s\n", errno, strerror(errno));
+    auto *msg = Phy::GetTaps(buf);
+    uint32_t num_rx = msg->num_rx_antennas();
+    uint32_t num_tx = msg->num_tx_antennas();
+    uint32_t taps_len = msg->taps_len();
 
-  init_taps_storage(&taps_storage, num_tx_antennas, num_rx_antennas);
+    AssertFatal(taps_len <= MAX_TAPS_LEN, "Too many taps: %u (max %d)\n", taps_len, MAX_TAPS_LEN);
 
-  client_thread_args_t *client_thread_args = static_cast<client_thread_args_t *>(malloc(sizeof(client_thread_args_t)));
-  client_thread_args->id = id;
-  client_thread_args->sock = sock;
-  client_thread_args->num_rx_antennas = num_rx_antennas;
-  client_thread_args->num_tx_antennas = num_tx_antennas;
-  client_thread_args->channel_desc = channel_desc;
-  ret = pthread_create(&client_thread, NULL, client_thread_func, client_thread_args);
-  AssertFatal(ret == 0, "pthread_create() failed: errno: %d, %s\n", errno, strerror(errno));
-}
+    auto *base = (struct complexf *)msg->taps()->data();
+    channel_desc_t *desc = &channel_descs_[id];
+    desc->nb_rx = num_rx;
+    desc->nb_tx = num_tx;
+    desc->nb_taps = taps_len;
 
-extern "C" void taps_client_stop()
-{
-  should_run = false;
-  pthread_join(client_thread, NULL);
-  for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
-    free(taps_storage.taps_buffers[i].taps_msg);
-    free(taps_storage.taps_buffers[i].channel_desc->ch_ps);
-    free(taps_storage.taps_buffers[i].channel_desc);
+    for (uint32_t aarx = 0; aarx < num_rx; aarx++) {
+      for (uint32_t aatx = 0; aatx < num_tx; aatx++) {
+        desc->ch_ps[aarx + num_rx * aatx] = &base[(aarx + num_rx * aatx) * taps_len];
+      }
+    }
+    desc->path_loss_dB = 0;
+    desc->channel_length = taps_len;
+
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (current_buffers_[id])
+        free_buffers_.push(current_buffers_[id]);
+      current_buffers_[id] = buf;
+    }
+
+    LOG_A(HW, "New taps for id %d: channel_length %u, %ux%u antennas\n", id, taps_len, num_rx, num_tx);
+
+    return desc;
   }
+};
+
+extern "C" void *taps_client_connect(const char *socket_path, int num_tx_ant, int num_rx_ant)
+{
+  return new taps_client_t(socket_path, num_tx_ant, num_rx_ant);
+}
+
+extern "C" channel_desc_t *taps_client_get_model(void *handle, int id)
+{
+  return static_cast<taps_client_t *>(handle)->get_model(id);
+}
+
+extern "C" void taps_client_stop(void *handle)
+{
+  delete static_cast<taps_client_t *>(handle);
 }

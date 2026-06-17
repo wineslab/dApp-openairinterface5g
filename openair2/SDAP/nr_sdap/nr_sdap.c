@@ -48,19 +48,18 @@ bool sdap_data_req(protocol_ctxt_t *ctxt_p,
     return 0;
   }
 
-  bool ret = sdap_entity->tx_entity(sdap_entity,
-                                    ctxt_p,
-                                    srb_flag,
-                                    mui,
-                                    confirm,
-                                    sdu_buffer_size,
-                                    sdu_buffer,
-                                    pt_mode,
-                                    sourceL2Id,
-                                    destinationL2Id,
-                                    qfi,
-                                    rqi);
-  return ret;
+  return sdap_entity->tx_entity(sdap_entity,
+                                ctxt_p,
+                                srb_flag,
+                                mui,
+                                confirm,
+                                sdu_buffer_size,
+                                sdu_buffer,
+                                pt_mode,
+                                sourceL2Id,
+                                destinationL2Id,
+                                qfi,
+                                rqi);
 }
 
 void sdap_data_ind(int pdcp_entity, int is_gnb, int pdusession_id, ue_id_t ue_id, char *buf, int size)

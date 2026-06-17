@@ -12,10 +12,9 @@
 // The adjustment is performed once per frame based on the
 // last channel estimate of the receiver
 
-int nr_adjust_synch_ue(NR_DL_FRAME_PARMS *frame_parms,
+int nr_adjust_synch_ue(const NR_DL_FRAME_PARMS *frame_parms,
                        PHY_VARS_NR_UE *ue,
-                       const int estimateSz,
-                       struct complex16 dl_ch_estimates_time[][estimateSz],
+                       const c16_t dl_ch_estimates_time[][frame_parms->ofdm_symbol_size],
                        uint8_t frame,
                        uint8_t slot,
                        short coef)

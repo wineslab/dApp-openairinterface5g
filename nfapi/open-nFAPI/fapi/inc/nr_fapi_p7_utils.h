@@ -8,6 +8,12 @@
 #include "stdint.h"
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi.h"
 
+/* Number of bytes needed to hold n bits (ceiling division). */
+static inline uint16_t nr_bits_to_bytes(uint16_t bits)
+{
+  return (bits + 7) / 8;
+}
+
 bool eq_dl_tti_request(const nfapi_nr_dl_tti_request_t *a, const nfapi_nr_dl_tti_request_t *b);
 bool eq_ul_tti_request(const nfapi_nr_ul_tti_request_t *a, const nfapi_nr_ul_tti_request_t *b);
 bool eq_slot_indication(const nfapi_nr_slot_indication_scf_t *a, const nfapi_nr_slot_indication_scf_t *b);

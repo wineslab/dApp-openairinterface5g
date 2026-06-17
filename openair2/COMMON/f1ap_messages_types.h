@@ -437,6 +437,8 @@ typedef struct f1ap_qos_flow_param_s {
     f1ap_dynamic_5qi_t dyn;
   };
   f1ap_arp_t arp;
+  // GBR QoS Flow Information (optional - only for GBR flows)
+  gbr_qos_flow_information_t *gbr_qos_flow_information;
 } f1ap_qos_flow_param_t;
 
 // in 9.2.2.1 Flows Mapped to DRB Item

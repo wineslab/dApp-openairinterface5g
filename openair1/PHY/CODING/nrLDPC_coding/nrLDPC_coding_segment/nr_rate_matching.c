@@ -577,16 +577,20 @@ int nr_rate_matching_ldpc(uint32_t Tbslbrm,
   }
 
   while (k < E) { // case where we do repetitions (low mcs)
-    for (ind = 0; (ind < Ncb) && (k < E); ind++) {
-#ifdef RM_DEBUG
-      printf("RM_TX k%u Ind: %u (%d)\n", k, ind, d[ind]);
-#endif
-
-      if (ind == Foffset)
-        ind = F + Foffset; // skip filler bits
-
-      e[k++] = d[ind];
-
+    // chunk before filler: d[0 .. Foffset)
+    if (Foffset > 0) {
+      uint32_t n = min(Foffset, E - k);
+      memcpy(e + k, d, n);
+      k += n;
+      if (k >= E)
+        break;
+    }
+    // chunk after filler: d[Foffset+F .. Ncb)
+    uint32_t after = Ncb - Foffset - F;
+    if (after > 0) {
+      uint32_t n = min(after, E - k);
+      memcpy(e + k, d + Foffset + F, n);
+      k += n;
     }
   }
 

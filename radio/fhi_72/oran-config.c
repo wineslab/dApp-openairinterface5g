@@ -1055,12 +1055,15 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
 {
   ru_config->xranTech = XRAN_RAN_5GNR; // 5GNR or LTE
   ru_config->xranCat = xran_cat; // mode: Catergory A or Category B
-  ru_config->xranCompHdrType = XRAN_COMP_HDR_TYPE_STATIC; // dynamic or static udCompHdr handling
 #ifdef OAI_MPLANE
   xran_mplane_t *xran_mplane = (xran_mplane_t *)mplane_api;
+  ru_config->xranCompHdrType = xran_mplane->comp_hdr_type;
   ru_config->iqWidth = xran_mplane->iq_width;
   ru_config->iqWidth_PRACH = xran_mplane->iq_width;
 #else
+  int comp_type_idx = config_paramidx_fromname(rup, nru, ORAN_RU_COMP_HDR_TYPE);
+  AssertFatal(comp_type_idx >= 0, "Index for %s config option not found!\n", ORAN_RU_COMP_HDR_TYPE);
+  ru_config->xranCompHdrType = config_get_processedint(config_get_if(), (paramdef_t *)&rup[comp_type_idx]); // 0 -> XRAN_COMP_HDR_TYPE_DYNAMIC, 1 -> XRAN_COMP_HDR_TYPE_STATIC
   ru_config->iqWidth = *gpd(rup, nru, ORAN_RU_CONFIG_IQWIDTH)->uptr; // IQ bit width
   AssertFatal(ru_config->iqWidth <= 16, "IQ Width cannot be > 16!\n");
   ru_config->iqWidth_PRACH = *gpd(rup, nru, ORAN_RU_CONFIG_IQWIDTH_PRACH)->uptr; // IQ bit width for PRACH

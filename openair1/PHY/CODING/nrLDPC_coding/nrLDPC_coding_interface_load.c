@@ -21,7 +21,7 @@
 /* arg is used to initialize the config module so that the loader works as expected */
 char *arguments_phy_simulators[64]={"ldpctest",NULL};
 
-int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *itf)
+int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *itf, int max_num_pxsch)
 {
   char *ptr = (char *)config_get_if();
   char libname[64] = "ldpc";
@@ -46,7 +46,7 @@ int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *itf)
   itf->nrLDPC_coding_decoder = (nrLDPC_coding_decoder_t *)shlib_fdesc[2].fptr;
   itf->nrLDPC_coding_encoder = (nrLDPC_coding_encoder_t *)shlib_fdesc[3].fptr;
 
-  AssertFatal(itf->nrLDPC_coding_init() == 0, "error starting LDPC library %s %s\n", libname, version);
+  AssertFatal(itf->nrLDPC_coding_init(max_num_pxsch) == 0, "error starting LDPC library %s %s\n", libname, version);
 
   return 0;
 }

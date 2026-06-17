@@ -8,186 +8,219 @@
 
 ## Prerequisites
 
-The hardware on which we have tried this tutorial:
+Check the [supported hardware operating system guide](./Supported_Hardware_Operating_System.md)
+to know if you have the appropriate hardware for your testing requirements.
+This tutorial has been tested with following OS and kernels feel free to
+install one of the tested operating systems.
 
-|Hardware (CPU,RAM)                       |Operating System (kernel)                       |NIC (Vendor,Driver,Firmware)             |
-|-----------------------------------------|------------------------------------------------|-----------------------------------------|
-|Intel(R) Xeon(R) Gold 6354 36-Core, 128GB|RHEL 9.2 (5.14.0-284.18.1.rt14.303.el9_2.x86_64)|Intel X710, i40e, 9.20 0x8000d95e 22.0.9 |
-|Intel(R) Xeon(R) Gold 6354 36-Core, 128GB|Ubuntu 22.04.3 LTS (5.15.0-1033-realtime)       |Intel X710, i40e, 9.00 0x8000cfeb 21.5.9 |
-|AMD EPYC 9374F 32-Core Processor, 128GB  |Ubuntu 22.04.2 LTS (5.15.0-1038-realtime)       |Intel E810 ,ice, 4.00 0x8001184e 1.3236.0|
+|Operating System      | Kernel    |
+|----------------------|-----------|
+|Ubuntu 22.04/24.04    | 6.8/6.14  |
+|Red Hat 9.X           | 5.14      |
 
-**NOTE**: 
+**NOTE**:
 
-- These are not minimum hardware requirements. This is the configuration of our servers. 
-- The NIC card should support hardware PTP time stamping. 
-- If you are using Intel servers then use only Ice Lake or newer generations. In case of AMD use only 4th generation, Genoa or newer. 
-- If you try on any other server apart from the above listed, then choose a desktop/server with clock speed higher than 3.0 GHz and `avx512` capabilities. 
-- This tutorial gives few instructions for Arm targets, but DU execution on Arm systems is yet not functional.  
-This feature is intended to enable experiments and future improvements on Arm systems.
-
-NICs we have tested so far:
-
-|Vendor         |Firmware Version        |
-|---------------|------------------------|
-|Intel X710     |9.20 0x8000d95e 22.0.9  |
-|Intel E810-XXV |4.00 0x8001184e 1.3236.0|
-|E810-C         |4.20 0x8001784e 22.0.9  |
-|Intel XXV710   |6.02 0x80003888         |
-
-**Note**:
-
+- Compute Hardware:
+  - For 4x4 100MHz 4L DL and 2L UL, it is important to have a clock speed
+    higher than 4GHz or use accelerators as AMD T2, Intel V-RAN Boost or Nvidia
+    Aerial L1.
+  - Minimum functional hardware requires clock speed of minimum 2.5GHz, 10 SFP
+    NIC
+  - Recommended servers for 8/9 bit compression:
+    - Intel: 3rd Generation (Ice Lake) or higher
+    - AMD: 4th Generation (Genoa) or higher
+    - ARM: Neoverse V2
+  - Uncompressed mode does not require AVX512
+- The NIC card should support hardware PTP time stamping.
 - With AMD servers/desktop machines with PCIe 5.0 we have only used E810 cards.
-- If you are using Mellanox NIC, please be aware that DPDK can't bind the NIC as vfio-pci. Instead it must be bind with mlx driver.
+- If you are using Mellanox NIC, please be aware that DPDK can't bind the NIC
+  as `vfio-pci`. Instead it must be bind with `mlx` driver.
 
-PTP enabled switches and grandmaster clock we have in are lab:
+PTP enabled switches and Grandmaster clock we have tested with:
 
-|Vendor                  |Software Version|
-|------------------------|----------------|
-|CISCO C93180YC-FX3      |10.2(4)         |
-|Fibrolan Falcon-RX/812/G|8.0.25.4        |
-|Qulsar Qg2 (Grandmaster)|12.1.27         |
+|Vendor                  |
+|------------------------|
+|CISCO C93180YC-FX3      |
+|Fibrolan Falcon-RX/812/G|
+|Qulsar Qg2 (Grandmaster)|
 
 **S-Plane synchronization is mandatory.** S-plane support is done via `ptp4l` and `phc2sys`. Make sure your version matches. 
 
-| Software  | Software Version |
-|-----------|------------------|
-| `ptp4l`   | 3.1.1            |
-| `phc2sys` | 3.1.1            |
+| Software  | Software Version|
+|-----------|-----------------|
+| `ptp4l`   | 4.4             |
+| `phc2sys` | 4.4             |
 
-We have only verified LLS-C3 configuration in our lab, i.e.  using an external
-grandmaster, a switch as a boundary clock, and the gNB/DU and RU.  We haven't
-tested any RU without S-plane.
+In our Lab we only use LLS-C3 configuration, i.e. using an external
+Grandmaster, a switch as a boundary clock, and the gNB/DU and RU. We have not
+tested any RU without S-plane. Though some community members use LLS-C1 and its
+support depends on the NIC.
+
 We tested the category A radio units listed below.
 
-|Vendor           |Software Version                             |
-|-----------------|---------------------------------------------|
-|VVDN LPRU        |03-v3.0.5                                    |
-|LiteON RU        |01.00.08/02.00.03/02.00.10                   |
-|Benetel 650      |RAN650-1v1.0.4-dda1bf5/RAN650-1v1.2.2-2fa04bc/RAN650-1v1.4.2-NM-c48047d|
-|Benetel 550      |RAN550-1v1.0.4-605a25a/RAN550-1v1.2.2-2fa04bc/RAN550-1v1.4.1-M-25fa970/RAN550-1v2.0.5-M-92a9d2c|
-|Foxconn RPQN     |v3.1.15q.551_rc10                            |
+|Vendor                |Software Version        |
+|----------------------|------------------------|
+|VVDN LPRU             |03-v3.0.5               |
+|LiteON RU FR1         |02.00.10                |
+|LiteON RU FR2         |02.00.07                |
+|Metanoia RU FR1 (Jura)|2.0.6                   |
+|Benetel 650           |RAN650-1v2.1.0-M-0820797|
+|Benetel 550           |RAN550-1v2.1.0-M-0820797|
+|Foxconn RPQN          |v3.1.15q.551_rc10       |
+|Microamp RU (FR2)     |0.1.174                 |
 
-Tested libxran releases:
+Supported libxran releases:
 
 | Vendor                                  |
 |-----------------------------------------|
 | `oran_f_release_v1.0`                   |
 | `oran_k_release_v1.0`                   |
 
-**Note**: The libxran driver of OAI identifies the above F release version as "6.1.0" (F is the sixth letter, then 1.0), and the above K release as "11.1.0".
+**Note**: The libxran driver of OAI identifies the above F release version as
+"6.1.0" (F is the sixth letter, then 1.0), and the above K release as "11.1.0".
 
 ### Configure your server
 
-1. Disable Hyperthreading (HT) in your BIOS. In all our servers HT is always disabled.
-2. We recommend you to start with a fresh installation of OS (either RHEL or Ubuntu). You have to install realtime kernel on your OS (Operating System). Based on your OS you can search how to install realtime kernel.
-3. Install realtime kernel for your OS
-4. Change the boot commands based on the below section. They can be performed either via `tuned` or via manually building the kernel
+1. Disable Hyperthreading (HT) in your BIOS for ease of CPU pining. If you want
+   to enable it then adjust the boot line command to isolate the whole physical
+   CPU including the threads.
+2. Configure the system with in performance mode. In some situation it will be
+   better to avoid BIOS telco profile as it uses HT and lowers the CPU clock
+   speed.
+3. We recommend you to start with a fresh installation of OS (Operating
+   System), either RPM or Debian.
+4. Change the boot commands based on the below section.
 
-#### CPU allocation
+##### x86 (Intel/AMD)
 
-**This section is important to read, regardless of the operating system you are using.**
+We are taking an example of a 32 core Intel(R) Xeon(R) Gold 6433N, depending on
+your system you would need to adjust the isolated and non-isolated cores.
+Though we don't recommend hyper-threading but if you want to use then make sure
+you isolate the whole physical CPU.
 
-Your server could be:
+1. Install realtime kernel,
 
-* One NUMA node (See [one NUMA node example](#one-numa-node)): all the processors are sharing a single memory system.
-* Two NUMA nodes (see [two NUMA nodes example](#two-numa-nodes)): processors are grouped in 2 memory systems.
-  - Usually the even (ie `0,2,4,...`) CPUs are on the 1st socket
-  - And the odd (ie (`1,3,5,...`) CPUs are on the 2nd socket
-
-DPDK, OAI and kernel threads require to be properly allocated to extract maximum real-time performance for your use case.
-
-1. **NOTE**: Currently the default OAI 7.2 configuration file requires isolated **CPUs 0,2,4** for DPDK/libXRAN, **CPU 6** for `ru_thread`, **CPU 8** for `L1_rx_thread` and **CPU 10** for `L1_tx_thread`. It is preferrable to have all these threads on the same socket.
-2. Allocating CPUs to the OAI nr-softmodem is done using the `--thread-pool` option. Allocating 4 CPUs is the minimal configuration but we recommend to allocate at least **8** CPUs. And they can be on a different socket as the DPDK threads.
-3. And to avoid kernel preempting these allocated CPUs, it is better to force the kernel to use un-allocated CPUs.
-
-Let summarize for example on a `32-CPU` single NUMA node system, regardless of the number of sockets:
-
-|Applicative Threads|Allocated CPUs    |
-|-------------------|------------------|
-|XRAN DPDK usage    |0,2,4             |
-|OAI `ru_thread`    |6                 |
-|OAI `L1_rx_thread` |8                 |
-|OAI `L1_tx_thread` |10                |
-|OAI `nr-softmodem` |1,3,5,7,9,11,13,15|
-|kernel             |16-31             |
-
-In below example we have shown the output of `/proc/cmdline` for two different servers, each of them have different number of NUMA nodes. **Be careful in isolating the CPUs in your environment.** Apart from CPU allocation there are additional parameters which are important to be present in your boot command.
-
-Modifying the `linux` command line usually requires to edit string `GRUB_CMDLINE_LINUX` in `/etc/default/grub`, run a `grub` command and reboot the server.
-
-* Set parameters `isolcpus`, `nohz_full` and `rcu_nocbs` with the list of CPUs to isolate for XRAN.
-* Set parameter `kthread_cpus` with the list of CPUs to isolate for kernel.
-
-Set the `tuned` profile to `realtime`. If the `tuned-adm` command is not installed then you have to install it. When choosing this profile you have to mention the isolated cpus in `/etc/tuned/realtime-variables.conf`. By default this profile adds `skew_tick=1 isolcpus=managed_irq,domain,<cpu-you-choose> intel_pstate=disable nosoftlockup` in the boot command. **Make sure you don't add them while changing `/etc/default/grub`**.
+Ubuntu (to know more about the below commands please check Canonical's official
+website):
 
 ```bash
-tuned-adm profile realtime
+sudo apt install ubuntu-realtime
+# using ubuntu pro if you have the subscription
+pro enable realtime-kernel
 ```
 
-**Checkout anyway the examples below.**
-
-#### One NUMA Node
-
-Below is the output of `/proc/cmdline` of a single NUMA node server,
+Red Hat (to know more about the below commands please check Red Hat's official
+website):
 
 ```bash
-NUMA:
-  NUMA node(s):          1
-  NUMA node0 CPU(s):     0-31
+subscription-manager repos --enable rhel-10-for-x86_64-rt-rpms
+dnf groupinstall RT
 ```
+
+For other operating systems you would need to either build the kernel from
+source or search if you can install it using a package manager.
+
+2. Update the Grub via creating a file `/etc/default/grub.d/cmdline.cfg`.
 
 ```bash
-isolcpus=0-15 nohz_full=0-15 rcu_nocbs=0-15 kthread_cpus=16-31 rcu_nocb_poll nosoftlockup default_hugepagesz=1GB hugepagesz=1G hugepages=20 amd_iommu=on iommu=pt mitigations=off skew_tick=1 selinux=0 enforcing=0 tsc=reliable nmi_watchdog=0 softlockup_panic=0 audit=0 vt.handoff=7
+GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX isolcpus=domain,4-31 nohz_full=4-31 irqaffinity=0,1,2,3 rcu_nocbs=4-31 hugepagesz=2M hugepages=0 default_hugepagesz=1G hugepagesz=1G hugepages=20 intel_iommu=on iommu=pt selinux=0 enforcing=0 intel_pstate=disable"
 ```
 
-Example taken for AMD EPYC 9374F 32-Core Processor
+In the above command:
 
-#### Two NUMA Nodes
+1. Isolated CPUs: 4-31, we recommend to leave the initial CPUs for the kernel
+   - `isolcpus=domain,4-31`: removes CPUs 4–31 from normal scheduler
+     load-balancing domains
+   - `nohz_full=4-31` enables full tickless operation on those CPUs
+   - `rcu_nocbs=4-31` moves RCU callback processing off those CPUs
+2. Non-isolated CPUs: 0,1,2,3
+   - `irqaffinity=0,1,2,3` directs default interrupt handling to CPUs 0–3 so
+     the isolated CPUs are disturbed less.
+3. Hugepages: The default hugepage size is 1G (`default_hudepagesz=1G`) and the
+   command above reserves 20G (`hugepages=20`). If you want to reduce then you
+   can put `hugepages=9` as OAI gNB/DU by default initializes with 8G
+   hugepages.
+4. IOMMU: It is needed for DPDK, for Intel servers its `intel_iommu` but AMD it
+   is `amd_iommu`
+5. P-State: For Intel the Pstate driver is `intel_pstate` and for AMD it is
+   `amd_pstate`
 
-Below is the output of `/proc/cmdline` of a two NUMA node server,
-
-```
-NUMA:
-  NUMA node(s):          2
-  NUMA node0 CPU(s):     0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34
-  NUMA node1 CPU(s):     1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35
-```
+After changing you would need to rebuild the grub and reboot the system:
 
 ```bash
-mitigations=off usbcore.autosuspend=-1 intel_iommu=on intel_iommu=pt selinux=0 enforcing=0 nmi_watchdog=0 softlockup_panic=0 audit=0 skew_tick=1 isolcpus=managed_irq,domain,0,2,4,6,8,10,12,14,16 nohz_full=0,2,4,6,8,10,12,14,16 rcu_nocbs=0,2,4,6,8,10,12,14,16 rcu_nocb_poll intel_pstate=disable nosoftlockup cgroup_disable=memory mce=off hugepagesz=1G hugepages=40 hugepagesz=2M hugepages=0 default_hugepagesz=1G isolcpus=managed_irq,domain,0,2,4,6,8,10,12,14 kthread_cpus=18-35 intel_pstate=disable nosoftlockup tsc=reliable
+sudo update-grub
+sudo reboot
 ```
 
-Example taken for Intel(R) Xeon(R) Gold 6354 CPU @ 3.00GHz
-
-#### Common
-
-Configure your servers to maximum performance mode either via OS or in BIOS. If you want to disable CPU sleep state via OS then use the below command:
+3. Configure your server to maximum performance mode either via OS or in BIOS.
+If you want to disable CPU sleep states via OS then use the below command:
 
 ```bash
-# to disable
+# Disable cpu cstates
 sudo cpupower idle-set -D 0
-#to enable
-sudo cpupower idle-set -E
+# you can make a crontab to automate this step at restart
 ```
 
-The above information we have gathered either from O-RAN documents or via our own experiments. In case you would like to read the O-RAN documents then here are the links:
+##### Aarch64
 
-1. [O-RAN-SC O-DU Setup Configuration](https://docs.o-ran-sc.org/projects/o-ran-sc-o-du-phy/en/latest/Setup-Configuration_fh.html)
-2. [O-RAN Cloud Platform Reference Designs 2.0,O-RAN.WG6.CLOUD-REF-v02.00,February 2021](https://orandownloadsweb.azurewebsites.net/specifications)
+We are taking an example from a Gracehopper GH200 Neoverse-V2
 
+1. Install nvidia-64k pagesize kernel using `apt/dnf`
+
+2. Update the Grub via creating a file `/etc/default/grub.d/cmdline.cfg`.
+
+```bash
+GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUXpci=realloc=off pci=pcie_bus_safe default_hugepagesz=512M hugepagesz=512M hugepages=256 tsc=reliable processor.max_cstate=0 audit=0 idle=poll rcu_nocb_poll nosoftlockup irqaffinity=0 isolcpus=managed_irq,domain,4-71 nohz_full=4-71 rcu_nocbs=4-71 earlycon module_blacklist=nouveau acpi_power_meter.force_cap_on=y numa_balancing=disable init_on_alloc=0 preempt=none"
+```
+
+In the above command (the explanation of the parameters is same as x86):
+
+1. Isolated CPUs: 4-71, we recommend to leave the initial CPUs for the kernel
+2. Non-isolated CPUs: 0,1,2,3
+3. Hugepages: The default hugepage size is 512M (`default_hudepagesz=512M`) and the command above reserves 131072M (`hugepages=256`).
+
+After changing you would need to rebuild the grub and reboot the system:
+
+```bash
+sudo update-grub
+sudo reboot
+```
+
+You can adapt the above command for a DGX spark.
+
+##### Common for both Architectures
+
+1. Configuration for realtime scheduling:
+
+```bash
+# create a file in sysctl.d
+vi /etc/sysctl.d/rt.conf
+# disables the RT throttling limit, allowing real-time tasks to use unlimited CPU time
+kernel.sched_rt_runtime_us=-1
+# prevents timers from being migrated between CPUs, reducing jitter on isolated/real-time cores.
+kernel.timer_migration=0
+```
+
+2. If you are using systemd you can configure `CPUAffinity` in `/etc/systemd/
+system.conf` to non-isolated CPUs. It helps if you are having issues with SSH
+or tcpdump when OAI-gNB/DU is running.
+
+After applying both the steps you can reboot the system.
 
 ### PTP configuration
 
-**Note**: You may run OAI with O-RAN 7.2 Fronthaul without a RU attached (e.g. for benchmarking).
+**Note**: You may run OAI with O-RAN 7.2 Fronthaul without a RU attached (e.g.
+for benchmarking).
 In such case, you can skip PTP configuration and go to DPDK section.
 
 1. You can install `linuxptp` rpm or debian package. It will install ptp4l and phc2sys.
 
 ```bash
-#RHEL
-sudo dnf install linuxptp -y
-#Ubuntu
-sudo apt install linuxptp -y
+# Sometimes in the package repository the PTP version is old, so its better to compile from source
+git clone https://github.com/richardcochran/linuxptp.git && cd linuxptp
+git checkout v4.4
+make
+cp ptp4l phc2sys /usr/sbin/
 ```
 
 Once installed you can use this configuration file for ptp4l (`/etc/ptp4l.conf`). Here the clock domain is 24 so you can adjust it according to your PTP GM clock domain
@@ -278,9 +311,9 @@ Download DPDK version 20.11.9 (F release) or 24.11.4 (K release).
 
 ```bash
 # on debian
-sudo apt install wget xz-utils libnuma-dev
+sudo apt install wget xz-utils libnuma-dev libibverbs-dev rdma-core python3-pyelftools meson
 # on Fedora/RHEL
-sudo dnf install wget xz numactl-devel
+sudo dnf install wget xz numactl-devel rdma-core-devel libibverbs-devel python3-pyelftools meson
 cd
 wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz # F release
 wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz # K release
@@ -289,11 +322,6 @@ wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz # K release
 #### DPDK Compilation and Installation
 
 ```bash
-# Installing meson : it should pull ninja-build and compiler packages
-# on debian
-sudo apt install python3-pyelftools meson
-# on Fedora/RHEL
-sudo dnf install python3-pyelftools meson
 tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9 # F release
 tar xvf dpdk-24.11.4.tar.xz && cd dpdk-stable-24.11.4 # K release
 
@@ -307,6 +335,7 @@ sudo ninja install -C build
 Check if the LD cache contains the DPDK Shared Objects after update:
 
 ```bash
+# output for DPDK 20.11.9
 sudo ldconfig -v | grep rte_
 	librte_fib.so.0.200.2 -> librte_fib.so.0.200.2
 	librte_telemetry.so.0.200.2 -> librte_telemetry.so.0.200.2
@@ -371,7 +400,7 @@ sudo ninja deinstall -C build
 Clone OAI code base in a suitable repository, here we are cloning in `~/openairinterface5g` directory,
 
 ```bash
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g/
 ```
 
@@ -380,6 +409,7 @@ cd ~/openairinterface5g/
 Download ORAN FHI DU library, checkout the correct version, and apply the correct patch (available in `oai_folder/cmake_targets/tools/oran_fhi_integration_patches`).
 
 #### F release
+
 ```bash
 git clone https://github.com/openairinterface/o-du-phy.git ~/phy
 cd ~/phy
@@ -397,10 +427,8 @@ git checkout <desired-tag> # shall match a variable `K_VERSION`
 Compile the fronthaul interface library by calling `make` and the option
 `XRAN_LIB_SO=1` to have it build a shared object. Note that we provide two
 environment variables `RTE_SDK` for the path to the source tree of DPDK, and
-`XRAN_DIR` to set the path to the fronthaul library.  
-For building for a Arm target, set as well the environment variable `TARGET=armv8`.
-DU execution on Arm systems is yet not functional.
-This feature is intended to enable experiments and future improvements on Arm systems.
+`XRAN_DIR` to set the path to the fronthaul library. For building for a Arm
+target, set as well the environment variable `TARGET=armv8`.
 
 **Note**: you need at least gcc-11 and g++-11.
 
@@ -532,7 +560,7 @@ cat /etc/ru_config.cfg
 mimo_mode=1_2_3_4_4x4
 downlink_scaling=0
 prach_format=short
-compression=static_compressed
+compression=static_compressed # if `dynamic_compressed` used, set the `comp_hdr_type` to `dynamic` in the gNB config file
 lf_prach_compression_enable=true
 cplane_per_symbol_workaround=disabled
 cuplane_dl_coupling_sectionID=disabled
@@ -558,7 +586,7 @@ cat /etc/ru_config.cfg
 mimo_mode=1_2_3_4_4x4
 downlink_scaling=0
 prach_format=short
-compression=static_compressed
+compression=static_compressed # if `dynamic_compressed` used, set the `comp_hdr_type` to `dynamic` in the gNB config file
 lf_prach_compression_enable=true
 cplane_per_symbol_workaround=disabled
 cuplane_dl_coupling_sectionID=disabled
@@ -617,9 +645,9 @@ jumboframe 1 # enable jumbo frame
 
 ###### FR2
 
-The OAI configuration file [`gnb.sa.band257.66prb.fhi72.2x2-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.66prb.fhi72.2x2-liteon.conf) corresponds to:
-- TDD pattern `DDDDDDDSUU`, 1.25ms
-- Bandwidth 100MHz
+The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-liteon.conf) corresponds to:
+- TDD pattern `DDDSU`, 0.625ms
+- Bandwidth 200MHz
 - FW v02.00.07
 - DL uses jumbo frame, UL uses standard MTU of 1500 bytes
 
@@ -630,81 +658,480 @@ eAXC_id 0 1 # set PRACH eAxC IDs
 ...
 ```
 
-#### MICROAMP FR2
+#### Microamp FR2
+
+#### Firmware starting from 0.1.174
+
+Requirements:
+- sshpass:
+  ```bash
+  #RHEL
+  sudo dnf install sshpass -y
+  #Ubuntu
+  sudo apt install sshpass -y
+  ``` 
+
+To check PTP status, you can use the following command:
+```bash
+sshpass -p microampcfg ssh remctl@<RU_IP_ADDR> "logs-ptp"
+```
+<details>
+  <summary>PTP output will be similar to:</summary>
+
+  ```
+  Apr 27 11:58:35 bbv1 ptp4l[74545]: ptp4l[357120.237]: rms    8 max   16 freq   -100 +/- 142 delay  1183 +/-   0
+  Apr 27 11:58:34 bbv1 ptp4l[74545]: ptp4l[357119.114]: rms    1 max    1 freq   +189 +/-  25 delay  1183 +/-   0
+  Apr 27 11:58:33 bbv1 ptp4l[74545]: ptp4l[357117.991]: rms    1 max    1 freq    +99 +/-  30 delay  1183 +/-   0
+  Apr 27 11:58:32 bbv1 ptp4l[74545]: ptp4l[357116.869]: rms    1 max    1 freq    +22 +/-  18 delay  1183 +/-   0
+  Apr 27 11:58:31 bbv1 ptp4l[74545]: ptp4l[357115.746]: rms    1 max    1 freq    -51 +/-  20 delay  1183 +/-   0
+  Apr 27 11:58:30 bbv1 ptp4l[74545]: ptp4l[357114.624]: rms    1 max    2 freq   -126 +/-  29 delay  1183 +/-   0
+  Apr 27 11:58:29 bbv1 ptp4l[74545]: ptp4l[357113.501]: rms    8 max   16 freq    -16 +/- 200 delay  1184 +/-   0
+  Apr 27 11:58:28 bbv1 ptp4l[74545]: ptp4l[357112.378]: rms    1 max    2 freq   +164 +/-  29 delay  1183 +/-   0
+  Apr 27 11:58:26 bbv1 ptp4l[74545]: ptp4l[357111.256]: rms    1 max    2 freq    +54 +/-  39 delay  1183 +/-   0
+  Apr 27 11:58:25 bbv1 ptp4l[74545]: ptp4l[357110.133]: rms    1 max    2 freq    -34 +/-  19 delay  1183 +/-   0
+  Apr 27 11:58:24 bbv1 ptp4l[74545]: ptp4l[357109.010]: rms    1 max    2 freq   -112 +/-  26 delay  1183 +/-   0
+  Apr 27 11:58:23 bbv1 ptp4l[74545]: ptp4l[357107.888]: rms    8 max   16 freq    -48 +/- 174 delay  1183 +/-   0
+  Apr 27 11:58:22 bbv1 ptp4l[74545]: ptp4l[357106.766]: rms    1 max    1 freq   +197 +/-  25 delay  1183 +/-   0
+  Apr 27 11:58:21 bbv1 ptp4l[74545]: ptp4l[357105.642]: rms    1 max    2 freq   +149 +/-  26 delay  1183 +/-   0
+  Apr 27 11:58:20 bbv1 ptp4l[74545]: ptp4l[357104.519]: rms    1 max    2 freq    +66 +/-  27 delay  1183 +/-   0
+  Apr 27 11:58:19 bbv1 ptp4l[74545]: ptp4l[357103.396]: rms    1 max    2 freq    -17 +/-  24 delay  1183 +/-   0
+  Apr 27 11:58:17 bbv1 ptp4l[74545]: ptp4l[357102.273]: rms    1 max    1 freq    -94 +/-  23 delay  1183 +/-   0
+  Apr 27 11:58:16 bbv1 ptp4l[74545]: ptp4l[357101.150]: rms    7 max   16 freq   +107 +/- 180 delay  1183 +/-   0
+  Apr 27 11:58:15 bbv1 ptp4l[74545]: ptp4l[357100.027]: rms    1 max    2 freq   +166 +/-  11 delay  1184 +/-   0
+  Apr 27 11:58:14 bbv1 ptp4l[74545]: ptp4l[357098.906]: rms    1 max    1 freq   +140 +/-  21 delay  1183 +/-   0
+  ```
+
+</details>
+
+###### RU configuration
+
+You can use the following command to display the current RU configuration:
+
+```bash
+sshpass -p microampcfg ssh remctl@<RU_IP_ADDR> get-cfg
+```
+
+<details>
+  <summary>
+  The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-microamp.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-microamp.conf) corresponds to the following RU configuration:
+  </summary>
+
+  ```
+  PRACH0 CC ID: 0
+  PRACH0 RU port ID: 0
+  PRACH1 CC ID: 1
+  PRACH1 RU port ID: 1
+  Bandwidth: 200M [Hz]
+  Carrier frequency: 28049280000.0 [Hz]
+  Compression enable: True
+  TDD config: DDDSU
+  eCPRI VLAN support enable: True
+  eCPRI VLAN tag: 600
+    MAC address: 10:70:fd:b8:86:02
+    VLAN PTP status: ENABLED
+    VLAN MGMT enabled: ENABLED
+    State: ENABLED_WITH_VLAN
+      Dynamic beamforming with mirrored beams
+  PL MAC address:
+    RU MAC: 10-70-FD-B8-86-02
+    DU MAC: 50-7C-6F-31-00-61
+  RF Power level: -5 dB - relative to maximum
+  ```
+
+</details>
+
+Execute the following command to check how to configure the RU:
+
+```bash
+sshpass -p microampcfg ssh remctl@<RU_IP_ADDR> "help"
+```
+<details>
+  <summary>Help output will be similar to:</summary>
+
+  ```
+  Usage: remctl <subcommand> [options]
+
+  Allowed Subcommands:
+    set-cfg, get-cfg, stat, logs-ptp, reboot, set-power, help, clear-cfg
+
+  Allowed 'set-cfg' options:
+    --bandwidth
+    --tdd-cfg
+    --compression-enable
+    --compression-disable
+    --ecpri-vlan-tag
+    --ecpri-vlan-support-enable
+    --ecpri-vlan-support-disable
+    --ru-mac
+    --du-mac
+    --beamforming
+    --carrier-freq
+    --eth-ipv4
+    --prach0-cc-id
+    --prach0-ru-port-id
+    --prach1-cc-id
+    --prach1-ru-port-id
+
+  ```
+
+</details>
 
 
+
+You can also execute the following command to show fronthaul statistics including on-time/late packet' counters:
+```bash
+sshpass -p microampcfg ssh remctl@<RU_IP_ADDR> "stat"
+```
+
+<details>
+  <summary>Statistics output will be similar to:</summary>
+
+  ```
+  ORAN RX C-plane on time:    71645874
+  ORAN RX C-plane early:      0
+  ORAN RX C-plane late:       16
+  ORAN TX U-plane:            229686268
+  ORAN RX DL C-plane on time: 53987559
+  ORAN RX DL C-plane early:   0
+  ORAN RX DL C-plane late:    12
+  ORAN RX DL U-plane on time: 701836967
+  ORAN RX DL U-plane early:   0
+  ORAN RX DL U-plane late:    52
+  ORAN RX UL C-plane on time: 17658315
+  ORAN RX UL C-plane early:   0
+  ORAN RX UL C-plane late:    4
+  CLASSIFIER LLC: overflow protection:    0
+  CLASSIFIER LLC: frame err:              28
+  CLASSIFIER LLC: packet too long:        0
+  CLASSIFIER LLC: dropped:                28
+  CLASSIFIER LLC: passed:                 804719078
+  CLASSIFIER ETH: dst MAC addr err:       0
+  CLASSIFIER ETH: VLAN LEGACY:            275571
+  CLASSIFIER ETH: VLAN Dot1Q:             804443507
+  CLASSIFIER ETH: VLAN Dot1AD:            0
+  CLASSIFIER ETH: VLAN Tag ID pass:       773482909
+  CLASSIFIER ETH: VLAN Tag ID error:      0
+  CLASSIFIER ETH: multicast:              31233828
+  CLASSIFIER ETH: PTP:                    29502626
+  CLASSIFIER ETH: eCPRI:                  773482909
+  CLASSIFIER ETH: to OS:                  31236169
+  CLASSIFIER ETH: dropped:                0
+  CLASSIFIER ETH: passed:                 804719078
+  CLASSIFIER ECPRI: prot rev unsupported: 0
+  CLASSIFIER ECPRI: concat unsupported:   0
+  CLASSIFIER ECPRI: msg type unsupported: 0
+  CLASSIFIER ECPRI: pld size err:         0
+  CLASSIFIER ECPRI: U-Plane:              701837019
+  CLASSIFIER ECPRI: C-Plane:              71645890
+  CLASSIFIER ECPRI: delay:                0
+  CLASSIFIER ECPRI: dropped:              0
+  CLASSIFIER ECPRI: passed:               773482909
+  CPLANE PARSER: ul early:                        0
+  CPLANE PARSER: ul late:                         4
+  CPLANE PARSER: ul on time:                      17658315
+  CPLANE PARSER: dl early:                        0
+  CPLANE PARSER: dl late:                         12
+  CPLANE PARSER: dl on time:                      53987559
+  CPLANE PARSER: timing dropped:                  16
+  CPLANE PARSER: timing passed:                   71645874
+  CPLANE PARSER: bad du port id:                  0
+  CPLANE PARSER: bad bandsector id:               0
+  CPLANE PARSER: bad cc id:                       663059
+  CPLANE PARSER: bad ru port id:                  2794
+  CPLANE PARSER: bad sequence id:                 0
+  CPLANE PARSER: bad e bit:                       0
+  CPLANE PARSER: bad subsequence id:              0
+  CPLANE PARSER: ecpri transport header dropped:  665623
+  CPLANE PARSER: ecpri transport header passed:   70980251
+  CPLANE PARSER: bad payloadversion:              0
+  CPLANE PARSER: bad filterindex:                 0
+  CPLANE PARSER: bad subframeid:                  0
+  CPLANE PARSER: bad slotid:                      0
+  CPLANE PARSER: bad startsymbolid:               0
+  CPLANE PARSER: bad numberofsections:            0
+  CPLANE PARSER: bad sectiontype:                 0
+  CPLANE PARSER: bad timeoffset:                  0
+  CPLANE PARSER: bad fftsize:                     0
+  CPLANE PARSER: bad subcarrierspacing:           0
+  CPLANE PARSER: bad cplength:                    0
+  CPLANE PARSER: bad udiqwidth:                   0
+  CPLANE PARSER: radio aplication header dropped: 0
+  CPLANE PARSER: radio aplication header passed:  70980251
+  CPLANE PARSER: bad rb:                          0
+  CPLANE PARSER: bad startprbc:                   0
+  CPLANE PARSER: bad numprbc:                     0
+  CPLANE PARSER: bad remask:                      0
+  CPLANE PARSER: bad numsymbol:                   0
+  CPLANE PARSER: bad ef:                          0
+  CPLANE PARSER: bad freqoffset:                  0
+  CPLANE PARSER: common section fields dropped:   0
+  CPLANE PARSER: common section fields passed:    70980251
+  CPLANE PARSER: bad section to symbol map:       0
+  CPLANE PARSER: dropped:                         0
+  CPLANE PARSER: passed:                          70980251
+  CPLANE PARSER: expected uplanes number:         701813698
+  UPLANE PARSER: sequence ID err:       0
+  UPLANE PARSER: IQ pld size err:       0
+  UPLANE PARSER: C-Plane match err:     114225
+  UPLANE PARSER: eAxC ID unsupported:   24631
+  UPLANE PARSER: any value unsupported: 24631
+  UPLANE PARSER: dropped:               138886
+  UPLANE PARSER: passed:                701698133
+  UPLANE ENCAPSULATOR 0: false drop error: 0
+  UPLANE ENCAPSULATOR 0: passed:           94598642
+  UPLANE ENCAPSULATOR 1: false drop error: 0
+  UPLANE ENCAPSULATOR 1: passed:           94598642
+  UPLANE ENCAPSULATOR 2: false drop error: 0
+  UPLANE ENCAPSULATOR 2: passed:           0
+  UPLANE ENCAPSULATOR 3: false drop error: 0
+  UPLANE ENCAPSULATOR 3: passed:           0
+  COMMON COMMON: symbol counter: 57757250505
+  DSP CHAIN 0: dl fft overflow: 0
+  DSP CHAIN 0: ul fft overflow: 0
+  DSP CHAIN 1: dl fft overflow: 0
+  DSP CHAIN 1: ul fft overflow: 0
+  ```
+
+</details>
+
+
+##### Firmware older than 0.1.174
 Interaction with RU is performed using `rucfg` utility provided by Microamp.
 
-To check PTP status, you can use `rucfg ptp`. the output should be similar to:
-```bash
-[INFO] Check if RU is available
-[INFO] RU available
-[INFO] Check SSH to RU available
-[INFO] SSH to RU available
-[INFO] Getting PTP status
-[INFO] ptp4l status = 
-{
-Feb 12 16:26:02 bbv1 ptp4l[23822]: ptp4l[6280.658]: rms    0 max    1 freq     +2 +/-   7 delay  1184 +/-   0
-Feb 12 16:26:00 bbv1 ptp4l[23822]: ptp4l[6279.535]: rms    0 max    1 freq     -8 +/-  13 delay  1184 +/-   0
-Feb 12 16:25:59 bbv1 ptp4l[23822]: ptp4l[6278.413]: rms    1 max    1 freq    -35 +/-  13 delay  1184 +/-   0
-Feb 12 16:25:58 bbv1 ptp4l[23822]: ptp4l[6277.290]: rms    0 max    1 freq    -68 +/-   9 delay  1184 +/-   0
-Feb 12 16:25:57 bbv1 ptp4l[23822]: ptp4l[6276.167]: rms    1 max    1 freq    -69 +/-  10 delay  1184 +/-   0
-Feb 12 16:25:56 bbv1 ptp4l[23822]: ptp4l[6275.044]: rms    0 max    1 freq    -46 +/-   9 delay  1184 +/-   0
-Feb 12 16:25:55 bbv1 ptp4l[23822]: ptp4l[6273.921]: rms    1 max    1 freq    -65 +/-  10 delay  1184 +/-   0
-Feb 12 16:25:54 bbv1 ptp4l[23822]: ptp4l[6272.800]: rms    0 max    1 freq    -91 +/-   6 delay  1184 +/-   0
-Feb 12 16:25:53 bbv1 ptp4l[23822]: ptp4l[6271.677]: rms    4 max   17 freq   -107 +/-  48 delay  1184 +/-   0
-Feb 12 16:25:52 bbv1 ptp4l[23822]: ptp4l[6270.554]: rms    6 max   17 freq   +179 +/- 106 delay  1184 +/-   0
-Feb 12 16:25:50 bbv1 ptp4l[23822]: ptp4l[6269.431]: rms    1 max    2 freq   +191 +/-  12 delay  1184 +/-   0
-Feb 12 16:25:49 bbv1 ptp4l[23822]: ptp4l[6268.308]: rms    1 max    1 freq   +119 +/-  21 delay  1184 +/-   0
-Feb 12 16:25:48 bbv1 ptp4l[23822]: ptp4l[6267.186]: rms    1 max    1 freq   +103 +/-  13 delay  1184 +/-   0
-Feb 12 16:25:47 bbv1 ptp4l[23822]: ptp4l[6266.063]: rms    7 max   17 freq   -101 +/- 160 delay  1184 +/-   0
-Feb 12 16:25:46 bbv1 ptp4l[23822]: ptp4l[6264.940]: rms    7 max   17 freq    -65 +/- 154 delay  1184 +/-   0
-Feb 12 16:25:45 bbv1 ptp4l[23822]: ptp4l[6263.817]: rms    1 max    2 freq   +176 +/-  33 delay  1183 +/-   0
-Feb 12 16:25:44 bbv1 ptp4l[23822]: ptp4l[6262.695]: rms    0 max    1 freq   +100 +/-   7 delay  1184 +/-   0
-Feb 12 16:25:43 bbv1 ptp4l[23822]: ptp4l[6261.572]: rms    1 max    2 freq    +56 +/-  34 delay  1184 +/-   0
-Feb 12 16:25:41 bbv1 ptp4l[23822]: ptp4l[6260.449]: rms    1 max    1 freq    -37 +/-  14 delay  1184 +/-   0
-Feb 12 16:25:40 bbv1 ptp4l[23822]: ptp4l[6259.326]: rms    7 max   16 freq   +114 +/- 149 delay  1183 +/-   0
-}
+To check PTP status, you can use `rucfg ptp`. 
 
-```
 
-##### RU configuration
+<details>
+  <summary>PTP output will be similar to:</summary>
 
-You can use `rucfg show` to display the current RU configuration. 
+  ```
+  [INFO] Check if RU is available
+  [INFO] RU available
+  [INFO] Check SSH to RU available
+  [INFO] SSH to RU available
+  [INFO] Getting PTP status
+  [INFO] ptp4l status = 
+  {
+  Feb 12 16:26:02 bbv1 ptp4l[23822]: ptp4l[6280.658]: rms    0 max    1 freq     +2 +/-   7 delay  1184 +/-   0
+  Feb 12 16:26:00 bbv1 ptp4l[23822]: ptp4l[6279.535]: rms    0 max    1 freq     -8 +/-  13 delay  1184 +/-   0
+  Feb 12 16:25:59 bbv1 ptp4l[23822]: ptp4l[6278.413]: rms    1 max    1 freq    -35 +/-  13 delay  1184 +/-   0
+  Feb 12 16:25:58 bbv1 ptp4l[23822]: ptp4l[6277.290]: rms    0 max    1 freq    -68 +/-   9 delay  1184 +/-   0
+  Feb 12 16:25:57 bbv1 ptp4l[23822]: ptp4l[6276.167]: rms    1 max    1 freq    -69 +/-  10 delay  1184 +/-   0
+  Feb 12 16:25:56 bbv1 ptp4l[23822]: ptp4l[6275.044]: rms    0 max    1 freq    -46 +/-   9 delay  1184 +/-   0
+  Feb 12 16:25:55 bbv1 ptp4l[23822]: ptp4l[6273.921]: rms    1 max    1 freq    -65 +/-  10 delay  1184 +/-   0
+  Feb 12 16:25:54 bbv1 ptp4l[23822]: ptp4l[6272.800]: rms    0 max    1 freq    -91 +/-   6 delay  1184 +/-   0
+  Feb 12 16:25:53 bbv1 ptp4l[23822]: ptp4l[6271.677]: rms    4 max   17 freq   -107 +/-  48 delay  1184 +/-   0
+  Feb 12 16:25:52 bbv1 ptp4l[23822]: ptp4l[6270.554]: rms    6 max   17 freq   +179 +/- 106 delay  1184 +/-   0
+  Feb 12 16:25:50 bbv1 ptp4l[23822]: ptp4l[6269.431]: rms    1 max    2 freq   +191 +/-  12 delay  1184 +/-   0
+  Feb 12 16:25:49 bbv1 ptp4l[23822]: ptp4l[6268.308]: rms    1 max    1 freq   +119 +/-  21 delay  1184 +/-   0
+  Feb 12 16:25:48 bbv1 ptp4l[23822]: ptp4l[6267.186]: rms    1 max    1 freq   +103 +/-  13 delay  1184 +/-   0
+  Feb 12 16:25:47 bbv1 ptp4l[23822]: ptp4l[6266.063]: rms    7 max   17     freq   -101 +/- 160 delay  1184 +/-   0
+  Feb 12 16:25:46 bbv1 ptp4l[23822]: ptp4l[6264.940]: rms    7 max   17 freq    -65 +/- 154 delay  1184 +/-   0
+  Feb 12 16:25:45 bbv1 ptp4l[23822]: ptp4l[6263.817]: rms    1 max    2 freq   +176 +/-  33 delay  1183 +/-   0
+  Feb 12 16:25:44 bbv1 ptp4l[23822]: ptp4l[6262.695]: rms    0 max    1 freq   +100 +/-   7 delay  1184 +/-   0
+  Feb 12 16:25:43 bbv1 ptp4l[23822]: ptp4l[6261.572]: rms    1 max    2 freq    +56 +/-  34 delay  1184 +/-   0
+  Feb 12 16:25:41 bbv1 ptp4l[23822]: ptp4l[6260.449]: rms    1 max    1 freq    -37 +/-  14 delay  1184 +/-   0
+  Feb 12 16:25:40 bbv1 ptp4l[23822]: ptp4l[6259.326]: rms    7 max   16 freq   +114 +/- 149 delay  1183 +/-   0
+  } 
+  ```
 
-The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-microamp.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-microamp.conf) corresponds to the following RU configuration:
+</details>
 
-```bash
-[INFO] Check if RU is available
-[INFO] RU available
-[INFO] Check SSH to RU available
-[INFO] SSH to RU available
-[INFO] Downloading oran_autostart
-[INFO] Downloading ructl_config.sh
-[INFO] Downloading udc_pll_configurator_startup
-[INFO] Downloaded Cellbox config = 
-{
-	eCPRI Compression: True
-	RF Bandwidth: 200MHz
-	CC Bandwidth: 200MHz
-	CCs: 1
-	LO frequency: 7.91642667e9
-	UL compensation frequency: 28.04928e9
-	DL compensation frequency: -28.04928e9
-	RU MAC: 10:70:FD:B8:86:02
-	DU MAC: 50:7C:6F:31:00:61
-	TDD config: dddsu
-	RF Power level: -5 dB - relative to maximum
-	VLAN ORAN: Enabled, tag: 600
-	VLAN PTP: Enabled, tag: 1
-	VLAN MGMT: False
-	Beamforming: dynamic-mirrored-beam
-}
-```
+###### RU configuration
+
+You can use `rucfg show` command to display the current RU configuration. 
+
+<details>
+  <summary>
+  The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-microamp.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-microamp.conf) corresponds to the following RU configuration:
+  </summary>
+
+  ```
+  [INFO] Check if RU is available
+  [INFO] RU available
+  [INFO] Check SSH to RU available
+  [INFO] SSH to RU available
+  [INFO] Downloading oran_autostart
+  [INFO] Downloading ructl_config.sh
+  [INFO] Downloading udc_pll_configurator_startup
+  [INFO] Downloaded Cellbox config = 
+  {
+    eCPRI Compression: True
+    RF Bandwidth: 200MHz
+    CC Bandwidth: 200MHz
+    CCs: 1
+    LO frequency: 7.91642667e9
+    UL compensation frequency: 28.04928e9
+    DL compensation frequency: -28.04928e9
+    RU MAC: 10:70:FD:B8:86:02
+    DU MAC: 50:7C:6F:31:00:61
+    TDD config: dddsu
+    RF Power level: -5 dB - relative to maximum
+    VLAN ORAN: Enabled, tag: 600
+    VLAN PTP: Enabled, tag: 1
+    VLAN MGMT: False
+    Beamforming: dynamic-mirrored-beam
+  }
+  ```
+
+</details>
+
 
 Execute `rucfg config -h` to check how to configure the RU.
 
+<details>
+<summary>Help output will be similar to:</summary>
+
+```
+usage: rucfg config [-h] [-f frequency] [-b bandwidth] [-t TDD pattern] [-p RU Power]
+                    [--cc carrier components] [--compression compression] [--vlan-oran vlan-oran]
+                    [--vlan-ptp vlan-ptp] [--mac DU MAC address]
+
+options:
+  -h, --help            show this help message and exit
+  -f frequency, --freq frequency
+                        Sets the 5G NR frequency. Allowed range: 24.0-29.9 GHz, default: <no conf
+                        change>
+  -b bandwidth, --bandwidth bandwidth
+                        Sets RF bandwidth 100/200 [MHz] per CC, default: <no conf change>
+  -t TDD pattern, --tdd TDD pattern
+                        Sets TDD pattern DDDSU/DDSUU/DSUUU, default: <no conf change>
+  -p RU Power, --power RU Power
+                        Sets Power in (0-100), default: <no conf change>
+  --cc carrier components
+                        Sets number of carrier components 1/2, default: <no conf change>
+  --compression compression
+                        Sets eCPRI compression True/False, default: <no conf change>
+  --vlan-oran vlan-oran
+                        Sets ORAN VLAN to None or <TAG>, default: <no conf change>
+  --vlan-ptp vlan-ptp   Sets PTP VLAN to None or <TAG>, default: <no conf change>
+  --mac DU MAC address  Sets DU MAC address (where RU sends eCPRI packets), format
+                        AA:BB:CC:DD:EE:FF, default: <no conf change>
+```
+
+</details>
+
+
+
 You can also execute `rucfg stats` to show fronthaul statistics including on-time/late packet' counters.
+
+
+<details>
+  <summary>Statistics output will be similar to:</summary>
+
+  ```
+  [INFO] Check if RU is available
+  [INFO] RU available
+  [INFO] Check SSH to RU available
+  [INFO] SSH to RU available
+  [INFO] Getting RU stats
+  [WARN] Received non-zero rc from ructl: 255
+  [INFO] ru stats = 
+  {
+  Preaccumulator overflow detected
+  ORAN RX C-plane on time:    5442384
+  ORAN RX C-plane early:      0
+  ORAN RX C-plane late:       4
+  ORAN TX U-plane:            15908424
+  ORAN RX DL C-plane on time: 3349166
+  ORAN RX DL C-plane early:   0
+  ORAN RX DL C-plane late:    0
+  ORAN RX DL U-plane on time: 43538742
+  ORAN RX DL U-plane early:   0
+  ORAN RX DL U-plane late:    93
+  ORAN RX UL C-plane on time: 2093218
+  ORAN RX UL C-plane early:   0
+  ORAN RX UL C-plane late:    4
+  CLASSIFIER LLC: overflow protection:    0
+  CLASSIFIER LLC: frame err:              0
+  CLASSIFIER LLC: packet too long:        0
+  CLASSIFIER LLC: dropped:                0
+  CLASSIFIER LLC: passed:                 49044133
+  CLASSIFIER ETH: dst MAC addr err:       0
+  CLASSIFIER ETH: VLAN LEGACY:            1524
+  CLASSIFIER ETH: VLAN Dot1Q:             49042609
+  CLASSIFIER ETH: VLAN Dot1AD:            0
+  CLASSIFIER ETH: VLAN Tag ID pass:       48981223
+  CLASSIFIER ETH: VLAN Tag ID error:      0
+  CLASSIFIER ETH: multicast:              60260
+  CLASSIFIER ETH: PTP:                    56086
+  CLASSIFIER ETH: eCPRI:                  48981223
+  CLASSIFIER ETH: to OS:                  62910
+  CLASSIFIER ETH: dropped:                0
+  CLASSIFIER ETH: passed:                 49044133
+  CLASSIFIER ECPRI: prot rev unsupported: 0
+  CLASSIFIER ECPRI: concat unsupported:   0
+  CLASSIFIER ECPRI: msg type unsupported: 0
+  CLASSIFIER ECPRI: pld size err:         0
+  CLASSIFIER ECPRI: U-Plane:              43538835
+  CLASSIFIER ECPRI: C-Plane:              5442388
+  CLASSIFIER ECPRI: delay:                0
+  CLASSIFIER ECPRI: dropped:              0
+  CLASSIFIER ECPRI: passed:               48981223
+  CPLANE PARSER: ul early:                        0
+  CPLANE PARSER: ul late:                         4
+  CPLANE PARSER: ul on time:                      2093218
+  CPLANE PARSER: dl early:                        0
+  CPLANE PARSER: dl late:                         0
+  CPLANE PARSER: dl on time:                      3349166
+  CPLANE PARSER: timing dropped:                  4
+  CPLANE PARSER: timing passed:                   5442384
+  CPLANE PARSER: bad du port id:                  0
+  CPLANE PARSER: bad bandsector id:               0
+  CPLANE PARSER: bad cc id:                       0
+  CPLANE PARSER: bad ru port id:                  0
+  CPLANE PARSER: bad sequence id:                 0
+  CPLANE PARSER: bad e bit:                       0
+  CPLANE PARSER: bad subsequence id:              0
+  CPLANE PARSER: ecpri transport header dropped:  0
+  CPLANE PARSER: ecpri transport header passed:   5442384
+  CPLANE PARSER: bad payloadversion:              0
+  CPLANE PARSER: bad filterindex:                 0
+  CPLANE PARSER: bad subframeid:                  0
+  CPLANE PARSER: bad slotid:                      0
+  CPLANE PARSER: bad startsymbolid:               0
+  CPLANE PARSER: bad numberofsections:            0
+  CPLANE PARSER: bad sectiontype:                 0
+  CPLANE PARSER: bad timeoffset:                  0
+  CPLANE PARSER: bad fftsize:                     0
+  CPLANE PARSER: bad subcarrierspacing:           0
+  CPLANE PARSER: bad cplength:                    0
+  CPLANE PARSER: bad udiqwidth:                   0
+  CPLANE PARSER: radio aplication header dropped: 0
+  CPLANE PARSER: radio aplication header passed:  5442384
+  CPLANE PARSER: bad rb:                          0
+  CPLANE PARSER: bad startprbc:                   0
+  CPLANE PARSER: bad numprbc:                     0
+  CPLANE PARSER: bad remask:                      0
+  CPLANE PARSER: bad numsymbol:                   0
+  CPLANE PARSER: bad ef:                          0
+  CPLANE PARSER: bad freqoffset:                  0
+  CPLANE PARSER: common section fields dropped:   0
+  CPLANE PARSER: common section fields passed:    5442384
+  CPLANE PARSER: bad section to symbol map:       0
+  CPLANE PARSER: dropped:                         0
+  CPLANE PARSER: passed:                          5442384
+  UPLANE PARSER: sequence ID err:       0
+  UPLANE PARSER: IQ pld size err:       0
+  UPLANE PARSER: C-Plane match err:     7138
+  UPLANE PARSER: eAxC ID unsupported:   0
+  UPLANE PARSER: any value unsupported: 0
+  UPLANE PARSER: dropped:               7231
+  UPLANE PARSER: passed:                43531604
+  UPLANE ENCAPSULATOR 0: false drop error: 0
+  UPLANE ENCAPSULATOR 0: passed:           6698292
+  UPLANE ENCAPSULATOR 1: false drop error: 0
+  UPLANE ENCAPSULATOR 1: passed:           6698292
+  UPLANE ENCAPSULATOR 2: false drop error: 0
+  UPLANE ENCAPSULATOR 2: passed:           0
+  UPLANE ENCAPSULATOR 3: false drop error: 0
+  UPLANE ENCAPSULATOR 3: passed:           0
+  COMMON COMMON: symbol counter: 111095058
+  }
+  ```
+
+</details>
+
 
 #### VVDN LPRU
 
@@ -843,6 +1270,42 @@ sudo ./ru_emulator -c <path-to/protoru-OAI-B210-TDD-n78-40MHz-1x1-30kHz.yml>
 ```
 
 Finally, start the OAI gNB.
+
+#### WNC R1220
+
+**Version 1.9.0**
+
+The OAI configuration file [gnb.sa.band77.273prb.fhi72.4x4-wnc.conf](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.4x4-wnc.conf) corresponds to:
+
+- TDD pattern `DDDDDDSUUU`, 5ms
+- Bandwidth 100MHz
+- 4TX4R
+
+##### RU configuration
+
+After switching on or rebooting the RU, you can check the RU PTP status with `show ptp clock` to make sure it's locked and run `show running-config` to check the current configuration.
+To enable RU transmission, use the `radio enable` command. Then verify the configuration with `show running-config`, which should reflect the enabled state:
+```
+radio 1
+  no shutdown
+```
+
+The required parameters to configure are:
+
+1. `center-frequency` →  3849990
+2. `transmit-power` →  24
+3. `lna-shutdown` →  **disabled**
+4. `transport-interface` →  configure the sub-interface (VLAN ID is defined during sub-interface creation)
+5. `transport-peer-mac` →  must match the DU MAC address
+6. `phase-compensation` →  **enabled**
+7. `bandwidth` →  100
+8. `sub-carrier` →  30
+9. `compress-oran-compliant` →  **enabled**
+
+**Note**
+  * Ensure that the VLAN configuration and MAC addressing are consistent with the DU setup.
+  * The RU must be PTP synchronized before starting the gNB.
+  * After reboot, the RU loads its `startup-config`. To save the current configuration, use `copy running-config startup-config`.
 
 ## Configure Network Interfaces and DPDK VFs
 
@@ -1128,6 +1591,7 @@ Edit the sample OAI gNB configuration file and check following parameters:
     * `RunSlotPrbMapBySymbol`: enable CP multisection (one symbol per section); default value is 0
     *  DU delay profile (`T1a` and `Ta4`): pairs of numbers `(x, y)` specifying minimum and maximum delays
     * `ru_config`: RU-specific configuration:
+      * `comp_hdr_type`: compression header type; `dynamic` or `static` (default)
       * `iq_width`: Width of DL/UL IQ samples: if 16, no compression, if <16, applies
         compression
       * `iq_width_prach`: Width of PRACH IQ samples: if 16, no compression, if <16, applies
@@ -1260,9 +1724,10 @@ For two RUs using a 8x8 configuration, i.e. a single antenna system, the referen
 
 For two RUs each using a 4x4 configuration, i.e. a distributed antenna system (DAS),
 we use the analog beamforming implementation. More details can be found in
-[this document](./analog_beamforming.md). It is important to note that
-the configuration file should be set as a 4x4 scenario and each RU would be given a
-different beam. The reference DU configuration file is [`gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf).
+[this document](./analog_beamforming.md). It is important to note the following parameters in the configuration file:
+- In RU section `nb_tx` and `nb_rx` indicates the total number of physical antenna ports across all distributed RUs.
+- `pusch_AntennaPorts`, `pdsch_AntennaPorts_XP * pdsch_AntennaPorts_N1 * pdsch_AntennaPorts_N2` indicate the number of logical antenna ports for one analog beam.
+The reference DU configuration file is [`gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf).
 
 DAS is enabled by setting to 1 the parameter `enable_das` in `L1` section.
 
@@ -1495,7 +1960,9 @@ sudo ldconfig
 If you would like to install these libraries in the custom path, please replace `/usr/local` default path to e.g. `/opt/mplane-v2`.
 
 ## Benetel O-RU
-Note: RAN550/650 v1.2.2 and v1.4.1 have been successfully tested.
+Note: RAN550-1v2.1.0-M-0820797 has been successfully tested.
+
+We added a [CI M-plane pipeline](https://jenkins-oai.eurecom.fr/job/RAN-SA-FHI72-MPLANE-CN5G/) showcasing the M-plane integration.
 
 #### One time steps
 Connect to the RU as user `root`, enable the mplane service, and reboot:
@@ -1595,7 +2062,7 @@ fhi_72 = {
   * `dpdk_mem_size`: [*]
   * `dpdk_iova_mode`: [*]
   * `owdm_enable`: [*]
-  * `fh_config`: only DU delay profile (`T1a` and `Ta4`)
+  * `fh_config`: DU delay profile (`T1a` and `Ta4`), and optionally `ru_config` for IQ bitwidth and compression type (assumed the same for PxSCH/PRACH)
   * `app_id`: [*]
 
 [*] see [Configure OAI gNB](#configure-oai-gnb) for more details
@@ -1603,7 +2070,7 @@ fhi_72 = {
 The following parameters are retrieved from the RU and forwarded to the xran:
 * `MTU`
 * `RU MAC address`
-* `IQ compression`: if RU supports multiple, the first value in the list is taken; please note that the same value is used for PxSCH/PRACH
+* `IQ compression`: unless explicitely specified via gNB config file, the first <iq-bitwidth> value from <compression-method-supported> node is taken and static compression is set (assumed the same for PxSCH/PRACH)
 * `PRACH offset`: hardcoded based on the RU vendor (i.e. for Benetel `max(Nrx,Ntx)`)
 
 ### Build and compile gNB
@@ -1617,7 +2084,7 @@ Compiled libraries:
 
 #### Using build_oai script
 ```bash
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g/cmake_targets/
 ./build_oai -I  # if you never installed OAI, use this command once before the next line
 ./build_oai --install-optional-packages  # for pcre/libpcre3, libssh, and libxml2 library installation
@@ -1628,7 +2095,7 @@ PKG_CONFIG_PATH=/opt/mplane-v2/lib/pkgconfig ./build_oai --gNB --ninja -t oran_f
 
 #### Using cmake directly
 ```bash
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g/
 mkdir build && cd build
 cmake .. -GNinja -DOAI_FHI72=ON -DOAI_FHI72_MPLANE=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
@@ -1731,6 +2198,7 @@ sequenceDiagram
 [HW]   [MPLANE] Storing the following information to forward to xran:
     RU MAC address 8c:1f:64:d1:11:c0
     MTU 9216
+    Compression header type static
     IQ bitwidth 9
     PRACH offset 4
     DU port bitmask 61440
@@ -1928,6 +2396,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -1947,6 +2416,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -1966,6 +2436,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -1985,6 +2456,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2004,6 +2476,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2028,6 +2501,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2052,6 +2526,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2076,6 +2551,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2100,6 +2576,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2124,6 +2601,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2148,6 +2626,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -2172,6 +2651,7 @@ sequenceDiagram
     <compression>
       <iq-bitwidth>9</iq-bitwidth>
       <compression-type>STATIC</compression-type>
+      <compression-method>BLOCK_FLOATING_POINT</compression-method>
     </compression>
     <frame-structure>193</frame-structure>
     <cp-type>NORMAL</cp-type>
@@ -3225,7 +3705,7 @@ sudo ./nr-softmodem -O <without-mplane-configuration file> --thread-pool <list o
 
 ## Contact in case of questions
 
-You can ask your question on the [mailing lists](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/MailingList).
+You can ask your question on the [mailing lists](https://github.com/duranta-project/openairinterface5g/wiki/MailingList).
 
 Your email should contain below information:
 
@@ -3238,4 +3718,4 @@ Your email should contain below information:
 - RU Vendor and Version.
 - In case your question is related to performance, include a small description of the machine (CPU, RAM and networking card) and diagram of your testing environment. 
 - If you have any issues related to PTP or synchronization, then first check the section "Debugging PTP issues". Then share your problem with PTP version you are using, switch details and master clock.
-- Known/open issues are present on [GitLab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues), so keep checking.
+- Known/open issues are present on [Github](https://github.com/duranta-project/openairinterface5g/issues), so keep checking.

@@ -3,8 +3,6 @@
  */
 
 #include "xnap_lib_common.h"
-#include "common/utils/assertions.h"
-#include "common/utils/utils.h"
 
 int xnap_gNB_set_cause(XNAP_Cause_t *cause_p,const xnap_cause_t *in)
 {
@@ -65,6 +63,101 @@ xnap_cause_t decode_xnap_cause(const XNAP_Cause_t *in)
    return out;
 }
 
+XNAP_Target_CGI_t xnap_encode_target_cgi(const xnap_ngran_cgi_t *in)
+{
+  DevAssert(in != NULL);
+
+  XNAP_Target_CGI_t out = {0};
+  out.present = XNAP_Target_CGI_PR_nr;
+  asn1cCalloc(out.choice.nr, nr);
+  const plmn_id_t *plmn_id = &in->plmn_id;
+  MCC_MNC_TO_PLMNID(plmn_id->mcc, plmn_id->mnc, plmn_id->mnc_digit_length, &nr->plmn_id);
+  NR_CELL_ID_TO_BIT_STRING(in->nrcell_id, &nr->nr_CI);
+
+  return out;
+}
+
+bool xnap_decode_target_cgi(const XNAP_Target_CGI_t *in, xnap_ngran_cgi_t *out)
+{
+  DevAssert(in != NULL);
+  DevAssert(out != NULL);
+
+  memset(out, 0, sizeof(*out));
+
+  if (in->present != XNAP_Target_CGI_PR_nr || in->choice.nr == NULL)
+    return false;
+
+  const XNAP_NR_CGI_t *nr = in->choice.nr;
+  plmn_id_t *plmn_id = &out->plmn_id;
+  PLMNID_TO_MCC_MNC(&nr->plmn_id, plmn_id->mcc, plmn_id->mnc, plmn_id->mnc_digit_length);
+
+  BIT_STRING_TO_NR_CELL_IDENTITY(&nr->nr_CI, out->nrcell_id);
+
+  return true;
+}
+
+XNAP_S_NSSAI_t xnap_encode_snssai(const nssai_t *in)
+{
+  DevAssert(in != NULL);
+
+  XNAP_S_NSSAI_t out = {0};
+  INT8_TO_OCTET_STRING(in->sst, &out.sst);
+  if (in->sd) {
+    asn1cCalloc(out.sd, sd);
+    INT24_TO_OCTET_STRING(in->sd, sd);
+  }
+
+  return out;
+}
+
+bool decode_xnap_snssai(const XNAP_S_NSSAI_t *in, nssai_t *out)
+{
+  DevAssert(in != NULL);
+  DevAssert(out != NULL);
+
+  memset(out, 0, sizeof(*out));
+  OCTET_STRING_TO_INT8(&in->sst, out->sst);
+  if (in->sd)
+    OCTET_STRING_TO_INT24(in->sd, out->sd);
+
+  return true;
+}
+
+bool eq_nr_guami(const nr_guami_t *a, const nr_guami_t *b)
+{
+  if (!eq_xnap_plmn(&a->plmn, &b->plmn))
+    return false;
+
+  _EQ_CHECK_INT(a->amf_region_id, b->amf_region_id);
+  _EQ_CHECK_INT(a->amf_set_id, b->amf_set_id);
+  _EQ_CHECK_INT(a->amf_pointer, b->amf_pointer);
+  return true;
+}
+
+bool eq_xnap_ngran_cgi(const xnap_ngran_cgi_t *a, const xnap_ngran_cgi_t *b)
+{
+  if (!eq_xnap_plmn(&a->plmn_id, &b->plmn_id))
+    return false;
+  _EQ_CHECK_UINT64(a->nrcell_id, b->nrcell_id);
+  return true;
+}
+
+bool eq_transport_layer_addr(const transport_layer_addr_t *a, const transport_layer_addr_t *b)
+{
+  _EQ_CHECK_INT(a->length, b->length);
+  if (memcmp(a->buffer, b->buffer, a->length) != 0) {
+    PRINT_ERROR("XnAP Equality failed: transport layer address buffers differ\n");
+    return false;
+  }
+  return true;
+}
+
+bool eq_gtpu_tunnel(const gtpu_tunnel_t *a, const gtpu_tunnel_t *b)
+{
+  _EQ_CHECK_UINT32(a->teid, b->teid);
+  return eq_transport_layer_addr(&a->addr, &b->addr);
+}
+
 bool eq_xnap_cause(const xnap_cause_t *a, const xnap_cause_t *b)
 {
   _EQ_CHECK_INT(a->type,  b->type);
@@ -83,7 +176,12 @@ bool eq_xnap_plmn(const plmn_id_t *a, const plmn_id_t *b)
 bool eq_xnap_snssai(const nssai_t *a, const nssai_t *b)
 {
   _EQ_CHECK_INT(a->sst, b->sst);
-  _EQ_CHECK_UINT32(a->sd, b->sd);
+  /* Handle optional sd */
+  if (a->sd && b->sd) {
+    _EQ_CHECK_UINT32(a->sd, b->sd);
+  } else if (a->sd || b->sd) {
+    return false;
+  }
   return true;
 }
 

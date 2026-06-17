@@ -12,6 +12,11 @@
 
 #include "GNB_APP/gnb_paramdef.h"
 
+#include "F1AP_F1AP-PDU.h"
+#include "F1AP_Reset.h"
+#include "F1AP_ProtocolIE-Field.h"
+#include "F1AP_InitiatingMessage.h"
+
 int DU_handle_RESET(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
   UNUSED(instance);

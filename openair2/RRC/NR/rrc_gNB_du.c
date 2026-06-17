@@ -27,6 +27,7 @@
 #include "NR_SIB3.h"
 #include "NR_SIB4.h"
 #include "NR_Q-OffsetRange.h"
+#include "NR_asn_constant.h"
 #include "openair2/RRC/NR/MESSAGES/asn1_msg.h"
 #include "rrc_gNB_mobility.h"
 #include "openair2/F1AP/f1ap_common.h"
@@ -1026,17 +1027,19 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
       return;
     }
 
-    nr_rrc_cell_container_t *cell = update_cell_info(rrc, old_nci, new_ci);
-    if (cell == NULL) {
-      LOG_W(NR_RRC, "Failed to update cell %ld, ignoring gNB-DU configuration update\n", old_nci);
-      return;
-    }
+
+    nr_rrc_cell_container_t *cell = get_cell_by_cell_id(&rrc->cells, old_nci);
     if (cell->assoc_id != du->assoc_id) {
       LOG_W(NR_RRC,
             "cell %ld belongs to different DU (assoc_id %d vs %d), ignoring gNB-DU configuration update\n",
             old_nci,
             cell->assoc_id,
             du->assoc_id);
+      return;
+    }
+    cell = update_cell_info(rrc, old_nci, new_ci);
+    if (cell == NULL) {
+      LOG_W(NR_RRC, "Failed to update cell %ld, ignoring gNB-DU configuration update\n", old_nci);
       return;
     }
 

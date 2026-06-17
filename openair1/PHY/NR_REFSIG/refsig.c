@@ -4,67 +4,33 @@
 
 #include "nr_refsig.h"
 #include "openair1/PHY/gold.h"
+#include "ds/hashtable.h"
 
-#define REFRESH_RATE (1000 * 100)
+#define GOLD_HT_SIZE 1024
+static const int grain = 64 / sizeof(uint32_t); // align to 64 bytes for AVX-512
 
 typedef struct {
-  int key;
   int length;
-  int usage;
-} gold_cache_t;
+  uint32_t *seq; // 64-byte aligned sequence data
+} gold_entry_t;
 
-typedef struct {
-  uint32_t *table;
-  uint32_t tblSz;
-  int calls;
-  int iterate;
-} gold_cache_table_t;
-static const int roundedHeaderSz = (((sizeof(gold_cache_t) + 63) / 64) * 64) / sizeof(uint32_t);
-static const int grain = 64 / sizeof(uint32_t);
-
-// Allocate, also reorder to have the most frequent first, so the cache search is optimized
-static void refresh_table(gold_cache_table_t *t, int sizeIncrease)
+static void gold_entry_free(void *ptr)
 {
-  uint32_t *old = t->table;
-  uint oldSz = t->tblSz;
-  if (t->tblSz == 0)
-    t->tblSz = PAGE_SIZE / sizeof(*t->table);
-  if (sizeIncrease)
-    t->tblSz += max(sizeIncrease, PAGE_SIZE / sizeof(*t->table));
-  int ret = posix_memalign((void **)&t->table, 64, t->tblSz * sizeof(*t->table));
-  AssertFatal(ret == 0, "No more memory");
-  LOG_D(PHY,
-        "re-organize gold sequence table to %lu pages of memory calls since last reorder: %d, search rate: %f\n",
-        t->tblSz * sizeof(*t->table) / PAGE_SIZE,
-        t->calls,
-        t->calls ? t->iterate / (float)t->calls : 0.0);
-  int maxUsage;
-  uint32_t *currentTmp = t->table;
-  do {
-    maxUsage = 0;
-    gold_cache_t *entryToCopy = NULL;
-    for (uint32_t *searchmax = old; searchmax < old + oldSz; searchmax += roundedHeaderSz) {
-      gold_cache_t *tbl = (gold_cache_t *)searchmax;
-      if (!tbl->length)
-        break;
-      if (tbl->usage > maxUsage) {
-        maxUsage = tbl->usage;
-        entryToCopy = tbl;
-      }
-      searchmax += tbl->length;
-    }
-    if (maxUsage) {
-      memcpy(currentTmp, entryToCopy, (roundedHeaderSz + entryToCopy->length) * sizeof(*t->table));
-      currentTmp += roundedHeaderSz + entryToCopy->length;
-      entryToCopy->usage = 0;
-    }
-  } while (maxUsage);
-  const uint usedSz = currentTmp - t->table;
-  memset(t->table + usedSz, 0, (t->tblSz - usedSz) * sizeof(*t->table));
-  free(old);
-  t->calls = 0;
-  t->iterate = 0;
-  return;
+  gold_entry_t *e = (gold_entry_t *)ptr;
+  free(e->seq);
+  free(e);
+}
+
+static uint32_t *gold_generate(uint32_t key, int length)
+{
+  uint32_t *seq;
+  int ret = posix_memalign((void **)&seq, 64, length * sizeof(uint32_t));
+  AssertFatal(ret == 0, "gold_generate: out of memory\n");
+  unsigned int x1 = 0, x2 = key;
+  seq[0] = gold_generic(&x1, &x2, 1);
+  for (int n = 1; n < length; n++)
+    seq[n] = gold_generic(&x1, &x2, 0);
+  return seq;
 }
 
 static pthread_key_t gold_table_key;
@@ -72,13 +38,11 @@ static pthread_once_t gold_key_once = PTHREAD_ONCE_INIT;
 
 static void delete_table(void *ptr)
 {
-  gold_cache_table_t *table = (gold_cache_table_t *)ptr;
-  if (table->table)
-    free(table->table);
-  free(ptr);
+  hash_table_t *ht = (hash_table_t *)ptr;
+  hashtable_destroy(&ht);
 }
 
-static void make_table_key()
+static void make_table_key(void)
 {
   (void)pthread_key_create(&gold_table_key, delete_table);
 }
@@ -86,66 +50,30 @@ static void make_table_key()
 uint32_t *gold_cache(uint32_t key, int length)
 {
   (void)pthread_once(&gold_key_once, make_table_key);
-  gold_cache_table_t *tableCache;
-  if ((tableCache = pthread_getspecific(gold_table_key)) == NULL) {
-    tableCache = calloc(1, sizeof(gold_cache_table_t));
-    (void)pthread_setspecific(gold_table_key, tableCache);
+  hash_table_t *ht;
+  if ((ht = pthread_getspecific(gold_table_key)) == NULL) {
+    ht = hashtable_create(GOLD_HT_SIZE, NULL, gold_entry_free);
+    AssertFatal(ht, "gold_cache: hashtable_create failed\n");
+    (void)pthread_setspecific(gold_table_key, ht);
   }
 
-  // align for AVX512
   length = ((length + grain - 1) / grain) * grain;
-  tableCache->calls++;
 
-  // periodic refresh
-  if (tableCache->calls > REFRESH_RATE)
-    refresh_table(tableCache, 0);
-
-  uint32_t *ptr = tableCache->table;
-  // check if already cached
-  for (; ptr < tableCache->table + tableCache->tblSz; ptr += roundedHeaderSz) {
-    gold_cache_t *tbl = (gold_cache_t *)ptr;
-    tableCache->iterate++;
-    if (tbl->length >= length && tbl->key == key) {
-      tbl->usage++;
-      return ptr + roundedHeaderSz;
-    }
-    if (tbl->key == key) {
-      // We use a longer sequence, same key
-      // let's delete the shorter and force reorganize
-      tbl->usage = 0;
-      tableCache->calls += REFRESH_RATE;
-    }
-    if (!tbl->length)
-      break;
-    ptr += tbl->length;
+  gold_entry_t *entry = NULL;
+  if (hashtable_get(ht, key, (void **)&entry) == HASH_TABLE_OK) {
+    if (entry->length >= length)
+      return entry->seq;
+    // same key but need longer sequence: replace
+    hashtable_remove(ht, key);
   }
 
-  // not enough space in the table
-  if (!ptr || ptr > tableCache->table + tableCache->tblSz - (2 * roundedHeaderSz + length))
-    refresh_table(tableCache, 2 * roundedHeaderSz + length);
-
-  // We will add a new entry
-  uint32_t *firstFree;
-  int size = 0;
-  for (firstFree = tableCache->table; firstFree < tableCache->table + tableCache->tblSz; firstFree += roundedHeaderSz) {
-    gold_cache_t *tbl = (gold_cache_t *)firstFree;
-    if (!tbl->length)
-      break;
-    firstFree += tbl->length;
-    size++;
-  }
-  if (!tableCache->calls)
-    LOG_D(PHY, "Number of entries (after reorganization) in gold cache: %d\n", size);
-
-  gold_cache_t *new = (gold_cache_t *)firstFree;
-  *new = (gold_cache_t){.key = key, .length = length, .usage = 1};
-  unsigned int x1 = 0, x2 = key;
-  uint32_t *sequence = firstFree + roundedHeaderSz;
-  *sequence++ = gold_generic(&x1, &x2, 1);
-  for (int n = 1; n < length; n++)
-    *sequence++ = gold_generic(&x1, &x2, 0);
-  LOG_D(PHY, "created a gold sequence, start %d; len %d\n", key, length);
-  return firstFree + roundedHeaderSz;
+  entry = malloc(sizeof(*entry));
+  AssertFatal(entry, "gold_cache: out of memory\n");
+  entry->length = length;
+  entry->seq = gold_generate(key, length);
+  hashtable_insert(ht, key, entry);
+  LOG_D(PHY, "gold_cache: new entry key=%u len=%d\n", key, length);
+  return entry->seq;
 }
 
 uint32_t *nr_gold_pbch(int Lmax, int Nid, int n_hf, int l)

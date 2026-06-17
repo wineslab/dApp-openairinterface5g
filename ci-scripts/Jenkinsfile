@@ -20,12 +20,11 @@ if (params.LockResources != null && params.LockResources.trim().length() > 0)
 // Global Parameters. Normally they should be populated when the master job
 // triggers the slave job with parameters
 
-def sourceRepository = params.eNB_Repository ?: env.GIT_URL
-def sourceBranch = params.eNB_Branch ?: env.GIT_BRANCH
-def targetRepository = params.Target_Repository ?: sourceRepository
-def targetBranch = params.eNB_TargetBranch ?: 'develop'
-def commitID = params.eNB_CommitID ?: env.GIT_COMMIT
-def is_MR = params.eNB_mergeRequest ?: false
+def targetBranch = params.targetBranch ?: 'develop'
+def testRepository = params.repository ?: 'git@asterix:/home/git/openairinterface5g.git'
+def testBranch = params.branch ?: 'develop'
+def mergeWithTarget = params.mergeWithTarget ?: false
+def sourceBranch = params.sourceBranch ?: testBranch
 
 def flexricOption = ""
 def runWithOC = false
@@ -40,17 +39,23 @@ pipeline {
     timestamps()
     ansiColor('xterm')
     lock(extra: lockResources)
+    skipDefaultCheckout()
   }
 
   stages {
     stage("Build Init") {
       steps {
+        checkout(
+          scmGit(branches: [[name: "${branch}"]],
+                 userRemoteConfigs: [[url: "${repository}"]],
+                 extensions: [cleanBeforeCheckout()])
+        )
         script {
           echo '\u2705 \u001B[94mBuild Init\u001B[0m'
           JOB_TIMESTAMP = sh(returnStdout: true, script: 'date --utc --rfc-3339=seconds | sed -e "s#+00:00##"').trim()
         }
         // update the build name and description
-        buildName "${params.eNB_MR}"
+        buildName "${params.requestNumber}"
         buildDescription "Branch : ${sourceBranch}"
       }
     }
@@ -64,12 +69,12 @@ pipeline {
             echo "no LockResources given"
             allParametersPresent = false
           }
-          if (params.eNB_SourceCodePath == null) {
-            echo "no eNB_SourceCodePath given"
+          if (params.workspace == null) {
+            echo "no workspace given"
             allParametersPresent = false
           }
           if (params.OC_Credentials != null) {
-            echo "This pipeline is configured to run with Opensift Cluster."
+            echo "This pipeline is configured to run with Openshift Cluster."
             runWithOC = true
             if (params.OC_ProjectName == null) {
               echo "no OC_ProjectName given"
@@ -84,21 +89,11 @@ pipeline {
           }
 
           echo "CI executor node    :   ${pythonExecutor}"
-          echo "Source Repository   :   ${sourceRepository}"
-          echo "Source Branch       :   ${sourceBranch}"
-          echo "Target Repository   :   ${targetRepository}"
-          echo "Target Branch       :   ${targetBranch}"
-          echo "Commit ID           :   ${commitID}"
+          echo "Testing Repository  :   ${testRepository}"
+          echo "Testing Branch      :   ${testBranch}"
 
           if (allParametersPresent) {
             echo '\u2705 \u001B[94m All parameters are present\u001B[0m'
-            if (is_MR) {
-              sh "git fetch"
-              sh "./ci-scripts/doGitLabMerge.sh --src-branch ${sourceBranch} --src-commit ${commitID} --target-branch ${targetBranch} --target-commit latest"
-            } else {
-              sh "git fetch"
-              sh "git checkout -f ${commitID}"
-            }
           } else {
             echo "\u274C Some parameters are missing"
             sh "./ci-scripts/fail.sh"
@@ -121,28 +116,20 @@ pipeline {
               }
             }
             sh """
-              python3 main.py --mode=InitiateHtml --ranRepository=${targetRepository} \
-                              --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
-                              --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
-                              ${flexricOption} ${mainPythonAllXmlFiles}
+              python3 main.py --mode=InitiateHtml --repository=${testRepository} \
+                              --branch=${testBranch} ${mainPythonAllXmlFiles}
             """
             if (runWithOC) {
               withCredentials([usernamePassword(credentialsId: "${params.OC_Credentials}", usernameVariable: 'OC_Username', passwordVariable: 'OC_Password')]) {
-                sh """
-                  python3 main.py --mode=InitiateHtml --ranRepository=${targetRepository} \
-                                  --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
-                                  --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
-                                  ${flexricOption} ${mainPythonAllXmlFiles}
-                """
                 for (xmlFile in myXmlTestSuite) {
                   if (fileExists(xmlFile)) {
                     try {
                       timeout (time: 60, unit: 'MINUTES') {
                         sh """
-                          python3 main.py --mode=TesteNB --ranRepository=${targetRepository} \
-                                          --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
-                                          --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
-                                          --eNBSourceCodePath=${params.eNB_SourceCodePath} --XMLTestFile=${xmlFile} \
+                          python3 main.py --mode=TesteNB --repository=${testRepository} \
+                                          --branch=${testBranch} \
+                                          --ranAllowMerge=${mergeWithTarget} --targetBranch=${targetBranch} \
+                                          --workspace=${params.workspace} --XMLTestFile=${xmlFile} \
                                           --OCUserName=${OC_Username} --OCPassword=${OC_Password} --OCProjectName=${OC_ProjectName} \
                                           ${flexricOption}
                         """
@@ -160,10 +147,10 @@ pipeline {
                   try {
                     timeout (time: 60, unit: 'MINUTES') {
                       sh """
-                        python3 main.py --mode=TesteNB --ranRepository=${targetRepository} \
-                                        --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
-                                        --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
-                                        --eNBSourceCodePath=${params.eNB_SourceCodePath} --XMLTestFile=${xmlFile} \
+                        python3 main.py --mode=TesteNB --repository=${testRepository} \
+                                        --branch=${testBranch} \
+                                        --ranAllowMerge=${mergeWithTarget} --targetBranch=${targetBranch} \
+                                        --workspace=${params.workspace} --XMLTestFile=${xmlFile} \
                                         ${flexricOption}
                       """
                     }

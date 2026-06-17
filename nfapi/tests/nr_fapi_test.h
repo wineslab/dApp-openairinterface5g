@@ -17,6 +17,8 @@
 #include "nfapi_nr_interface.h"
 #include "nfapi_nr_interface_scf.h"
 
+#include "common/platform_types.h"
+
 #define FILL_TLV(TlV, TaG, VaL) \
   do {                          \
     TlV.tl.tag = TaG;           \
@@ -63,8 +65,6 @@ uint32_t rand32_range(uint32_t lower, uint32_t upper)
 {
   return (rand() % (upper - lower + 1)) + lower;
 }
-
-int main(int n, char *v[]);
 
 static inline void fapi_test_init_seeded(time_t seed)
 {

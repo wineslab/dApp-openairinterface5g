@@ -12,6 +12,12 @@
 #include "rrc_extern.h"
 #include "openair2/RRC/NR/rrc_gNB_NGAP.h"
 
+#include "F1AP_UEContextModificationRequired.h"
+#include "F1AP_InitiatingMessage.h"
+#include "F1AP_SuccessfulOutcome.h"
+#include "F1AP_UnsuccessfulOutcome.h"
+#include "F1AP_ProtocolIE-Field.h"
+
 #ifdef E2_AGENT
 #include "openair2/RRC/NR/rrc_gNB_UE_context.h"
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"

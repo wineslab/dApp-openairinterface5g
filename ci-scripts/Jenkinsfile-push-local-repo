@@ -23,79 +23,98 @@ pipeline {
     lock(extra: lockResources)
   }
   stages {
+    stage("Job init") {
+      steps {
+        buildName "${params.requestNumber ?: params.targetBranch}"
+        buildDescription "Branch: ${params.sourceBranch}"
+      }
+    }
+    stage('Checkout') {
+      steps {
+        script {
+          if (params.mergeWithTarget) {
+            echo "PR triggered - checking out merge ref for PR #${params.requestNumber}"
+            try {
+              checkout([
+                $class: 'GitSCM',
+                branches: [[name: "refs/remotes/origin/pr/${params.requestNumber}/merge"]],
+                userRemoteConfigs: [[
+                  url: params.targetRepo,
+                  refspec: "+refs/pull/${params.requestNumber}/merge:refs/remotes/origin/pr/${params.requestNumber}/merge",
+                  credentialsId: 'github-jenkins-duranta'
+                ]]
+              ])
+            } catch (e) {
+              error("Checkout failed for PR #${params.requestNumber} - " +
+                    "merge ref not found. The PR likely has a conflict with ${params.targetBranch} " +
+                    "that must be resolved before CI can run. (${e.message})")
+            }
+          } else {
+            echo "Push triggered - checking out branch ${params.targetBranch}"
+            try {
+              checkout([
+                $class: 'GitSCM',
+                branches: [[name: params.targetBranch]],
+                userRemoteConfigs: [[
+                  url: params.targetRepo,
+                  credentialsId: 'github-jenkins-duranta'
+                ]]
+              ])
+            } catch (e) {
+              error("Checkout failed for branch ${params.targetBranch} from ${params.targetRepo}. (${e.message})")
+            }
+          }
+        }
+      }
+    }
     stage('Verify parameters') {
       steps {
         script {
           def missingParams = []
-          if (!params.SourceRepo?.trim())       { missingParams << 'SourceRepo' }
-          if (!params.eNB_Branch?.trim())       { missingParams << 'eNB_Branch' }
-          if (!params.eNB_CommitID?.trim())     { missingParams << 'eNB_CommitID' }
-          if (!params.eNB_TargetBranch?.trim()) { missingParams << 'eNB_TargetBranch' }
-          if (!params.eNB_Repository?.trim())   { missingParams << 'eNB_Repository' }
+          if (!params.sourceBranch?.trim())   { missingParams << 'sourceBranch' }
+          if (!params.sourceCommit?.trim()) { missingParams << 'sourceCommit' }
+          if (params.mergeWithTarget) {
+            if (!params.targetRepo?.trim())   { missingParams << 'targetRepo' }
+            if (!params.targetBranch?.trim()) { missingParams << 'targetBranch' }
+          }
 
           if (missingParams) {
             error "Missing required parameters: ${missingParams.join(', ')}"
           }
 
-          echo "Source Repo   : ${params.SourceRepo}"
-          echo "Source Branch : ${params.eNB_Branch}"
-          echo "Source Commit : ${params.eNB_CommitID}"
-          echo "Target Branch : ${params.eNB_TargetBranch}"
-          echo "Target Repo   : ${params.eNB_Repository}"
+          echo "Source Branch : ${params.sourceBranch}"
+          echo "Source Commit : ${params.sourceCommit}"
+          echo "Merge         : ${params.mergeWithTarget}"
+          if (params.mergeWithTarget) {
+            echo "Target Branch : ${params.targetBranch}"
+            echo "Target Repo   : ${params.targetRepo}"
+          }
         }
       }
     }
     stage('Prepare workspace') {
       steps {
         sh """
-          git config user.email "jenkins@openairinterface.org"
-          git config user.name "OAI Jenkins"
-          git remote remove source || true
+          git config user.email "oaicicdteam@openairinterface.org"
+          git config user.name "Duranta Jenkins"
           git remote remove internal-repo || true
         """
       }
     }
-    stage('Add source repo & fetch branches') {
+    stage('Create testing branch for CI') {
       steps {
-        sh """
-          git remote add source ${params.SourceRepo} || true
-          git fetch source ${params.eNB_Branch}
-          git fetch origin ${params.eNB_TargetBranch}
-        """
-      }
-    }
-    stage('Create temporary branch for CI') {
-      steps {
-        script {
-          def shortCommit = params.eNB_CommitID.take(8)
-          env.NEW_BRANCH = "${params.eNB_Branch}-${shortCommit}"
-          echo "New branch: ${env.NEW_BRANCH}"
-        }
         sh """
           # Checkout source commit
-          git checkout -B ${env.NEW_BRANCH} ${params.eNB_CommitID}
-        """
-      }
-    }
-    stage('Merge target into source') {
-      steps {
-        sh """
-          echo "Merging target branch ${params.eNB_TargetBranch} into source branch ${env.NEW_BRANCH}"
-          if ! git merge --ff origin/${params.eNB_TargetBranch} \
-            -m "Merge ${params.eNB_TargetBranch} into ${params.eNB_Branch} for CI"; then
-            echo "Merge conflicts detected. Aborting."
-            git merge --abort || true
-            exit 1
-          fi
+          git checkout -B ${params.branch}
         """
       }
     }
     stage('Push merged branch to internal repository') {
       steps {
         sh """
-          git remote add internal-repo ${internalRepoURL} || true
-          echo "Pushing ${env.NEW_BRANCH} to internal repo"
-          git push --force internal-repo ${env.NEW_BRANCH}
+          git remote add internal-repo ${params.repository} || true
+          echo "Pushing ${params.branch} to internal repo"
+          git push --force internal-repo ${params.branch}
         """
       }
     }

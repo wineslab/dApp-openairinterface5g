@@ -1296,7 +1296,7 @@ static inline void nrLDPC_bnProc(t_nrLDPC_lut* p_lut, int8_t* bnProcBuf, int8_t*
    \param llrOut Pointer to output LLRs
    \param numLLR Number of LLRs
 */
-static inline void nrLDPC_llr2bit(int8_t* out, int8_t* llrOut, uint16_t numLLR)
+static inline void nrLDPC_llr2bit(uint8_t* out, int8_t* llrOut, uint16_t numLLR)
 {
     simde__m256i* p_llrOut = (simde__m256i*) llrOut;
     simde__m256i* p_out    = (simde__m256i*) out;
@@ -1313,7 +1313,7 @@ static inline void nrLDPC_llr2bit(int8_t* out, int8_t* llrOut, uint16_t numLLR)
 
   // Remaining LLRs that do not fit in multiples of 32 bytes
   int8_t* p_llrOut8 = (int8_t*)p_llrOut;
-  int8_t* p_out8 = (int8_t*)p_out;
+  uint8_t* p_out8 = (uint8_t*)p_out;
 
   for (uint32_t i = 0; i < Mr; i++)
     p_out8[i] = p_llrOut8[i] < 0;
@@ -1328,7 +1328,7 @@ static inline void nrLDPC_llr2bit(int8_t* out, int8_t* llrOut, uint16_t numLLR)
    \param llrOut Pointer to output LLRs
    \param numLLR Number of LLRs
 */
-static inline void nrLDPC_llr2bitPacked(int8_t* out, int8_t* llrOut, uint16_t numLLR)
+static inline void nrLDPC_llr2bitPacked(uint8_t* out, int8_t* llrOut, uint16_t numLLR)
 {
     /** Vector of indices for shuffling input */
     const uint8_t constShuffle_256_epi8[32] __attribute__ ((aligned(32))) = {7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8};

@@ -26,7 +26,7 @@ class ChannelConvolutionTest : public ::testing::TestWithParam<std::tuple<int, i
  protected:
   void SetUp() override
   {
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
     gpu_context = cuda_channel_pipeline_init(614400 * 4);
 #endif
     tpool = init_tpool(8);
@@ -35,7 +35,7 @@ class ChannelConvolutionTest : public ::testing::TestWithParam<std::tuple<int, i
 
   void TearDown() override
   {
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
     cuda_channel_pipeline_shutdown(gpu_context);
 #endif
     destroy_tpool(tpool);
@@ -46,7 +46,7 @@ class ChannelConvolutionTest : public ::testing::TestWithParam<std::tuple<int, i
   void *tpool = nullptr;
 };
 
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
 TEST_P(ChannelConvolutionTest, CompareCpuGpu)
 {
   int nb_rx = std::get<0>(GetParam());

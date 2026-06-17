@@ -230,6 +230,7 @@ Msg1_transmitted(module_id_t module_idP, uint8_t CC_id,
   // start contention resolution timer
   UE_mac_inst[module_idP].RA_attempt_number++;
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = NULL,
                     .pdu_buffer_size = 0,
                     .ueid = module_idP,
@@ -255,6 +256,7 @@ Msg3_transmitted(module_id_t module_idP, uint8_t CC_id,
   UE_mac_inst[module_idP].RA_contention_resolution_cnt = 0;
   UE_mac_inst[module_idP].RA_contention_resolution_timer_active = 1;
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = UE_mac_inst[module_idP].CCCH_pdu.payload,
                     .pdu_buffer_size = UE_mac_inst[module_idP].RA_Msg3_size,
                     .ueid = module_idP,

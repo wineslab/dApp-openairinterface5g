@@ -20,7 +20,7 @@ Ref :
   DL & UL scheduling timing : 8.0
   UL Indication : 3.0
   Slot Indication : 9.0
-  feprx : 85.0
+  feprx : 50.0
   feptx_ofdm (per port, half_slot) : 31
   feptx_total : 92
 DeviationThreshold :

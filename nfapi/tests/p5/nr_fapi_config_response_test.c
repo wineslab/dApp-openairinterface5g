@@ -97,7 +97,7 @@ void test_copy(const nfapi_nr_config_response_scf_t *msg)
   free_config_response(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

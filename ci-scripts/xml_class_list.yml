@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LicenseRef-CSSL-1.0
-  - Build_Proxy
   - Build_Cluster_Image
   - Pull_Cluster_Image
   - Build_eNB
@@ -34,3 +33,5 @@
   - Create_Workspace
   - AnalyzeRTStats
   - AnalyzeRTStats_Object
+  - DeployWithScript
+  - UndeployWithScript

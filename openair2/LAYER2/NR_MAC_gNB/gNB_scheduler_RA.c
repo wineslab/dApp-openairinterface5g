@@ -490,9 +490,18 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
           prach_pdu->num_prach_ocas = num_td_occ;
           prach_pdu->beamforming.num_prgs = 1;
           prach_pdu->beamforming.prg_size = n_ra_rb;
-          prach_pdu->beamforming.dig_bf_interface = num_td_occ;
+          // Spatial stream indices
+          const uint16_t num_log_ports = gNB->radio_config.pusch_AntennaPorts;
+          const uint8_t num_beams = beam.idx + 1;
+          prach_pdu->param_v4.numSpatialStreamIndices = num_beams * num_log_ports;
+          const int start_stream_idx = beam.idx * num_log_ports;
+          for (int s = 0; s < num_log_ports; s++)
+            prach_pdu->param_v4.spatialStreamIndices[start_stream_idx + s] =
+                gNB->radio_config.spatial_stream_index[start_stream_idx + s];
+          // Beam id
           const uint16_t fapi_beam = convert_to_fapi_beam(beam_index, gNB->beam_info.beam_mode);
-          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[num_td_occ - 1].beam_idx = fapi_beam;
+          prach_pdu->beamforming.dig_bf_interface = num_beams;
+          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[beam.idx].beam_idx = fapi_beam;
 
           LOG_D(NR_MAC,
                 "Frame %d, Slot %d: Prach Occasion id = %u  fdm index = %u start symbol = %u slot index = %u subframe index = %u \n",
@@ -836,6 +845,12 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
     .dmrs_info = dmrs_info,
   };
 
+  // Map antenna ports for this UE
+  sched_pusch.ant_port_idx.numSpatialStreamIndices = nr_mac->radio_config.pusch_AntennaPorts;
+  const int start_stream_idx = beam_ul.idx * nr_mac->radio_config.pusch_AntennaPorts;
+  for (int i = 0; i < sched_pusch.ant_port_idx.numSpatialStreamIndices; i++)
+    sched_pusch.ant_port_idx.spatialStreamIndices[i] = nr_mac->radio_config.spatial_stream_index[start_stream_idx + i];
+
   const int bwpStart = sched_pusch.bwp_info.bwpStart;
   const int bwpSize = sched_pusch.bwp_info.bwpSize;
   int rbStart = 0;
@@ -914,8 +929,15 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
 
   // Fill PDCCH DL DCI PDU
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode);
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, ss, coreset, aggregation_level, CCEIndex, fapi_beam, UE->rnti);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                   scc,
+                                                   ss,
+                                                   coreset,
+                                                   sched_pusch.ant_port_idx.spatialStreamIndices,
+                                                   aggregation_level,
+                                                   CCEIndex,
+                                                   fapi_beam,
+                                                   UE->rnti);
   pdcch_pdu_rel15->numDlDci++;
 
   dci_pdu_rel15_t uldci_payload = {0};
@@ -940,6 +962,7 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                      &uldci_payload,
                      NR_UL_DCI_FORMAT_0_0,
                      TYPE_TC_RNTI_,
+                     0,
                      ss,
                      coreset,
                      0, // parameter not needed for DCI 0_0
@@ -1198,7 +1221,8 @@ static bool nr_get_Msg3alloc(gNB_MAC_INST *mac, int CC_id, int current_slot, fra
   return true;
 }
 
-static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_t slotP, NR_UE_info_t *UE, uint8_t *RAR_pdu)
+static void
+nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_t slotP, NR_UE_info_t *UE, uint8_t *RAR_pdu, int beam_number)
 {
   gNB_MAC_INST *mac = RC.nrmac[module_idP];
   NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
@@ -1256,19 +1280,21 @@ static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_
                          1) >> 3;
   }
 
-  NR_sched_pusch_t sched_pusch = {
-    .bwp_info.bwpSize = sc_info->initial_ul_BWPSize,
-    .bwp_info.bwpStart = ra->msg3_bwp_start,
-    .rbSize = ra->msg3_nb_rb,
-    .rbStart = ra->msg3_first_rb,
-    .tb_size = TBS,
-    .R = R,
-    .Qm = Qm,
-    .mcs = mcsindex,
-    .nrOfLayers = 1,
-    .tda_info = tda_info,
-    .dmrs_info = dmrs_info
-  };
+  NR_sched_pusch_t sched_pusch = {.bwp_info.bwpSize = sc_info->initial_ul_BWPSize,
+                                  .bwp_info.bwpStart = ra->msg3_bwp_start,
+                                  .rbSize = ra->msg3_nb_rb,
+                                  .rbStart = ra->msg3_first_rb,
+                                  .tb_size = TBS,
+                                  .R = R,
+                                  .Qm = Qm,
+                                  .mcs = mcsindex,
+                                  .nrOfLayers = 1,
+                                  .tda_info = tda_info,
+                                  .dmrs_info = dmrs_info,
+                                  .ant_port_idx = {.numSpatialStreamIndices = mac->radio_config.pusch_AntennaPorts}};
+  const int start_stream_idx = beam_number * mac->radio_config.pusch_AntennaPorts;
+  for (int i = 0; i < sched_pusch.ant_port_idx.numSpatialStreamIndices; i++)
+    sched_pusch.ant_port_idx.spatialStreamIndices[i] = mac->radio_config.spatial_stream_index[start_stream_idx + i];
 
   LOG_D(NR_MAC,
         "UE %04x: %d.%d Adding Msg3 UL Config Request for (%d,%d) : (%d,%d,%d)\n",
@@ -1429,8 +1455,15 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                                          pduindex);
 
   /* Fill PDCCH DL DCI PDU */
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, sched_ctrl->search_space, coreset, aggregation_level, CCEIndex, fapi_beam, rnti);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                   scc,
+                                                   sched_ctrl->search_space,
+                                                   coreset,
+                                                   sched_pdsch->ant_port_idx.spatialStreamIndices,
+                                                   aggregation_level,
+                                                   CCEIndex,
+                                                   fapi_beam,
+                                                   rnti);
   pdcch_pdu_rel15->numDlDci++;
 
   int tpc = 1; // 0dB change, don't know how to determine this.
@@ -1477,6 +1510,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                      &dci_payload,
                      NR_DL_DCI_FORMAT_1_0,
                      rnti_type,
+                     0,
                      sched_ctrl->search_space,
                      coreset,
                      0, // parameter not needed for DCI 1_0
@@ -1668,20 +1702,25 @@ static void nr_generate_Msg2(module_id_t module_idP,
           >> 3; // layers
   }
 
+  const nr_pdsch_AntennaPorts_t *p = &nr_mac->radio_config.pdsch_AntennaPorts;
+  const uint16_t num_log_ports_beam = p->N1 * p->N2 * p->XP;
   NR_sched_pdsch_t sched_pdsch = {
-    .R = R,
-    .Qm = Qm,
-    .mcs = mcsIndex,
-    .time_domain_allocation = time_domain_assignment,
-    .nrOfLayers = 1,
-    .dmrs_parms = dmrs_parms,
-    .tda_info = tda_info,
-    .pm_index = 0,
-    .tb_size = TBS,
-    .bwp_info = bwp_info,
-    .rbStart = rbStart,
-    .rbSize = rbSize
-  };
+      .R = R,
+      .Qm = Qm,
+      .mcs = mcsIndex,
+      .time_domain_allocation = time_domain_assignment,
+      .nrOfLayers = 1,
+      .dmrs_parms = dmrs_parms,
+      .tda_info = tda_info,
+      .pm_index = 0,
+      .tb_size = TBS,
+      .bwp_info = bwp_info,
+      .rbStart = rbStart,
+      .rbSize = rbSize,
+      // no of layers 1 and pmi 0 gives only one log antenna port
+      .ant_port_idx = {.numSpatialStreamIndices = 1,
+                       .spatialStreamIndices[0] = nr_mac->radio_config.spatial_stream_index[beam.idx * num_log_ports_beam]}};
+
   prepare_dl_pdus(nr_mac,
                   UE,
                   &sched_pdsch,
@@ -1705,7 +1744,7 @@ static void nr_generate_Msg2(module_id_t module_idP,
   // but required Msg3. Also, "if RAR includes a MAC subPDU with RAPID: [...]
   // indicate the reception of an acknowledgement for SI request to upper
   // layers." which is not the case here.
-  nr_add_msg3(module_idP, CC_id, frameP, slotP, UE, (uint8_t *)&tx_req->TLVs[0].value.direct[0]);
+  nr_add_msg3(module_idP, CC_id, frameP, slotP, UE, (uint8_t *)&tx_req->TLVs[0].value.direct[0], beam.idx);
 
   if (!ra->cfra) {
     LOG_D(NR_MAC,
@@ -1960,20 +1999,24 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
     }
 
     rnti_t rnti = ra->ra_type == RA_4_STEP ? UE->rnti : ra->MsgB_rnti;
+    const nr_pdsch_AntennaPorts_t *p = &nr_mac->radio_config.pdsch_AntennaPorts;
+    const int num_log_ports = p->N1 * p->N2 * p->XP;
     NR_sched_pdsch_t sched_pdsch = {
-      .R = nr_get_code_rate_dl(mcsIndex, mcsTableIdx),
-      .Qm = nr_get_Qm_dl(mcsIndex, mcsTableIdx),
-      .mcs = mcsIndex,
-      .time_domain_allocation = time_domain_assignment,
-      .nrOfLayers = 1,
-      .dmrs_parms = dmrs_info,
-      .tda_info = msg4_tda,
-      .pm_index = 0,
-      .tb_size = tb_size,
-      .bwp_info = bwp_info,
-      .rbStart = rbStart,
-      .rbSize = rbSize
-    };
+        .R = nr_get_code_rate_dl(mcsIndex, mcsTableIdx),
+        .Qm = nr_get_Qm_dl(mcsIndex, mcsTableIdx),
+        .mcs = mcsIndex,
+        .time_domain_allocation = time_domain_assignment,
+        .nrOfLayers = 1,
+        .dmrs_parms = dmrs_info,
+        .tda_info = msg4_tda,
+        .pm_index = 0,
+        .tb_size = tb_size,
+        .bwp_info = bwp_info,
+        .rbStart = rbStart,
+        .rbSize = rbSize,
+        .ant_port_idx = {.numSpatialStreamIndices = 1,
+                         .spatialStreamIndices[0] = nr_mac->radio_config.spatial_stream_index[beam.idx * num_log_ports]}};
+
     const int pduindex = nr_mac->pdu_index[CC_id]++;
     prepare_dl_pdus(nr_mac,
                     UE,

@@ -101,7 +101,7 @@ typedef struct {
   /// \brief Anaglogue beam ID for each OFDM symbol (used when beamforming not done in RU)
   /// - first index: concurrent beam
   /// - second index: beam_id [0.. symbols_per_frame[
-  int **beam_id;
+  uint16_t **beam_id;
 } RU_COMMON;
 
 
@@ -435,10 +435,6 @@ typedef struct RU_t_s {
   int nb_rx;
   /// number of TX paths on device
   int nb_tx;
-  /// number of concurrent analog beams in period
-  int num_beams_period;
-  /// number of logical antennas at TX beamformer input
-  int nb_log_antennas;
   /// maximum PDSCH RS EPRE
   int max_pdschReferenceSignalPower;
   /// maximum RX gain
@@ -504,7 +500,7 @@ typedef struct RU_t_s {
   int (*stop_rf)(struct RU_t_s *ru);
   /// function pointer to initialization function for radio interface
   int (*start_if)(struct RU_t_s *ru, struct PHY_VARS_eNB_s *eNB);
-  int (*nr_start_if)(struct RU_t_s *ru, struct PHY_VARS_gNB_s *gNB);
+  int (*nr_start_if)(struct RU_t_s *ru);
   /// function pointer to RX front-end processing routine (DFTs/prefix removal or NULL)
   void (*feprx)(struct RU_t_s *ru, int subframe);
   /// function pointer to TX front-end processing routine (IDFTs and prefix removal or NULL)

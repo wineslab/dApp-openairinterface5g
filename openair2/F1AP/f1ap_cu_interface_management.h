@@ -5,6 +5,11 @@
 #ifndef F1AP_CU_INTERFACE_MANAGEMENT_H_
 #define F1AP_CU_INTERFACE_MANAGEMENT_H_
 
+#include "openair2/COMMON/f1ap_messages_types.h"
+
+struct F1AP_F1AP_PDU;
+typedef struct F1AP_F1AP_PDU F1AP_F1AP_PDU_t;
+
 /*
  * Reset
  */

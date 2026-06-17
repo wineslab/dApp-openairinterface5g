@@ -5,7 +5,7 @@
 #ifndef __NR_ESTIMATION_DEFS__H__
 #define __NR_ESTIMATION_DEFS__H__
 
-#include "PHY/nr_phy_common/inc/nr_phy_common.h"
+#include "common/utils/bits.h"
 #include "PHY/defs_nr_UE.h"
 
 /** @addtogroup _PHY_PARAMETER_ESTIMATION_BLOCKS_
@@ -44,20 +44,17 @@ c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
                                const int Nid_cell,
                                const int ssb_start_subcarrier,
                                const uint32_t nr_gold_pbch[NR_PBCH_DMRS_LENGTH_DWORD],
-                               const c16_t rxdataF[][fp->samples_per_slot_wCP]);
+                               const c16_t rxdataF[fp->nb_antennas_rx][fp->ofdm_symbol_size]);
 
 int nr_pbch_channel_estimation(const NR_DL_FRAME_PARMS *fp,
                                const sl_nr_ue_phy_params_t *sl_phy_params,
-                               int estimateSz,
-                               struct complex16 dl_ch_estimates[][estimateSz],
-                               struct complex16 dl_ch_estimates_time[][fp->ofdm_symbol_size],
+                               c16_t dl_ch_estimates[fp->ofdm_symbol_size],
                                const UE_nr_rxtx_proc_t *proc,
-                               unsigned char symbol,
                                int dmrss,
                                uint ssb_index,
                                uint n_hf,
                                int ssb_start_subcarrier,
-                               const c16_t rxdataF[][fp->samples_per_slot_wCP],
+                               const c16_t rxdataF[fp->ofdm_symbol_size],
                                bool sidelink,
                                uint Nid);
 
@@ -74,12 +71,11 @@ void nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
                                  c16_t rxdataF[][rxdataFsize],
                                  uint32_t *nvar);
 
-int nr_adjust_synch_ue(NR_DL_FRAME_PARMS *frame_parms,
+int nr_adjust_synch_ue(const NR_DL_FRAME_PARMS *frame_parms,
                        PHY_VARS_NR_UE *ue,
-                       int estimateSz,
-                       struct complex16 dl_ch_estimates_time[][estimateSz],
+                       const c16_t dl_ch_estimates_time[][frame_parms->ofdm_symbol_size],
                        uint8_t frame,
-                       uint8_t subframe,
+                       uint8_t slot,
                        short coef);
 
 void nr_ue_measurements(PHY_VARS_NR_UE *ue,
@@ -89,14 +85,13 @@ void nr_ue_measurements(PHY_VARS_NR_UE *ue,
                         int32_t dl_ch_estimates[][pdsch_est_size]);
 
 uint32_t nr_ue_calculate_ssb_rsrp(const NR_DL_FRAME_PARMS *fp,
-                                  const c16_t rxdataF[][fp->samples_per_slot_wCP],
-                                  int symbol_offset,
+                                  const c16_t rxdataF[][fp->ofdm_symbol_size],
                                   int ssb_start_subcarrier);
 
 void nr_ue_ssb_rsrp_measurements(PHY_VARS_NR_UE *ue,
                                  int ssb_index,
                                  const UE_nr_rxtx_proc_t *proc,
-                                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP]);
+                                 const c16_t rxdataF[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size]);
 
 // Structure to pass data to neighboring cell measurement task
 typedef struct {
@@ -113,7 +108,7 @@ void do_neighboring_cell_measurements(UE_nr_rxtx_proc_t *proc, PHY_VARS_NR_UE *u
 
 void nr_ue_rrc_measurements(PHY_VARS_NR_UE *ue,
                             const UE_nr_rxtx_proc_t *proc,
-                            c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP]);
+                            const c16_t rxdataF[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size]);
 
 void phy_adjust_gain_nr(PHY_VARS_NR_UE *ue,
                         uint32_t rx_power_fil_dB,
@@ -124,20 +119,21 @@ void nr_pdsch_ptrs_processing(int nbRx,
                               int32_t ptrs_re_per_slot[][14],
                               uint32_t rx_size_symbol,
                               int nl,
-                              c16_t rxdataF_comp[][nl][nbRx][rx_size_symbol],
+                              c16_t rxdataF_comp[][nl][rx_size_symbol],
                               NR_DL_FRAME_PARMS *frame_parms,
-                              NR_DL_UE_HARQ_t *dlsch0_harq,
-                              NR_DL_UE_HARQ_t *dlsch1_harq,
+                              fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config,
                               uint8_t nr_slot_rx,
                               unsigned char symbol,
                               int nb_rb,
                               uint16_t rnti,
-                              NR_UE_DLSCH_t dlsch[2]);
+                              uint16_t *ptrsSymbPos,
+                              uint8_t *ptrsSymbIdx);
 
 int nr_sl_psbch_rsrp_measurements(PHY_VARS_NR_UE *ue,
                                   sl_nr_ue_phy_params_t *sl_phy_params,
-                                  NR_DL_FRAME_PARMS *fp,
-                                  c16_t rxdataF[][fp->samples_per_slot_wCP],
+                                  const NR_DL_FRAME_PARMS *fp,
+                                  const int symbol,
+                                  const c16_t rxdataF[][fp->ofdm_symbol_size],
                                   bool use_SSS);
 /** @}*/
 #endif

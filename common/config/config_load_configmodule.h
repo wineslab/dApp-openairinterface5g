@@ -48,8 +48,6 @@ typedef void (*configmodule_endfunc_t)(struct configmodule_interface *cfg);
 typedef int (*configmodule_initfunc_t)(struct configmodule_interface *cfg);
 
 typedef struct configmodule_status {
-  int num_paramgroups;
-  char **paramgroups_names;
   int num_err_nullvalue;
   int emptyla;
   int num_err_read;

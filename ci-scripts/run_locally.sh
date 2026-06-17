@@ -30,15 +30,13 @@ docker tag oai-nr-ue oai-ci/oai-nr-ue:develop-${SHORT_COMMIT_SHA}
 docker tag oai-gnb oai-ci/oai-gnb:develop-${SHORT_COMMIT_SHA}
 docker tag oai-nr-cuup oai-ci/oai-nr-cuup:develop-${SHORT_COMMIT_SHA}
 
-python3 main.py --mode=InitiateHtml --ranRepository=NONE --ranBranch=${CURRENT_BRANCH} \
-    --ranCommitID=${COMMIT_SHA} --ranAllowMerge=false \
-    --ranTargetBranch=NONE \
+python3 main.py --mode=InitiateHtml --repository=NONE --branch=${CURRENT_BRANCH} \
     --XMLTestFile=xml_files/${TESTCASE} --local --datefmt="%H:%M:%S"
 
-python3 main.py --mode=TesteNB --ranRepository=NONE --ranBranch=${CURRENT_BRANCH} \
-    --ranCommitID=${COMMIT_SHA} --ranAllowMerge=false \
-    --ranTargetBranch=NONE \
-    --eNBSourceCodePath=${REPO_PATH} \
+python3 main.py --mode=TesteNB --repository=NONE --branch=${CURRENT_BRANCH} \
+    --ranAllowMerge=false \
+    --targetBranch=NONE \
+    --workspace=${REPO_PATH} \
     --XMLTestFile=${TESTCASE} --local --datefmt="%H:%M:%S"
 RET=$?
 

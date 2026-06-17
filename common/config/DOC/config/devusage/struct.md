@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
 # `paramdef_t`structure
-It is defined in include file [ common/config/config_paramdesc.h ](https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/common/config/config_paramdesc.h#L103). This structure is used by developers to describe parameters and by the configuration module to return parameters value. A pointer to a `paramdef_t` array is passed to `config_get` and `config_getlist` calls to instruct the configuration module what parameters it should read.
+It is defined in include file [ common/config/config_paramdesc.h ](../../../../../common/config/config_paramdesc.h#L103). This structure is used by developers to describe parameters and by the configuration module to return parameters value. A pointer to a `paramdef_t` array is passed to `config_get` and `config_getlist` calls to instruct the configuration module what parameters it should read.
 
 | Fields     | Description                                                       | I/O |
 |:-----------|:------------------------------------------------------------------|----:|
@@ -32,7 +32,7 @@ It is defined in include file [ common/config/config_paramdesc.h ](https://gitla
 
 
 # `paramlist_def_t`structure
-It is defined in include file [ common/config/config_paramdesc.h ](https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/common/config/config_paramdesc.h#L160).
+It is defined in include file [ common/config/config_paramdesc.h ](../../../../../common/config/config_paramdesc.h#L160).
 It is used as an argument to `config_getlist` calls, to get values of multiple occurrences of group of parameters.
 
 | Fields     | Description                                                       | I/O |
@@ -42,7 +42,7 @@ It is used as an argument to `config_getlist` calls, to get values of multiple o
 | `numelt` | Number of items in the `paramarray` field | O |
 
 # `checkedparam_t` union
-It is defined in include file [ common/config/config_paramdesc.h ](https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/common/config/config_paramdesc.h#L62).
+It is defined in include file [ common/config/config_paramdesc.h ](../../../../../common/config/config_paramdesc.h#L62).
 This union of structures is used to provide a parameter checking mechanism. Each `paramdef_t` instance may include a pointer to a `checkedparam_t`structure which is then used by the configuration module to check the value it got from the config source.
 Each structure in the union provides one parameter verification method, which returns `-1` when the verification fails. Currently the following structures  are defined in the `checkedparam_t` union:
 

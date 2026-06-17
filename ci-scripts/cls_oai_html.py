@@ -33,11 +33,8 @@ class HTMLManagement():
 		self.htmlHeaderCreated = False
 		self.htmlFooterCreated = False
 
-		self.ranRepository = ''
-		self.ranBranch = ''
-		self.ranCommitID = ''
-		self.ranAllowMerge = False
-		self.ranTargetBranch = ''
+		self.repository = ''
+		self.branch = ''
 
 		self.nbTestXMLfiles = 0
 		self.htmlTabRefs = []
@@ -96,47 +93,24 @@ class HTMLManagement():
 			self.htmlFile.write('     </tr>\n')
 			self.htmlFile.write('     <tr>\n')
 			self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-cloud-upload"></span> GIT Repository </td>\n')
-			self.htmlFile.write('       <td><a href="' + self.ranRepository + '">' + self.ranRepository + '</a></td>\n')
+			self.htmlFile.write('       <td><a href="' + self.repository + '">' + self.repository + '</a></td>\n')
 			self.htmlFile.write('     </tr>\n')
 			self.htmlFile.write('     <tr>\n')
-			self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-wrench"></span> Job Trigger </td>\n')
-			if (self.ranAllowMerge):
-				self.htmlFile.write('       <td>Merge-Request</td>\n')
-			else:
-				self.htmlFile.write('       <td>Push to Branch</td>\n')
+			self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-log-out"></span> Test Branch </td>\n')
+			self.htmlFile.write('       <td>' + self.branch + '</td>\n')
 			self.htmlFile.write('     </tr>\n')
+			commit_id = subprocess.check_output("git log -n1 --pretty=format:\"%H\" ", shell=True, universal_newlines=True)
+			commit_id = commit_id.strip()
 			self.htmlFile.write('     <tr>\n')
-			if (self.ranAllowMerge):
-				self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-log-out"></span> Source Branch </td>\n')
-			else:
-				self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tree-deciduous"></span> Branch</td>\n')
-			self.htmlFile.write('       <td>' + self.ranBranch + '</td>\n')
+			self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tag"></span> Commit ID </td>\n')
+			self.htmlFile.write('       <td>' + commit_id + '</td>\n')
 			self.htmlFile.write('     </tr>\n')
+			commit_message = subprocess.check_output("git log -n1 --pretty=format:\"%s\" ", shell=True, universal_newlines=True)
+			commit_message = commit_message.strip()
 			self.htmlFile.write('     <tr>\n')
-			if (self.ranAllowMerge):
-				self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tag"></span> Source Commit ID </td>\n')
-			else:
-				self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tag"></span> Commit ID </td>\n')
-			self.htmlFile.write('       <td>' + self.ranCommitID + '</td>\n')
+			self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-comment"></span> Commit Message </td>\n')
+			self.htmlFile.write('       <td>' + commit_message + '</td>\n')
 			self.htmlFile.write('     </tr>\n')
-			if self.ranAllowMerge != '' and self.ranCommitID != 'develop':
-				commit_message = subprocess.check_output("git log -n1 --pretty=format:\"%s\" " + self.ranCommitID, shell=True, universal_newlines=True)
-				commit_message = commit_message.strip()
-				self.htmlFile.write('     <tr>\n')
-				if (self.ranAllowMerge):
-					self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-comment"></span> Source Commit Message </td>\n')
-				else:
-					self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-comment"></span> Commit Message </td>\n')
-				self.htmlFile.write('       <td>' + commit_message + '</td>\n')
-				self.htmlFile.write('     </tr>\n')
-			if (self.ranAllowMerge):
-				self.htmlFile.write('     <tr>\n')
-				self.htmlFile.write('       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-log-in"></span> Target Branch </td>\n')
-				if (self.ranTargetBranch == ''):
-					self.htmlFile.write('       <td>develop</td>\n')
-				else:
-					self.htmlFile.write('       <td>' + self.ranTargetBranch + '</td>\n')
-				self.htmlFile.write('     </tr>\n')
 			self.htmlFile.write('  </table>\n')
 
 			self.htmlFile.write('  <br>\n')

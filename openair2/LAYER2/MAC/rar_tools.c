@@ -72,6 +72,7 @@ fill_rar(const module_id_t module_idP,
     (((ra->msg3_mcs & 0x7) << 5)) | ((ra->msg3_TPC & 7) << 2) |
     ((ra->msg3_ULdelay & 1) << 1) | (ra->msg3_cqireq & 1);
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = cc->tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = dlsch_buffer,
                     .pdu_buffer_size = input_buffer_length,
                     .ueid = module_idP,
@@ -171,6 +172,7 @@ unsigned short fill_rar_br(eNB_MAC_INST *eNB,
         ra->preamble_index,
         ra->timing_offset);
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = cc->tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = dlsch_buffer,
                     .pdu_buffer_size = input_buffer_length,
                     .ueid = eNB->Mod_id,

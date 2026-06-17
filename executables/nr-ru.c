@@ -347,7 +347,7 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   AssertFatal(*slot < fp->slots_per_frame && *slot >= 0, "slot %d is illegal (%d)\n", *slot, fp->slots_per_frame);
 
   start_meas(&ru->rx_fhaul);
-  int nb = ru->nb_rx * ru->num_beams_period;
+  int nb = ru->nb_rx;
   void *rxp[nb];
   for (int i = 0; i < nb; i++)
     rxp[i] = (void *)&ru->common.rxdata[i][get_samples_slot_timestamp(fp, *slot)];
@@ -446,11 +446,6 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   metadata mt = {.slot = *slot, .frame = *frame};
   gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
 
-  if (rxs != samples_per_slot) {
-    //exit_fun( "problem receiving samples" );
-    LOG_E(PHY, "problem receiving samples\n");
-  }
-
   stop_meas(&ru->rx_fhaul);
 }
 
@@ -467,12 +462,12 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
 
       if (ru->common.beam_id) {
         int prev_slot = (slot - 1 + fp->slots_per_frame) % fp->slots_per_frame;
-        const int *beam_ids = ru->common.beam_id[0];
-        int prev_beam = beam_ids[prev_slot * fp->symbols_per_slot];
-        int beam = beam_ids[slot * fp->symbols_per_slot];
+        uint16_t **beam_ids = ru->common.beam_id;
+        uint16_t prev_beam = beam_ids[prev_slot * fp->symbols_per_slot][0];
+        int beam = beam_ids[slot * fp->symbols_per_slot][0];
         if (prev_beam != beam) {
           flags_gpio = beam | TX_GPIO_CHANGE; // enable change of gpio
-          LOG_I(HW, "slot %d, beam %d\n", slot, ru->common.beam_id[0][slot * fp->symbols_per_slot]);
+          LOG_I(HW, "slot %d, beam %d\n", slot, beam_ids[slot * fp->symbols_per_slot][0]);
         }
       }
       break;
@@ -481,7 +476,7 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
       // the beam index is written in bits 8-10 of the flags
       // bit 11 enables the gpio programming
       int beam = 0;
-      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[0][slot * fp->symbols_per_slot] < 64)) {
+      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[slot * fp->symbols_per_slot][0] < 64)) {
         // beam = ru->common.beam_id[0][slot*fp->symbols_per_slot] | 64;
         beam = 1024; // hardcoded now for beam32 boresight
         // beam = 127; //for the sake of trying beam63
@@ -564,7 +559,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   const int flags = flags_burst | (flags_gpio << 4);
   proc->first_tx = 0;
 
-  int nt = ru->nb_tx * ru->num_beams_period;
+  int nt = ru->nb_tx;
   void *txp[nt];
   for (int i = 0; i < nt; i++)
     txp[i] = (void *)&ru->common.txdata[i][get_samples_slot_timestamp(fp, slot)] - sf_extension * sizeof(int32_t);
@@ -617,13 +612,13 @@ static void fill_rf_config(RU_t *ru, char *rf_config_file)
   AssertFatal(ru->nb_rx > 0 && ru->nb_rx <= 8, "openair0 does not support more than 8 antennas\n");
 
   cfg->num_rb_dl = N_RB;
-  cfg->tx_num_channels = ru->nb_tx * ru->num_beams_period;
-  cfg->rx_num_channels = ru->nb_rx * ru->num_beams_period;
-  cfg->num_distributed_ru = ru->num_beams_period;
+  cfg->tx_num_channels = ru->nb_tx;
+  cfg->rx_num_channels = ru->nb_rx;
+  cfg->num_distributed_ru = 1;
   LOG_I(PHY,"Setting RF config for N_RB %d, NB_RX %d, NB_TX %d\n",cfg->num_rb_dl,cfg->rx_num_channels,cfg->tx_num_channels);
   LOG_I(PHY,"tune_offset %.0f Hz, sample_rate %.0f Hz\n",cfg->tune_offset,cfg->sample_rate);
 
-  for (int i = 0; i < ru->nb_tx * ru->num_beams_period; i++) {
+  for (int i = 0; i < ru->nb_tx; i++) {
     if (ru->if_frequency == 0) {
       cfg->tx_freq[i] = fp->dl_CarrierFreq;
     } else if (ru->if_freq_offset) {
@@ -638,7 +633,7 @@ static void fill_rf_config(RU_t *ru, char *rf_config_file)
           i, cfg->tx_gain[i],cfg->tx_freq[i]);
   }
 
-  for (int i = 0; i < ru->nb_rx * ru->num_beams_period; i++) {
+  for (int i = 0; i < ru->nb_rx; i++) {
     if (ru->if_frequency == 0) {
       cfg->rx_freq[i] = fp->ul_CarrierFreq;
     } else if (ru->if_freq_offset) {
@@ -711,7 +706,7 @@ int setup_RU_buffers(RU_t *ru)
 
   if (ru->openair0_cfg.mmapped_dma == 1) {
     // replace RX signal buffers with mmaped HW versions
-    for (int i = 0; i < ru->nb_rx * ru->num_beams_period; i++) {
+    for (int i = 0; i < ru->nb_rx; i++) {
       int card = i / 4;
       int ant = i % 4;
       LOG_D(PHY, "Mapping RU id %u, rx_ant %d, on card %d, chain %d\n", ru->idx, i, ru->rf_map.card + card, ru->rf_map.chain + ant);
@@ -723,7 +718,7 @@ int setup_RU_buffers(RU_t *ru)
       }
     }
 
-    for (int i = 0; i < ru->nb_tx * ru->num_beams_period; i++) {
+    for (int i = 0; i < ru->nb_tx; i++) {
       int card = i / 4;
       int ant = i % 4;
       LOG_D(PHY, "Mapping RU id %u, tx_ant %d, on card %d, chain %d\n", ru->idx, i, ru->rf_map.card + card, ru->rf_map.chain + ant);
@@ -864,7 +859,7 @@ void *ru_thread(void *param)
     }
 
     LOG_I(PHY, "Starting IF interface for RU %d, nb_rx %d\n", ru->idx, ru->nb_rx);
-    AssertFatal(ru->nr_start_if(ru, NULL) == 0, "Could not start the IF device\n");
+    AssertFatal(ru->nr_start_if(ru) == 0, "Could not start the IF device\n");
 
   } else if (ru->if_south == LOCAL_RF) { // configure RF parameters only
     ret = openair0_device_load(&ru->rfdevice,&ru->openair0_cfg);
@@ -985,7 +980,7 @@ void *ru_thread(void *param)
         prach_item_t p;
         while (get_next_nr_prach(&gNB->prach_ru_queue, &now, &p)) {
           // need to extract RACH data for later processing by rx_nr_prach()
-          rx_nr_prach_ru(&p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
+          rx_nr_prach_ru(&p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset, gNB->enable_analog_das);
           bool success = spsc_q_put(&gNB->prach_l1rx_queue, &p, sizeof(p));
           // assume prach_l1rx_queue never full: prach_ru_queue filled at
           // constant pace, but prach_l1rx_queue emptied as fast as possible,
@@ -1016,7 +1011,8 @@ int start_streaming(RU_t *ru) {
   return ru->ifdevice.thirdparty_startstreaming(&ru->ifdevice);
 }
 
-int nr_start_if(struct RU_t_s *ru, struct PHY_VARS_gNB_s *gNB) {
+int nr_start_if(struct RU_t_s *ru)
+{
   if (ru->if_south <= REMOTE_IF5)
     for (int i = 0; i < ru->nb_rx; i++)
       ru->openair0_cfg.rxbase[i] = ru->common.rxdata[i];
@@ -1024,11 +1020,13 @@ int nr_start_if(struct RU_t_s *ru, struct PHY_VARS_gNB_s *gNB) {
   return ru->ifdevice.trx_start_func(&ru->ifdevice);
 }
 
-int start_rf(RU_t *ru) {
+int start_rf(RU_t *ru)
+{
   return(ru->rfdevice.trx_start_func(&ru->rfdevice));
 }
 
-int stop_rf(RU_t *ru) {
+int stop_rf(RU_t *ru)
+{
   if (ru->rfdevice.trx_get_stats_func) {
     ru->rfdevice.trx_get_stats_func(&ru->rfdevice);
   }

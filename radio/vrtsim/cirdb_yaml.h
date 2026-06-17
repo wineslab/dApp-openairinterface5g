@@ -15,6 +15,7 @@ typedef struct {
   int want_rx; // exact match
   float want_ds_ns; // nearest
   float want_speed_mps; // nearest
+  float want_aoa_deg; // exact match; 0.0 = broadside default
   int allow_shape_swap; // allow TX/RX swap when matching
   float w_ds; // DS distance weight
   float w_speed; // speed distance weight

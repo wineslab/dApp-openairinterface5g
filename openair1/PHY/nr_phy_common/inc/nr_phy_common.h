@@ -377,14 +377,6 @@ int nr_get_ssb_start_sc(int scs,
                         int ssb_sco,
                         frequency_range_t freq_range);
 
-bool find_next_rb_block(const uint32_t *bitmap, int size, int *pos, int *start, int *end);
-typedef struct {
-  int first_rb;
-  int last_rb;
-  int num_rbs;
-  uint32_t bitmap[9];
-} freq_alloc_bitmap_t;
-bool check_rb_in_bitmap(const freq_alloc_bitmap_t *alloc, int rb);
-freq_alloc_bitmap_t set_start_end_from_bitmap(int size, int alloc_size, const uint8_t bitmap[alloc_size]);
-freq_alloc_bitmap_t set_bitmap_from_start_size(int start, int size);
+#include "nr_channel_compensation.h"
+#include "nr_compute_llr.h"
 #endif

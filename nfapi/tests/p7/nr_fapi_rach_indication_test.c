@@ -77,7 +77,7 @@ static void test_copy(const nfapi_nr_rach_indication_t *msg)
   free_rach_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

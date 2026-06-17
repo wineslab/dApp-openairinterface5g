@@ -65,6 +65,23 @@ def Iperf_ComputeTime(args):
 		raise Exception('Iperf time not found!')
 	return int(result.group('iperf_time'))
 
+def Iperf_UpdateBindPort(opts, ueIP, idx):
+	# search if bind address present. Extract if yes, add if no.
+	bind_m = re.search(r'(-B|--bind)\s+(?P<ip>\d+\.\d+\.\d+\.\d+)', opts)
+	if bind_m:
+		bindIP = bind_m.group('ip')
+	else:
+		bindIP = ueIP
+		opts += f" -B {ueIP}"
+	# search if port present. Extract if yes, add if no.
+	port_m = re.search(r'(-p|--port)\s+(?P<port>\d+)', opts)
+	if port_m:
+		port = port_m.group('port')
+	else:
+		port = 5002 + idx
+		opts += f" -p {port}"
+	return bindIP, port, opts
+
 def convert_to_mbps(value, magnitude):
 	value = float(value)
 	if magnitude == 'K' or magnitude == 'k':
@@ -259,18 +276,46 @@ def Deploy_Physim(ctx, HTML, node, workdir, script, options):
 		logging.error('\u001B[1m Physical Simulator Fail\u001B[0m')
 	return test_status
 
+def DeployWithScript(HTML, node, script, options, tag):
+	logging.debug(f'Deploy with script {script} on node: {node}')
+	opt = options.replace('%%image_tag%%', tag)
+	with cls_cmd.getConnection(node) as c:
+		ret = c.exec_script(script, 600, opt)
+	logging.debug(f'"{script}" finished with code {ret.returncode}, output:\n{ret.stdout}')
+	HTML.CreateHtmlTestRowQueue(f'on node {node}', 'OK' if ret.returncode == 0 else 'KO', [f'{ret.stdout}'])
+	return ret.returncode == 0
+
+def UndeployWithScript(HTML, ctx, node, script, options):
+	logging.debug(f'Undeploy with script {script} on node: {node}')
+	remote_dir = '/tmp/undeploy'
+	opt = options.replace('%%log_dir%%', remote_dir)
+	with cls_cmd.getConnection(node) as c:
+		# create a directory for log collection
+		c.run(f'rm -rf {remote_dir}')
+		ret = c.run(f'mkdir {remote_dir}')
+		if ret.returncode != 0:
+			logging.error("cannot create directory for log collection")
+			return False
+		ret = c.exec_script(script, 600, opt)
+		logging.debug(f'"{script}" finished with code {ret.returncode}, output:\n{ret.stdout}')
+		ret_ls = c.run(f'ls -1 {remote_dir}')
+		files = ret_ls.stdout.strip().splitlines()
+		log_files = []
+		for lf in files:
+			name = archiveArtifact(c, ctx, f'{remote_dir}/{lf}')
+			log_files.append(name)
+	msg = "Log files:\n" + "\n".join([os.path.basename(lf) for lf in log_files])
+	HTML.CreateHtmlTestRowQueue(f'on node {node}', 'OK' if ret.returncode == 0 else 'KO', [f'{ret.stdout}\n\n{msg}'])
+	return ret.returncode == 0
+
 #-----------------------------------------------------------
 # OaiCiTest Class Definition
 #-----------------------------------------------------------
 class OaiCiTest():
 	
 	def __init__(self):
-		self.ranRepository = ''
-		self.ranBranch = ''
-		self.ranCommitID = ''
-		self.ranAllowMerge = False
-		self.ranTargetBranch = ''
-
+		self.repository = ''
+		self.branch = ''
 		self.testXMLfiles = []
 		self.ping_args = ''
 		self.ping_packetloss_threshold = ''
@@ -457,7 +502,6 @@ class OaiCiTest():
 		svrIP = cn.getIP()
 		if not svrIP:
 			return (False, f"Iperf server {cn.getName()} has no IP address")
-
 		iperf_opt = self.iperf_args
 		jsonReport = "--json"
 		serverReport = ""
@@ -471,11 +515,11 @@ class OaiCiTest():
 			# note: enable server report collection on the UE side, no need to store and collect server report separately on the server side
 			serverReport = "--get-server-output"
 		iperf_time = Iperf_ComputeTime(self.iperf_args)
+		bindIP, port, iperf_opt = Iperf_UpdateBindPort(iperf_opt, ueIP, idx)
 		# hack: the ADB UEs don't have iperf in $PATH, so we need to hardcode for the moment
 		iperf_ue = '/data/local/tmp/iperf3' if re.search('adb', ue.getName()) else 'iperf3'
-		ue_header = f'UE {ue.getName()} ({ueIP})'
+		ue_header = f'UE {ue.getName()} ({bindIP})'
 		with cls_cmd.getConnection(ue.getHost()) as cmd_ue, cls_cmd.getConnection(cn.getHost()) as cmd_svr:
-			port = 5002 + idx
 			# note: some core setups start an iperf3 server automatically, indicated in ci_infra by runIperf3Server: False`
 			t = iperf_time * 2.5
 			cmd_ue.run(f'rm {client_filename}', reportNonZero=False, silent=True)
@@ -486,7 +530,7 @@ class OaiCiTest():
 				if ret.returncode == 0:
 					logging.warning(f'Iperf3 server on port {port} detected and terminated')
 				cmd_svr.run(f'{cn.getCmdPrefix()} timeout -vk3 {t} iperf3 -s -B {svrIP} -p {port} -1 {jsonReport} >> /dev/null &', timeout=t)
-			cmd_ue.run(f'{ue.getCmdPrefix()} timeout -vk3 {t} {iperf_ue} -B {ueIP} -c {svrIP} -p {port} {iperf_opt} {jsonReport} {serverReport} -O 5 >> {client_filename}', timeout=t)
+			client_ret = cmd_ue.run(f'{ue.getCmdPrefix()} timeout -vk3 {t} {iperf_ue} -c {svrIP} {iperf_opt} {jsonReport} {serverReport} -O 5 >> {client_filename}', timeout=t, reportNonZero=False)
 			dest_filename = archiveArtifact(cmd_ue, ctx, client_filename)
 		if udpIperf:
 			status, msg = Iperf_analyzeV3UDP(dest_filename, self.iperf_bitrate_threshold, self.iperf_packetloss_threshold, target_bitrate)
@@ -494,6 +538,10 @@ class OaiCiTest():
 			status, msg = Iperf_analyzeV3BIDIRJson(dest_filename)
 		else:
 			status, msg = Iperf_analyzeV3TCPJson(dest_filename, self.iperf_tcp_rate_target)
+
+		# add some diagnostic messages if the actual iperf command returned non-zero
+		if client_ret.returncode != 0:
+			msg = f'{msg}\nIperf client command failed on {bindIP} -> {svrIP}:{port} (return code: {client_ret.returncode})'
 
 		return (status, f'{ue_header}\n{msg}')
 

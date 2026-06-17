@@ -114,7 +114,7 @@ typedef enum {
 #define GNB_CONFIG_HLP_CU_SIBS                          "List of CU generated SIBs to be transmitted"
 #define GNB_CONFIG_HLP_DU_SIBS                          "List of DU generated SIBs to be transmitted"
 #define GNB_CONFIG_HLP_CONFIG_REP                       "Define quantity for CSI report (options: ssb_rsrp, ssb_sinr and cri_rsrp)"
-
+#define GNB_CONFIG_HLP_DOSRS                            "defines the type of SRS to be scheduled (none, periodic, or aperiodic)"
 
 /*-----------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            cell configuration parameters                                                                */
@@ -141,7 +141,7 @@ typedef enum {
 {GNB_CONFIG_STRING_PUSCHANTENNAPORTS,            NULL,   0,            .iptr=NULL,  .defintval=1,                 TYPE_INT,       0},  \
 {GNB_CONFIG_STRING_DOTCI,                        NULL,   0,            .iptr=NULL,  .defintval=0,                 TYPE_INT,       0},  \
 {GNB_CONFIG_STRING_DOCSIRS,                      NULL,   0,            .iptr=NULL,  .defintval=0,                 TYPE_INT,       0},  \
-{GNB_CONFIG_STRING_DOSRS,                        NULL,   0,            .iptr=NULL,  .defintval=0,                 TYPE_INT,       0},  \
+{GNB_CONFIG_STRING_DOSRS,        GNB_CONFIG_HLP_DOSRS,   0,           .strptr=NULL, .defstrval="none",            TYPE_STRING,    0},  \
 {GNB_CONFIG_STRING_NRCELLID,                     NULL,   0,            .u64ptr=NULL,.defint64val=1,               TYPE_UINT64,    0},  \
 {GNB_CONFIG_STRING_MINRXTXTIME,                  NULL,   0,            .iptr=NULL,  .defintval=2,                 TYPE_INT,       0},  \
 {GNB_CONFIG_STRING_ULPRBBLACKLIST,               NULL,   0,            .strptr=NULL,.defstrval="",                TYPE_STRING,    0},  \
@@ -232,7 +232,10 @@ typedef enum {
   { .s5 = { NULL } },                                             \
   { .s5 = { NULL } },                                             \
   { .s5 = { NULL } },                                             \
-  { .s5 = { NULL } },                                             \
+  { .s3a = { config_checkstr_assign_integer, \
+             {"none", "periodic", "aperiodic"}, \
+             {NO_SRS, PERIODIC_SRS, APERIODIC_SRS}, \
+             3 } }, \
   { .s5 = { NULL } },                                             \
   { .s5 = { NULL } },                                             \
   { .s5 = { NULL } },                                             \

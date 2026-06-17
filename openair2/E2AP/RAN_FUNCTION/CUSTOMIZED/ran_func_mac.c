@@ -31,6 +31,8 @@ bool read_mac_sm(void* data)
     assert(mac->msg.ue_stats != NULL && "Memory exhausted" );
   }
 
+  gNB_MAC_INST *mac_inst = RC.nrmac[0];
+  NR_SCHED_LOCK(&mac_inst->sched_lock);
   size_t i = 0; //TODO
   UE_iterator(UE_info->connected_ue_list, UE) {
     const NR_UE_sched_ctrl_t* sched_ctrl = &UE->UE_sched_ctrl;
@@ -93,6 +95,7 @@ bool read_mac_sm(void* data)
 
     ++i;
   }
+  NR_SCHED_UNLOCK(&mac_inst->sched_lock);
 
   return num_ues > 0;
 }

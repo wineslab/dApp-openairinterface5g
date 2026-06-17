@@ -458,8 +458,9 @@ static int init_op_data_objs_dec(struct rte_bbdev_op_data *bufs,
   bool large_input = false;
   int j = 0;
   for (int h = 0; h < nrLDPC_slot_decoding_parameters->nb_TBs; ++h) {
-    for (int i = 0; i < nrLDPC_slot_decoding_parameters->TBs[h].C; ++i) {
-      uint32_t data_len = nrLDPC_slot_decoding_parameters->TBs[h].segments[i].E;
+    nrLDPC_TB_decoding_parameters_t *p = &nrLDPC_slot_decoding_parameters->TBs[h];
+    for (int i = 0; i < p->C; ++i) {
+      uint32_t data_len = i < p->first_rE2 ? p->E : p->E2;
       char *data;
       struct rte_mbuf *m_head = rte_pktmbuf_alloc(mbuf_pool);
       AssertFatal(m_head != NULL,
@@ -602,20 +603,19 @@ static void set_ldpc_dec_op(struct rte_bbdev_dec_op **ops,
   bool special_case_tb_mode = !active_dev.is_t2 && (nrLDPC_slot_decoding_parameters->nb_TBs == 1)
                               && (nb_segments_decoding(nrLDPC_slot_decoding_parameters) == 1);
   for (int h = 0; h < nrLDPC_slot_decoding_parameters->nb_TBs; ++h) {
-    for (int i = 0; i < nrLDPC_slot_decoding_parameters->TBs[h].C; ++i) {
-      ops[j]->ldpc_dec.basegraph = nrLDPC_slot_decoding_parameters->TBs[h].BG;
-      ops[j]->ldpc_dec.z_c = nrLDPC_slot_decoding_parameters->TBs[h].Z;
-      ops[j]->ldpc_dec.q_m = nrLDPC_slot_decoding_parameters->TBs[h].Qm;
-      ops[j]->ldpc_dec.n_filler = nrLDPC_slot_decoding_parameters->TBs[h].F;
-      ops[j]->ldpc_dec.n_cb = (nrLDPC_slot_decoding_parameters->TBs[h].BG == 1) ? (66 * nrLDPC_slot_decoding_parameters->TBs[h].Z)
-                                                                                : (50 * nrLDPC_slot_decoding_parameters->TBs[h].Z);
-      ops[j]->ldpc_dec.iter_max = nrLDPC_slot_decoding_parameters->TBs[h].max_ldpc_iterations;
-      ops[j]->ldpc_dec.rv_index = nrLDPC_slot_decoding_parameters->TBs[h].rv_index;
+    nrLDPC_TB_decoding_parameters_t *p = &nrLDPC_slot_decoding_parameters->TBs[h];
+    for (int i = 0; i < p->C; ++i) {
+      ops[j]->ldpc_dec.basegraph = p->BG;
+      ops[j]->ldpc_dec.z_c = p->Z;
+      ops[j]->ldpc_dec.q_m = p->Qm;
+      ops[j]->ldpc_dec.n_filler = p->F;
+      ops[j]->ldpc_dec.n_cb = (p->BG == 1) ? (66 * p->Z) : (50 * p->Z);
+      ops[j]->ldpc_dec.iter_max = p->max_ldpc_iterations;
+      ops[j]->ldpc_dec.rv_index = p->rv_index;
       ops[j]->ldpc_dec.op_flags = RTE_BBDEV_LDPC_ITERATION_STOP_ENABLE | RTE_BBDEV_LDPC_HQ_COMBINE_OUT_ENABLE;
-      if (*nrLDPC_slot_decoding_parameters->TBs[h].segments[i].d_to_be_cleared) {
-        *nrLDPC_slot_decoding_parameters->TBs[h].segments[i].d_to_be_cleared = false;
+      if (p->d_to_be_cleared) {
         if (active_dev.is_t2)
-          *nrLDPC_slot_decoding_parameters->TBs[h].processedSegments = 0;
+          *p->processedSegments = 0;
       } else {
         ops[j]->ldpc_dec.op_flags |= RTE_BBDEV_LDPC_HQ_COMBINE_IN_ENABLE;
         if (active_dev.support_internal_harq_memory) {
@@ -625,12 +625,12 @@ static void set_ldpc_dec_op(struct rte_bbdev_dec_op **ops,
       }
 
       if (!active_dev.is_t2)
-        *nrLDPC_slot_decoding_parameters->TBs[h].processedSegments = 0;
+        *p->processedSegments = 0;
 
       if (!special_case_tb_mode) {
         ops[j]->ldpc_dec.code_block_mode = 1;
-        ops[j]->ldpc_dec.cb_params.e = nrLDPC_slot_decoding_parameters->TBs[h].segments[i].E;
-        if (nrLDPC_slot_decoding_parameters->TBs[h].C > 1) {
+        ops[j]->ldpc_dec.cb_params.e = i < p->first_rE2 ? p->E : p->E2;
+        if (p->C > 1) {
           ops[j]->ldpc_dec.op_flags |= RTE_BBDEV_LDPC_CRC_TYPE_24B_DROP;
           ops[j]->ldpc_dec.op_flags |= RTE_BBDEV_LDPC_CRC_TYPE_24B_CHECK;
         }
@@ -646,12 +646,12 @@ static void set_ldpc_dec_op(struct rte_bbdev_dec_op **ops,
         ops[j]->ldpc_dec.tb_params.c = 1;
         ops[j]->ldpc_dec.tb_params.r = 0;
         ops[j]->ldpc_dec.tb_params.cab = 1;
-        ops[j]->ldpc_dec.tb_params.ea = nrLDPC_slot_decoding_parameters->TBs[h].segments[i].E;
-        ops[j]->ldpc_dec.tb_params.eb = nrLDPC_slot_decoding_parameters->TBs[h].segments[i].E;
+        ops[j]->ldpc_dec.tb_params.ea = i < p->first_rE2 ? p->E : p->E2;
+        ops[j]->ldpc_dec.tb_params.eb = i < p->first_rE2 ? p->E : p->E2;
       }
       // Calculate offset in the HARQ combined buffers
       // Unique segment offset
-      uint32_t segment_offset = (nrLDPC_slot_decoding_parameters->TBs[h].harq_unique_pid * NR_LDPC_MAX_NUM_CB) + i;
+      uint32_t segment_offset = (p->harq_unique_pid * NR_LDPC_MAX_NUM_CB) + i;
       // Prune to avoid shooting above maximum id
       uint32_t pruned_segment_offset = segment_offset % active_dev.num_harq_codeblock;
       // Segment offset to byte offset
@@ -673,6 +673,7 @@ static void set_ldpc_dec_op(struct rte_bbdev_dec_op **ops,
       ops[j]->ldpc_dec.input = inputs[j];
       ++j;
     }
+    p->d_to_be_cleared = false;
   }
 }
 
@@ -729,14 +730,16 @@ static int retrieve_ldpc_dec_op(struct rte_bbdev_dec_op **ops, nrLDPC_slot_decod
 {
   int j = 0;
   for (int h = 0; h < nrLDPC_slot_decoding_parameters->nb_TBs; ++h) {
-    for (int i = 0; i < nrLDPC_slot_decoding_parameters->TBs[h].C; ++i) {
+    nrLDPC_TB_decoding_parameters_t *p = &nrLDPC_slot_decoding_parameters->TBs[h];
+    size_t data_off = 0;
+    for (int i = 0; i < p->C; ++i) {
       struct rte_bbdev_op_data *hard_output = &ops[j]->ldpc_dec.hard_output;
       struct rte_mbuf *m = hard_output->data;
       uint16_t data_len = rte_pktmbuf_data_len(m) - hard_output->offset;
       uint8_t *data = rte_pktmbuf_mtod_offset(m, uint8_t *, hard_output->offset);
-      memcpy(nrLDPC_slot_decoding_parameters->TBs[h].segments[i].c, data, data_len);
+      memcpy(p->c + data_off, data, data_len);
 
-      uint32_t segment_offset = (nrLDPC_slot_decoding_parameters->TBs[h].harq_unique_pid * NR_LDPC_MAX_NUM_CB) + i;
+      uint32_t segment_offset = (p->harq_unique_pid * NR_LDPC_MAX_NUM_CB) + i;
       uint32_t pruned_segment_offset = segment_offset % active_dev.num_harq_codeblock;
       struct rte_bbdev_op_data *harq_output = &ops[j]->ldpc_dec.harq_combined_output;
       if (!active_dev.support_internal_harq_memory) {
@@ -749,6 +752,7 @@ static int retrieve_ldpc_dec_op(struct rte_bbdev_dec_op **ops, nrLDPC_slot_decod
       active_dev.harq_buffers[pruned_segment_offset].offset = harq_output->offset;
       active_dev.harq_buffers[pruned_segment_offset].length = harq_output->length;
       ++j;
+      data_off += p->K >> 3;
     }
   }
   return 0;
@@ -823,7 +827,7 @@ static int pmd_lcore_ldpc_dec(void *arg)
 
   // Start timer
   // We report timing only once in (0,0) since the timers are merged at the end
-  start_meas(&nrLDPC_slot_decoding_parameters->TBs[0].segments[0].ts_ldpc_decode);
+  start_meas(&nrLDPC_slot_decoding_parameters->TBs[0].ts_ldpc_decode);
 
   uint16_t enq = 0, deq = 0;
   while (enq < num_segments) {
@@ -840,7 +844,7 @@ static int pmd_lcore_ldpc_dec(void *arg)
 
   // Stop timer
   // We report timing only once in (0,0) since the timers are merged at the end
-  stop_meas(&nrLDPC_slot_decoding_parameters->TBs[0].segments[0].ts_ldpc_decode);
+  stop_meas(&nrLDPC_slot_decoding_parameters->TBs[0].ts_ldpc_decode);
 
   if (deq == enq) {
     ret = retrieve_ldpc_dec_op(ops_deq, nrLDPC_slot_decoding_parameters);
@@ -849,24 +853,24 @@ static int pmd_lcore_ldpc_dec(void *arg)
     /* get the max of iter_count for all dequeued ops */
     int j = 0;
     for (int h = 0; h < nrLDPC_slot_decoding_parameters->nb_TBs; ++h) {
-      for (int i = 0; i < nrLDPC_slot_decoding_parameters->TBs[h].C; ++i) {
-        bool *status = &nrLDPC_slot_decoding_parameters->TBs[h].segments[i].decodeSuccess;
+      nrLDPC_TB_decoding_parameters_t *p = &nrLDPC_slot_decoding_parameters->TBs[h];
+      for (int i = 0; i < p->C; ++i) {
+        bool *status = &p->decodeSuccess[i];
         tp->iter_count = RTE_MAX(ops_enq[j]->ldpc_dec.iter_count, tp->iter_count);
 
         // Check if CRC is available otherwise rely on ops_enq[j]->status to detect decoding success
         // CRC is NOT available if the CRC type is 24_B which is when C is greater than 1
-        if (nrLDPC_slot_decoding_parameters->TBs[h].C > 1) {
+        if (p->C > 1) {
           *status = (ops_enq[j]->status == 0);
         } else {
-          uint8_t *decoded_bytes = nrLDPC_slot_decoding_parameters->TBs[h].segments[i].c;
-          uint8_t crc_type = crcType(nrLDPC_slot_decoding_parameters->TBs[h].C, nrLDPC_slot_decoding_parameters->TBs[h].A);
-          uint32_t len_with_crc = lenWithCrc(nrLDPC_slot_decoding_parameters->TBs[h].C, nrLDPC_slot_decoding_parameters->TBs[h].A);
+          uint8_t *decoded_bytes = p->c;
+          uint8_t crc_type = crcType(p->C, p->A);
+          uint32_t len_with_crc = lenWithCrc(p->C, p->A);
           *status = check_crc(decoded_bytes, len_with_crc, crc_type);
         }
 
         if (*status) {
-          *nrLDPC_slot_decoding_parameters->TBs[h].processedSegments =
-              *nrLDPC_slot_decoding_parameters->TBs[h].processedSegments + 1;
+          *p->processedSegments = *p->processedSegments + 1;
         }
         ++j;
       }
@@ -1057,7 +1061,7 @@ static int normalize_dpdk_dev(const char *input, char *output, size_t out_len)
 }
 
 // OAI CODE
-int32_t nrLDPC_coding_init()
+int32_t nrLDPC_coding_init(int max_num_pxsch)
 {
   pthread_mutex_init(&encode_mutex, NULL);
   pthread_mutex_init(&decode_mutex, NULL);
@@ -1283,28 +1287,24 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   int8_t llr_decimal = (active_dev.info.drv.capabilities)[RTE_BBDEV_OP_LDPC_DEC].cap.ldpc_dec.llr_decimals;
   int offset = 0;
   for (int h = 0; h < nrLDPC_slot_decoding_parameters->nb_TBs; ++h) {
-    for (int r = 0; r < nrLDPC_slot_decoding_parameters->TBs[h].C; r++) {
+    nrLDPC_TB_decoding_parameters_t *p = &nrLDPC_slot_decoding_parameters->TBs[h];
+    size_t data_off = 0;
+    for (int r = 0; r < p->C; r++) {
+      uint32_t E = r < p->first_rE2 ? p->E : p->E2;
       if (active_dev.is_t2) {
         // For the T2, we simply saturate the LLRs.
         uint16_t z_ol[LDPC_MAX_CB_SIZE] __attribute__((aligned(16)));
-        memcpy(z_ol,
-               nrLDPC_slot_decoding_parameters->TBs[h].segments[r].llr,
-               nrLDPC_slot_decoding_parameters->TBs[h].segments[r].E * sizeof(uint16_t));
+        memcpy(z_ol, p->llr + data_off, E * sizeof(uint16_t));
         simde__m128i *pv_ol128 = (simde__m128i *)z_ol;
         simde__m128i *pl_ol128 = (simde__m128i *)&l_ol[offset];
-        for (int i = 0, j = 0; j < ((nrLDPC_slot_decoding_parameters->TBs[h].segments[r].E + 15) >> 4); i += 2, j++) {
+        for (int i = 0, j = 0; j < ((E + 15) >> 4); i += 2, j++) {
           pl_ol128[j] = simde_mm_packs_epi16(pv_ol128[i], pv_ol128[i + 1]);
         }
       } else {
-        llr_scaling(nrLDPC_slot_decoding_parameters->TBs[h].segments[r].llr,
-                    nrLDPC_slot_decoding_parameters->TBs[h].segments[r].E,
-                    &l_ol[offset],
-                    llr_size,
-                    llr_decimal,
-                    nrLDPC_slot_decoding_parameters->TBs[h].nb_layers,
-                    nrLDPC_slot_decoding_parameters->TBs[h].Qm);
+        llr_scaling(p->llr + data_off, E, &l_ol[offset], llr_size, llr_decimal, p->nb_layers, p->Qm);
       }
       offset += LDPC_MAX_CB_SIZE;
+      data_off += E;
     }
   }
 

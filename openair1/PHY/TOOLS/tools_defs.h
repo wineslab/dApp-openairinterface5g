@@ -30,6 +30,9 @@
 #define adds_int16(a,b) simde_mm_adds_epi16(a,b)
 #define mullo_int16(a,b) simde_mm_mullo_epi16(a,b)
 
+#define ALIGNARRAYSIZE(a, b) (((a + b - 1) / b) * b)
+#define ALNARS_32_8(a) ALIGNARRAYSIZE(a, 8)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -699,18 +702,18 @@ static inline idft_size_idx_t get_idft(int size)
   return IDFT_SIZE_IDXTABLESIZE; // never reached and will trigger assertion in idft function
 }
 
-
-/*!\fn int32_t rotate_cpx_vector(c16_t *x,c16_t *alpha,c16_t *y,uint32_t N,uint16_t output_shift)
+/*!\fn int32_t rotate_cpx_vector(c16_t *x,c16_t alpha,c16_t *y,uint32_t N,uint16_t output_shift)
 This function performs componentwise multiplication of a vector with a complex scalar.
 @param x Vector input (Q1.15)  in the format  |Re0  Im0|,......,|Re(N-1) Im(N-1)|
 @param alpha Scalar input (Q1.15) in the format  |Re0 Im0|
 @param y Output (Q1.15) in the format  |Re0  Im0|,......,|Re(N-1) Im(N-1)|
 @param N Length of x WARNING: N>=4
-@param output_shift Number of bits to shift output down to Q1.15 (should be 15 for Q1.15 inputs) WARNING: log2_amp>0 can cause overflow!!
+@param output_shift Number of bits to shift output down to Q1.15 (should be 15 for Q1.15 inputs) WARNING: log2_amp>0 can cause
+overflow!!
 
 The function implemented is : \f$\mathbf{y} = \alpha\mathbf{x}\f$
 */
-static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const alpha, c16_t *y, uint32_t N, uint16_t output_shift)
+static inline void rotate_cpx_vector(const c16_t *const x, const c16_t alpha, c16_t *y, uint32_t N, uint16_t output_shift)
 {
   // multiply a complex vector with a complex value (alpha)
   // stores result in y
@@ -720,9 +723,9 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
   if (__builtin_cpu_supports("avx2")) {
     // output is 32 bytes aligned, but not the input
 
-    const c16_t for_re = {alpha->r, (int16_t)-alpha->i};
+    const c16_t for_re = {alpha.r, (int16_t)-alpha.i};
     const simde__m256i alpha_for_real = simde_mm256_set1_epi32(*(uint32_t *)&for_re);
-    const c16_t for_im = {alpha->i, alpha->r};
+    const c16_t for_im = {alpha.i, alpha.r};
     const simde__m256i alpha_for_im = simde_mm256_set1_epi32(*(uint32_t *)&for_im);
     const simde__m256i perm_mask = simde_mm256_set_epi8(31,
                                                         30,
@@ -766,10 +769,10 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
       const simde__m256i tmp = simde_mm256_packs_epi32(xre, xim);
       simde_mm256_storeu_si256(yd, simde_mm256_shuffle_epi8(tmp, perm_mask));
     }
-    c16_t *alpha16 = (c16_t *)alpha, *yLast;
+    c16_t *yLast;
     yLast = ((c16_t *)y) + (N / 8) * 8;
     for (c16_t *xTail = (c16_t *)end; xTail < ((c16_t *)x) + N; xTail++, yLast++) {
-      *yLast = c16mulShift(*xTail, *alpha16, output_shift);
+      *yLast = c16mulShift(*xTail, alpha, output_shift);
     }
   } else {
 #endif
@@ -791,8 +794,8 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
 #ifdef __aarch64__
     if (output_shift == 15) { // allows specific NEON instruction
 
-      int16x8_t ar = (int16x8_t)vdupq_n_s16(alpha->r);
-      int16x8_t ai = (int16x8_t)vdupq_n_s16(alpha->i);
+      int16x8_t ar = (int16x8_t)vdupq_n_s16(alpha.r);
+      int16x8_t ai = (int16x8_t)vdupq_n_s16(alpha.i);
       int16x8_t *y_128 = (int16x8_t *)y;
       int16x8_t *x_128 = (int16x8_t *)x;
       for (uint32_t i = 0; i < (N >> 2); i++) {
@@ -850,14 +853,14 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
 
     simde__m128i shift = simde_mm_cvtsi32_si128(output_shift);
 
-    ((int16_t *)&alpha_128)[0] = alpha->r;
-    ((int16_t *)&alpha_128)[1] = -alpha->i;
-    ((int16_t *)&alpha_128)[2] = alpha->i;
-    ((int16_t *)&alpha_128)[3] = alpha->r;
-    ((int16_t *)&alpha_128)[4] = alpha->r;
-    ((int16_t *)&alpha_128)[5] = -alpha->i;
-    ((int16_t *)&alpha_128)[6] = alpha->i;
-    ((int16_t *)&alpha_128)[7] = alpha->r;
+    ((int16_t *)&alpha_128)[0] = alpha.r;
+    ((int16_t *)&alpha_128)[1] = (int16_t)-alpha.i;
+    ((int16_t *)&alpha_128)[2] = alpha.i;
+    ((int16_t *)&alpha_128)[3] = alpha.r;
+    ((int16_t *)&alpha_128)[4] = alpha.r;
+    ((int16_t *)&alpha_128)[5] =  (int16_t)-alpha.i;
+    ((int16_t *)&alpha_128)[6] = alpha.i;
+    ((int16_t *)&alpha_128)[7] = alpha.r;
     y_128 = (simd_q15_t *)y;
 
     for (i = 0; i < N >> 2; i++) {

@@ -110,9 +110,8 @@ typedef struct gtpv1u_gnb_delete_tunnel_req_s gtpv1u_gnb_delete_tunnel_req_t;
   teid_t newGtpuCreateTunnel(instance_t instance,
                              ue_id_t ue_id,
                              int incoming_bearer_id,
-                             int outgoing_rb_id,
-                             teid_t teid,
-                             int outgoing_qfi,
+                             int outgoing_bearer_id,
+                             teid_t outgoing_teid,
                              transport_layer_addr_t remoteAddr,
                              gtpCallback callBack,
                              gtpCallbackSDAP callBackSDAP);
@@ -127,6 +126,8 @@ typedef struct gtpv1u_gnb_delete_tunnel_req_s gtpv1u_gnb_delete_tunnel_req_t;
   int newGtpuDeleteAllTunnels(instance_t instance, ue_id_t ue_id);
 
   void gtpv1uSendDirect(instance_t instance, ue_id_t ue_id, int bearer_id, uint8_t *buf, size_t len, bool seqNumFlag, bool npduNumFlag);
+  void gtpv1uSendDirectWithQFI(instance_t instance, ue_id_t ue_id, int bearer_id, int qfi, uint8_t *buf, size_t len);
+
   void gtpv1uSendDirectWithNRUSeqNum(instance_t instance,
                                      ue_id_t ue_id,
                                      int bearer_id,

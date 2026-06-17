@@ -153,20 +153,22 @@ static void free_match_list(char **match_list, size_t count)
 static void fix_benetel_setting(xran_mplane_t *xran_mplane, const uint32_t interface_mtu, const int16_t first_iq_width, const int max_num_ant, const char *model_name)
 {
   if (interface_mtu == 1500) {
-    MP_LOG_I("Interface MTU %d unreliable/not correctly reported by Benetel O-RU, hardcoding to 9600.\n", interface_mtu);
-    xran_mplane->mtu = 9600;
+    MP_LOG_I("Interface MTU %d unreliable/not correctly reported by Benetel O-RU, hardcoding to 9216.\n", interface_mtu);
+    xran_mplane->mtu = 9216;
   } else {
     xran_mplane->mtu = interface_mtu;
   }
 
-  if (first_iq_width != 9) {
-    MP_LOG_I("IQ bitwidth %d unreliable/not correctly reported by Benetel O-RU, hardcoding to 9.\n", first_iq_width);
-    xran_mplane->iq_width = 9;
-  } else {
-    xran_mplane->iq_width = first_iq_width;
+  if (xran_mplane->iq_width == 255) {
+    if (first_iq_width != 9) {
+      MP_LOG_I("IQ bitwidth %d unreliable/not correctly reported by Benetel O-RU, hardcoding to 9.\n", first_iq_width);
+      xran_mplane->iq_width = 9;
+    } else {
+      xran_mplane->iq_width = first_iq_width;
+    }
   }
 
-  xran_mplane->prach_offset = max_num_ant;
+  xran_mplane->prach_offset = (max_num_ant == 2) ? 8 : max_num_ant;
 
   if (strcasecmp(model_name, "RAN550") == 0) {
     xran_mplane->max_tx_gain = 24.0;
@@ -247,6 +249,7 @@ bool get_config_for_xran(const char *buffer, const int max_num_ant, xran_mplane_
   MP_LOG_I("Storing the following information to forward to xran:\n\
     RU MAC address %s\n\
     MTU %d\n\
+    Compression header type %s\n\
     IQ bitwidth %d\n\
     PRACH offset %d\n\
     DU port bitmask %d\n\
@@ -260,6 +263,7 @@ bool get_config_for_xran(const char *buffer, const int max_num_ant, xran_mplane_
     max Tx gain %.1f\n",
       xran_mplane->ru_mac_addr,
       xran_mplane->mtu,
+      xran_mplane->comp_hdr_type == 0 ? "dynamic" : "static",
       xran_mplane->iq_width,
       xran_mplane->prach_offset,
       xran_mplane->du_port_bitmask,

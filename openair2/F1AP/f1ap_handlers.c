@@ -11,6 +11,9 @@
 #include "f1ap_du_ue_context_management.h"
 #include "f1ap_du_paging.h"
 
+#include "F1AP_F1AP-PDU.h"
+#include "F1AP_InitiatingMessage.h"
+
 /* Handlers matrix. Only f1 related procedure present here */
 static const f1ap_message_processing_t f1ap_messages_processing[][3] = {
 

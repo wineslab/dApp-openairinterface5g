@@ -22,7 +22,7 @@ class TestDeploymentMethods(unittest.TestCase):
 		self.html = cls_oai_html.HTMLManagement()
 		self.html.testCaseId = "000000"
 		self.cont = cls_containerize.Containerize()
-		self.cont.eNBSourceCodePath = os.getcwd()
+		self.cont.workspace = os.getcwd()
 
 	def test_pull_clean_local_reg(self):
 		# the pull function has the authentication at the internal cluster hardcoded

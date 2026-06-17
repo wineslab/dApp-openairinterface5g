@@ -272,7 +272,7 @@ typedef struct {
   unsigned int dmrs_scrambling_id;
   unsigned int scid;
   unsigned int dmrs_port;
-  int Wt;
+  int *Wt;
   int *Wf;
   unsigned int dmrs_symb_pos;
   unsigned int ptrs_symb_pos;
@@ -456,6 +456,7 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
   // for all symbols
   const unsigned int n_dmrs = (p.bwp_start + p.start_rb + p.nb_rb) * ((p.dmrs_type == pusch_dmrs_type1) ? 6 : 4);
   const c16_t *cur_data = data;
+  uint8_t dmrs_symb_idx = 0;
   for (int l = p.start_symbol; l < p.start_symbol + p.num_symbols; l++) {
     const bool dmrs_symbol = is_dmrs_symbol(l, p.dmrs_symb_pos);
     const bool ptrs_symbol = is_ptrs_symbol(l, p.ptrs_symb_pos);
@@ -469,10 +470,11 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
       c16_t mod_dmrs[ALNARS_16_4(n_dmrs)] __attribute((aligned(16)));
       if (p.transform_precoding == transformPrecoder_disabled) {
         nr_modulation(gold, n_dmrs * 2, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
-        dmrs_amp_mult(p.Wt, p.Wf, mod_dmrs, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
+        dmrs_amp_mult(p.Wt[dmrs_symb_idx % 2], p.Wf, mod_dmrs, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
       } else {
-        dmrs_amp_mult(p.Wt, p.Wf, dmrs_seq, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
+        dmrs_amp_mult(p.Wt[dmrs_symb_idx % 2], p.Wf, dmrs_seq, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
       }
+      dmrs_symb_idx++;
     } else if ((p.pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) && ptrs_symbol) {
       AssertFatal(p.transform_precoding == transformPrecoder_disabled, "PTRS NOT SUPPORTED IF TRANSFORM PRECODING IS ENABLED\n");
       c16_t mod_ptrs[ALNARS_16_4(p.nb_rb)] __attribute((aligned(16)));
@@ -1140,6 +1142,7 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   ws_trace_t tmp = {.nr = true,
                     .direction = DIRECTION_UPLINK,
+                    .type = UE->frame_parms.frame_type == FDD ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = harq_process_ul_ue->payload_AB,
                     .pdu_buffer_size = tb_size,
                     .ueid = 0,
@@ -1172,8 +1175,6 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
   }
 
   LOG_D(PHY, "nr_ue_ulsch_procedures_slot hard_id %d %d.%d\n", harq_pid, frame, slot);
-
-  int l_prime[2];
 
   NR_DL_FRAME_PARMS *frame_parms = &UE->frame_parms;
 
@@ -1334,8 +1335,6 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   //////////////////////// ULSCH transform precoding ////////////////////////
 
-  l_prime[0] = 0; // single symbol ap 0
-
   uint8_t u = 0, v = 0;
   c16_t *dmrs_seq = NULL;
   /// Transform-coded "y"-sequences (for definition see 38-211 V15.3.0 2018-09, subsection 6.3.1.4)
@@ -1428,7 +1427,7 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
                                     .dmrs_scrambling_id = pusch_pdu->ul_dmrs_scrambling_id,
                                     .scid = pusch_pdu->scid,
                                     .dmrs_port = dmrs_port,
-                                    .Wt = Wt[l_prime[0]],
+                                    .Wt = Wt,
                                     .Wf = Wf,
                                     .dmrs_symb_pos = ul_dmrs_symb_pos,
                                     .ptrs_symb_pos = ulsch_ue->ptrs_symbols,

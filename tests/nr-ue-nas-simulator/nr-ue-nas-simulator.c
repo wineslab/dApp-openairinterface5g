@@ -75,7 +75,7 @@ int nr_rlc_get_available_tx_space(const rnti_t rntiP, const logical_chan_id_t ch
 
 configmodule_interface_t *uniqCfg = NULL;
 
-// Emulate registration request to register UE in the AMF (required for positioning)
+// Emulate registration request to register UE in the AMF
 void send_initial_ue_message(instance_t instance)
 {
   MessageDef *msg_p = itti_alloc_new_message(TASK_RRC_GNB, 0, NGAP_NAS_FIRST_REQ);
@@ -92,6 +92,12 @@ void send_initial_ue_message(instance_t instance)
 
   as_nas_info_t initialNasMsg = {0};
   nr_ue_nas_t *nr_ue_nas = get_ue_nas_info(0);
+  // serving network name (snn)
+  // Ideally snn should be filled from SIB1, but we operate at NAS/RRC level and we dont decode SIB1
+  nr_ue_nas->sn_id = calloc(1, sizeof(plmn_id_t));
+  nr_ue_nas->sn_id->mcc = mcc;
+  nr_ue_nas->sn_id->mnc = mnc;
+  nr_ue_nas->sn_id->mnc_digit_length = mnc_len;
   generateRegistrationRequest(&initialNasMsg, nr_ue_nas, false);
 
   NGAP_NAS_FIRST_REQ(msg_p).nas_pdu.buf = initialNasMsg.nas_data;

@@ -24,7 +24,7 @@ class TestBuild(unittest.TestCase):
 		self._d = tempfile.mkdtemp()
 		logging.warning(f"temporary directory: {self._d}")
 		self.node = 'localhost'
-		self.cont.eNBSourceCodePath = self._d
+		self.cont.workspace = self._d
 		self.ctx = TestCaseCtx.Default(tempfile.mkdtemp())
 
 	def tearDown(self):
@@ -32,11 +32,6 @@ class TestBuild(unittest.TestCase):
 		with cls_cmd.getConnection(None) as cmd:
 			cmd.run(f"rm -rf {self._d}")
 			cmd.run(f'rm -rf {self.ctx.logPath}')
-
-	def test_build_proxy(self):
-		self.cont.proxyCommit = "b64d9bce986b38ca59e8582864ade3fcdd05c0dc"
-		success = self.cont.BuildProxy(self.ctx, self.node, self.html)
-		self.assertTrue(success)
 
 if __name__ == '__main__':
 	unittest.main()

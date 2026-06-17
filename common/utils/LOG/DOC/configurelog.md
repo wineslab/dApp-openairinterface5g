@@ -39,7 +39,7 @@ CLEAR_LOG_DUMP(flag)
 ```
  These macros are used to set or clear the corresponding bit flag, trigerring the activation or un-activation of conditional code or memory dumps generation.
 
-Example of using the logging utility APIs can be found, for initialization and cleanup,  in [lte-softmodem.c](../../../../targets/RT/USER/lte-softmodem.c) and in the [telnet server log command implementation](../../telnetsrv/telnetsrv_proccmd.c) for a complete access to the logging facility features.
+Example of using the logging utility APIs can be found, for initialization and cleanup,  in [lte-softmodem.c](../../../../executables/lte-softmodem.c) and in the [telnet server log command implementation](../../telnetsrv/telnetsrv_proccmd.c) for a complete access to the logging facility features.
 
 #### components and debug flags definitions
 
@@ -48,4 +48,3 @@ To add a flag than can then be used for adding conditional code or memory dumps 
 
 [logging facility developer main page](devusage.md)
 [logging facility  main page](log.md)
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

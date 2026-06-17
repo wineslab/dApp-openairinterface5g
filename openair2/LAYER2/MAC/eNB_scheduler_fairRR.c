@@ -1888,6 +1888,7 @@ schedule_ue_spec_fairRR(module_id_t module_idP,
             UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0][offset+sdu_length_total+j] = (char)(taus()&0xff);
           }
           ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                            .type = cc[CC_id].tdd_Config ? TDD_RADIO : FDD_RADIO,
                             .pdu_buffer = UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0],
                             .pdu_buffer_size = TBS,
                             .ueid = module_idP,

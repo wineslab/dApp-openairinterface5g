@@ -28,7 +28,6 @@
 #include "assertions.h"
 #include "common/ngran_types.h"
 #include "common/ran_context.h"
-#include "common/utils/T/T.h"
 #include "executables/softmodem-common.h"
 #include "linear_alloc.h"
 #include "nr_pdcp/nr_pdcp_entity.h"
@@ -173,7 +172,8 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
     float pucch_snr_diff = (pucch_snr * 10.0f - sched_ctrl->pucch_pc.target_snrx10) / 10.0f;
     output = st_append(output,
                        end,
-                       ", dlsch_errors %"PRIu64", pucch0_DTX %d (SNR %.1f%+.1f dB), BLER %.5f MCS (%d) %d CCE fail %d\n",
+                       ", dlsch_errors %" PRIu64
+                       ", pucch0_DTX %d (SNR %.1f%+.1f dB), BLER %.5f MCS (%d) %d CCE fail %d, goodput %.2f Mbps\n",
                        stats->dl.errors,
                        stats->pucch0_DTX,
                        pucch_snr,
@@ -181,7 +181,8 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
                        sched_ctrl->dl_bler_stats.bler,
                        UE->current_DL_BWP.mcsTableIdx,
                        sched_ctrl->dl_bler_stats.mcs,
-                       sched_ctrl->dl_cce_fail);
+                       sched_ctrl->dl_cce_fail,
+                       UE->dl_thr_ue_display / 1e6);
     if (reset_rsrp) {
       stats->num_rsrp_meas = 0;
       stats->cumul_rsrp = 0;
@@ -197,24 +198,23 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
 
     float snr = nr_mac_get_snr(&sched_ctrl->pusch_pc);
     float diff_target = (snr * 10.0f - sched_ctrl->pusch_pc.target_snrx10) / 10.0f;
-    output = st_append(output,
-                       end,
-                       ", ulsch_errors %"PRIu64", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d SNR %.1f (%+.1f) dB CCE fail %d\n",
-                       stats->ul.errors,
-                       stats->ulsch_DTX,
-                       sched_ctrl->ul_bler_stats.bler,
-                       UE->current_UL_BWP.mcs_table,
-                       sched_ctrl->ul_bler_stats.mcs,
-                       nr_get_Qm_ul(sched_ctrl->ul_bler_stats.mcs,UE->current_UL_BWP.mcs_table),
-                       UE->mac_stats.deltaMCS,
-                       UE->mac_stats.NPRB,
-                       snr,
-                       diff_target,
-                       sched_ctrl->ul_cce_fail);
-   output = st_append(output,
-                       end,
-                       "UE %04x: MAC:    TX %14"PRIu64" RX %14"PRIu64" bytes\n",
-                       UE->rnti, stats->dl.total_bytes, stats->ul.total_bytes);
+    output = st_append(
+        output,
+        end,
+        ", ulsch_errors %" PRIu64
+        ", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d SNR %.1f (%+.1f) dB CCE fail %d, goodput %.2f Mbps\n",
+        stats->ul.errors,
+        stats->ulsch_DTX,
+        sched_ctrl->ul_bler_stats.bler,
+        UE->current_UL_BWP.mcs_table,
+        sched_ctrl->ul_bler_stats.mcs,
+        nr_get_Qm_ul(sched_ctrl->ul_bler_stats.mcs, UE->current_UL_BWP.mcs_table),
+        UE->mac_stats.deltaMCS,
+        UE->mac_stats.NPRB,
+        snr,
+        diff_target,
+        sched_ctrl->ul_cce_fail,
+        UE->ul_thr_ue_display / 1e6);
 
     for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); i++) {
       const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
@@ -300,12 +300,25 @@ void mac_top_init_gNB(ngran_node_t node_type,
 
       uid_linear_allocator_init(&RC.nrmac[i]->UE_info.uid_allocator);
 
+      RC.nrmac[i]->ul_ri_tpmi_select = nr_ul_ri_tpmi_select_default;
+      RC.nrmac[i]->ul_tda_select = nr_ul_tda_select_default;
+      RC.nrmac[i]->ul_beam_select = nr_ul_beam_select_default;
+      RC.nrmac[i]->ul_mcs_select = nr_ul_mcs_select_default;
+      RC.nrmac[i]->ul_rb_alloc = nr_ul_proportional_fair;
+
+      RC.nrmac[i]->dl_lcid_alloc = nr_dl_lcid_alloc_default;
+
       if (get_softmodem_params()->phy_test) {
         RC.nrmac[i]->pre_processor_dl = nr_preprocessor_phytest;
         RC.nrmac[i]->pre_processor_ul = nr_ul_preprocessor_phytest;
       } else {
-        RC.nrmac[i]->pre_processor_dl = nr_init_dlsch_preprocessor();
-        RC.nrmac[i]->pre_processor_ul = nr_init_ulsch_preprocessor();
+        RC.nrmac[i]->pre_processor_dl = nr_dlsch_preprocessor;
+        RC.nrmac[i]->pre_processor_ul = nr_ulsch_preprocessor;
+        RC.nrmac[i]->dl_ri_pmi_select = nr_dl_ri_pmi_select_default;
+        RC.nrmac[i]->dl_mcs_select = nr_dl_mcs_select_default;
+        RC.nrmac[i]->dl_beam_select = nr_dl_beam_select_default;
+        RC.nrmac[i]->dl_tda_select = nr_dl_tda_select_default;
+        RC.nrmac[i]->dl_rb_alloc = nr_dl_proportional_fair;
       }
       if (!IS_SOFTMODEM_NOSTATS)
         threadCreate(&RC.nrmac[i]->stats_thread,

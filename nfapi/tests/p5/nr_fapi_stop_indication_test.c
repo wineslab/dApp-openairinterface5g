@@ -46,7 +46,7 @@ void test_copy(const nfapi_nr_stop_indication_scf_t *msg)
   free_stop_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

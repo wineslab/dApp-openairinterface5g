@@ -22,6 +22,7 @@
 #include "NR_UL-CCCH-Message.h"
 
 #include "openair2/F1AP/f1ap_du_rrc_message_transfer.h"
+#include "openair2/F1AP/f1ap_common.h"
 #include "openair2/F1AP/f1ap_ids.h"
 #include "openair3/ocp-gtpu/gtp_itf.h"
 #include <stdint.h>
@@ -484,8 +485,9 @@ rb_found:
         return;
       } else {
         LOG_D(RLC, "Received uplink user-plane traffic at RLC-DU to be sent to the CU, size %d \n", size);
-        extern instance_t DUuniqInstance;
-        gtpv1uSendDirect(DUuniqInstance, ue->ue_id, rb_id, (uint8_t*) buf, size, false, false);
+        const f1ap_cudu_inst_t *inst = getCxt(0);
+        DevAssert(inst);
+        gtpv1uSendDirect(inst->gtpInst, ue->ue_id, rb_id, (uint8_t*) buf, size, false, false);
         return;
       }
     }

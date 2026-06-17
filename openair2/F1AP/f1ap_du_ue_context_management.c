@@ -12,6 +12,12 @@
 #include "openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_oai_api.h"
 
+#include "F1AP_F1AP-PDU.h"
+#include "F1AP_InitiatingMessage.h"
+#include "F1AP_SuccessfulOutcome.h"
+#include "F1AP_UnsuccessfulOutcome.h"
+#include "F1AP_ProtocolIE-Field.h"
+
 int DU_handle_UE_CONTEXT_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
   UNUSED(instance);

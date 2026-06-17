@@ -694,9 +694,6 @@ The NAS layer is based on **3GPP 24.301** and implements the following functions
 - EMM attach/detach, authentication, tracking area update, and more
 - ESM default/dedicated bearer, PDN connectivity, and more
 
-
-[OAI wiki home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)
-
 [OAI softmodem build procedure](BUILD.md)
 
 [Running the OAI softmodem ](RUNMODEM.md)

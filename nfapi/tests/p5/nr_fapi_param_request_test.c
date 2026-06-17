@@ -46,7 +46,7 @@ void test_copy(const nfapi_nr_param_request_scf_t *msg)
   free_param_request(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

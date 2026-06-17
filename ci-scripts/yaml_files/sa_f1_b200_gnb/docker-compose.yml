@@ -40,7 +40,7 @@ services:
             USE_B2XX: 'yes'
             USE_ADDITIONAL_OPTIONS: --RUs.[0].sdr_addrs serial=30C51D4 --continuous-tx
                                     --telnetsrv --telnetsrv.listenport 9091 --telnetsrv.shrmod ci
-                                    --gNBs.[0].min_rxtxtime 2 --gNBs.[0].do_CSIRS 1 --gNBs.[0].do_SRS 0 --L1s.[0].max_ldpc_iterations 20
+                                    --gNBs.[0].min_rxtxtime 2 --gNBs.[0].do_CSIRS 1 --L1s.[0].max_ldpc_iterations 20
                                     --log_config.global_log_options level,nocolor,time,line_num,function
         devices:
             - /dev/bus/usb/:/dev/bus/usb/

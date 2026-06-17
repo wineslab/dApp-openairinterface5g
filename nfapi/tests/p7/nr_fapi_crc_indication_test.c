@@ -78,7 +78,7 @@ static void test_copy(const nfapi_nr_crc_indication_t *msg)
   free_crc_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

@@ -3,7 +3,7 @@
 services:
     mysql:
         container_name: "rfsim5g-mysql"
-        image: mysql:8.0
+        image: mysql:9.6
         init: true
         volumes:
             - ../5g_rfsimulator/oai_db.sql:/docker-entrypoint-initdb.d/oai_db.sql
@@ -26,7 +26,7 @@ services:
                 ipv4_address: 192.168.71.131
     oai-amf:
         container_name: "rfsim5g-oai-amf"
-        image: oaisoftwarealliance/oai-amf:v2.1.10
+        image: oaisoftwarealliance/oai-amf:v2.2.1
         environment:
             - TZ=Europe/paris
         volumes:
@@ -38,7 +38,7 @@ services:
                 ipv4_address: 192.168.71.132
     oai-smf:
         container_name: "rfsim5g-oai-smf"
-        image: oaisoftwarealliance/oai-smf:v2.1.10
+        image: oaisoftwarealliance/oai-smf:v2.2.1
         environment:
             - TZ=Europe/Paris
         volumes:
@@ -50,7 +50,7 @@ services:
                 ipv4_address: 192.168.71.133
     oai-upf:
         container_name: "rfsim5g-oai-upf"
-        image: oaisoftwarealliance/oai-upf:v2.1.10
+        image: oaisoftwarealliance/oai-upf:v2.2.1
         init: true
         environment:
             - TZ=Europe/Paris
@@ -74,7 +74,7 @@ services:
     oai-ext-dn:
         privileged: true
         container_name: rfsim5g-oai-ext-dn
-        image: oaisoftwarealliance/trf-gen-cn5g:focal
+        image: oaisoftwarealliance/trf-gen-cn5g:latest
         init: true
         entrypoint: /bin/bash -c \
               "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE;"\

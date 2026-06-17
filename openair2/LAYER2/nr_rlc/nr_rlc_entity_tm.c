@@ -10,6 +10,7 @@
 #include "nr_rlc_pdu.h"
 #include "common/utils/time_stat.h"
 #include "LOG/log.h"
+#include "common/platform_types.h"
 
 /*************************************************************************/
 /* PDU RX functions                                                      */

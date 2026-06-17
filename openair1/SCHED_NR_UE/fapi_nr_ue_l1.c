@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include "openair1/PHY/phy_extern_nr_ue.h"
 #include "fapi_nr_ue_interface.h"
 #include "fapi_nr_ue_l1.h"
 #include "harq_nr.h"
@@ -16,53 +17,47 @@
 #include "utils.h"
 #include "SCHED_NR_UE/phy_sch_processing_time.h"
 
-extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
-
 const char *const dl_pdu_type[] = {"DCI", "DLSCH", "RA_DLSCH", "SI_DLSCH", "P_DLSCH", "CSI_RS", "CSI_IM", "TA"};
 const char *const ul_pdu_type[] = {"PRACH", "PUCCH", "PUSCH", "SRS"};
 
-static void configure_dlsch(NR_UE_DLSCH_t *dlsch0,
+static void configure_dlsch(NR_UE_DLSCH_t *dlsch,
                             NR_DL_UE_HARQ_t *harq_list,
                             fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config_pdu,
                             NR_UE_MAC_INST_t *mac,
+                            int cw_idx,
                             int rnti)
 {
   const uint8_t current_harq_pid = dlsch_config_pdu->harq_process_nbr;
-  dlsch0->active = true;
-  dlsch0->rnti = rnti;
+  dlsch->active = true;
+  dlsch->rnti = rnti;
 
-  LOG_D(PHY,"current_harq_pid = %d\n", current_harq_pid);
+  LOG_D(PHY,"Configure DLSCH for pid = %d\n", current_harq_pid);
 
-  NR_DL_UE_HARQ_t *dlsch0_harq = &harq_list[current_harq_pid];
+  NR_DL_UE_HARQ_t *dlsch_harq = &harq_list[current_harq_pid];
+  dlsch->cw_info = dlsch_config_pdu->cw_info[cw_idx];
 
-  //get nrOfLayers from DCI info
-  uint8_t Nl = 0;
-  for (int i = 0; i < 12; i++) { // max 12 ports
-    if ((dlsch_config_pdu->dmrs_ports >> i) & 0x01)
-      Nl += 1;
-  }
-  if (Nl == 0) {
-    LOG_E(PHY, "Invalid number of layers %d for DLSCH\n", Nl);
+  if (dlsch->cw_info.Nl == 0) {
+    LOG_E(PHY, "Invalid number of layers %d for DLSCH\n", dlsch->cw_info.Nl);
     // setting NACK for this TB
-    dlsch0->active = false;
-    update_harq_status(mac, current_harq_pid, 0);
+    dlsch->active = false;
+    update_harq_status(mac, current_harq_pid, cw_idx, 0);
     return;
   }
-  dlsch0->Nl = Nl;
-  if (dlsch_config_pdu->new_data_indicator) {
-    dlsch0_harq->first_rx = true;
-    dlsch0_harq->DLround = 0;
+
+  if (dlsch->cw_info.new_data_indicator) {
+    dlsch_harq->first_rx = true;
+    dlsch_harq->DLround = 0;
   } else {
-    dlsch0_harq->first_rx = false;
-    dlsch0_harq->DLround++;
+    dlsch_harq->first_rx = false;
+    dlsch_harq->DLround++;
   }
-  downlink_harq_process(dlsch0_harq, current_harq_pid, dlsch_config_pdu->new_data_indicator, dlsch_config_pdu->rv, dlsch0->rnti_type);
-  if (dlsch0_harq->status != NR_ACTIVE) {
-    // dlsch0_harq->status not ACTIVE due to false retransmission
+  downlink_harq_process(dlsch_harq, current_harq_pid, dlsch->cw_info.new_data_indicator, dlsch->cw_info.rv, dlsch->rnti_type);
+  if (dlsch_harq->status != NR_ACTIVE) {
+    // dlsch_harq->status not ACTIVE due to false retransmission
     // Reset the following flag to skip PDSCH procedures in that case and retrasmit harq status
-    dlsch0->active = false;
+    dlsch->active = false;
     LOG_W(NR_MAC, "dlsch0_harq->status not ACTIVE due to false retransmission harq pid: %d\n", current_harq_pid);
-    update_harq_status(mac, current_harq_pid, dlsch0_harq->decodeResult);
+    update_harq_status(mac, current_harq_pid, cw_idx, dlsch_harq->decodeResult);
   }
 }
 
@@ -161,23 +156,28 @@ static void nr_ue_scheduled_response_dl(NR_UE_MAC_INST_t *mac,
       case FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH: {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config_pdu = &pdu->dlsch_config_pdu.dlsch_config_rel15;
         NR_UE_DLSCH_t *dlsch0 = phy_data->dlsch + 0;
+        phy_data->n_dlsch_codewords = dlsch_config_pdu->n_codewords;
+        phy_data->dlsch_config = *dlsch_config_pdu;
         dlsch0->rnti_type = TYPE_RA_RNTI_;
-        dlsch0->dlsch_config = *dlsch_config_pdu;
-        configure_dlsch(dlsch0, phy->dl_harq_processes[0], dlsch_config_pdu, mac, pdu->dlsch_config_pdu.rnti);
+        configure_dlsch(dlsch0, phy->dl_harq_processes[0], dlsch_config_pdu, mac, 0, pdu->dlsch_config_pdu.rnti);
       } break;
       case FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH: {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config_pdu = &pdu->dlsch_config_pdu.dlsch_config_rel15;
         NR_UE_DLSCH_t *dlsch0 = phy_data->dlsch + 0;
+        phy_data->n_dlsch_codewords = dlsch_config_pdu->n_codewords;
+        phy_data->dlsch_config = *dlsch_config_pdu;
         dlsch0->rnti_type = TYPE_SI_RNTI_;
-        dlsch0->dlsch_config = *dlsch_config_pdu;
-        configure_dlsch(dlsch0, phy->dl_harq_processes[0], dlsch_config_pdu, mac, pdu->dlsch_config_pdu.rnti);
+        configure_dlsch(dlsch0, phy->dl_harq_processes[0], dlsch_config_pdu, mac, 0, pdu->dlsch_config_pdu.rnti);
       } break;
       case FAPI_NR_DL_CONFIG_TYPE_DLSCH: {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config_pdu = &pdu->dlsch_config_pdu.dlsch_config_rel15;
-        NR_UE_DLSCH_t *dlsch0 = &phy_data->dlsch[0];
-        dlsch0->rnti_type = TYPE_C_RNTI_;
-        dlsch0->dlsch_config = *dlsch_config_pdu;
-        configure_dlsch(dlsch0, phy->dl_harq_processes[0], dlsch_config_pdu, mac, pdu->dlsch_config_pdu.rnti);
+        phy_data->n_dlsch_codewords = dlsch_config_pdu->n_codewords;
+        phy_data->dlsch_config = *dlsch_config_pdu;
+        for (int c = 0; c < dlsch_config_pdu->n_codewords; c++) {
+          NR_UE_DLSCH_t *dlsch = &phy_data->dlsch[c];
+          dlsch->rnti_type = TYPE_C_RNTI_;
+          configure_dlsch(dlsch, phy->dl_harq_processes[c], dlsch_config_pdu, mac, c, pdu->dlsch_config_pdu.rnti);
+        }
       } break;
       case FAPI_NR_CONFIG_TA_COMMAND:
         configure_ta_command(phy, &pdu->ta_command_pdu);
@@ -354,7 +354,7 @@ static void nr_ue_scheduled_response_ul(PHY_VARS_NR_UE *phy, fapi_nr_ul_config_r
 
 int8_t nr_ue_scheduled_response(nr_scheduled_response_t *scheduled_response)
 {
-  PHY_VARS_NR_UE *phy = PHY_vars_UE_g[scheduled_response->module_id][scheduled_response->CC_id];
+  PHY_VARS_NR_UE *phy = nrPHY_vars_UE_g[scheduled_response->module_id][scheduled_response->CC_id];
   AssertFatal(!scheduled_response->dl_config || !scheduled_response->ul_config || !scheduled_response->sl_rx_config
                   || !scheduled_response->sl_tx_config,
               "phy_data parameter will be cast to two different types!\n");
@@ -376,7 +376,7 @@ int8_t nr_ue_scheduled_response(nr_scheduled_response_t *scheduled_response)
 
 void nr_ue_phy_config_request(nr_phy_config_t *phy_config)
 {
-  PHY_VARS_NR_UE *phy = PHY_vars_UE_g[phy_config->Mod_id][phy_config->CC_id];
+  PHY_VARS_NR_UE *phy = nrPHY_vars_UE_g[phy_config->Mod_id][phy_config->CC_id];
   fapi_nr_config_request_t *nrUE_config = &phy->nrUE_config;
   if(phy_config != NULL) {
     phy->received_config_request = true;
@@ -386,14 +386,14 @@ void nr_ue_phy_config_request(nr_phy_config_t *phy_config)
 
 void nr_ue_synch_request(nr_synch_request_t *synch_request)
 {
-  fapi_nr_synch_request_t *synch_req = &PHY_vars_UE_g[synch_request->Mod_id][synch_request->CC_id]->synch_request.synch_req;
+  fapi_nr_synch_request_t *synch_req = &nrPHY_vars_UE_g[synch_request->Mod_id][synch_request->CC_id]->synch_request.synch_req;
   memcpy(synch_req, &synch_request->synch_req, sizeof(fapi_nr_synch_request_t));
-  PHY_vars_UE_g[synch_request->Mod_id][synch_request->CC_id]->synch_request.received_synch_request = 1;
+  nrPHY_vars_UE_g[synch_request->Mod_id][synch_request->CC_id]->synch_request.received_synch_request = 1;
 }
 
 void nr_ue_sl_phy_config_request(nr_sl_phy_config_t *phy_config)
 {
-  PHY_VARS_NR_UE *phy = PHY_vars_UE_g[phy_config->Mod_id][phy_config->CC_id];
+  PHY_VARS_NR_UE *phy = nrPHY_vars_UE_g[phy_config->Mod_id][phy_config->CC_id];
   sl_nr_phy_config_request_t *sl_config = &phy->SL_UE_PHY_PARAMS.sl_config;
   if (phy_config != NULL) {
     phy->received_config_request = true;

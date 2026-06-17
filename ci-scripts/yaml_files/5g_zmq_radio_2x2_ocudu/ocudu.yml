@@ -20,6 +20,8 @@ ru_sdr:
   srate: 61.44
   tx_gain: 25
   rx_gain: 25
+  amplitude_control:
+    tx_gain_backoff: 22
 
 cell_cfg:
   dl_arfcn: 632628
@@ -44,8 +46,8 @@ cell_cfg:
     nof_cell_csi_res: 0
 
 log:
-  filename: gnb.log
-  all_level: debug
+  filename: stdout
+  all_level: info
 
 pcap:
   mac_enable: false

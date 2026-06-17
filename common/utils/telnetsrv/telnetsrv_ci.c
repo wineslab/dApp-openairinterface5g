@@ -24,7 +24,7 @@
 #include "openair2/LAYER2/NR_MAC_gNB/mac_config.h"
 #include "openair2/RRC/NR/rrc_gNB_mobility.h"
 #include "openair3/NGAP/ngap_gNB_ue_context.h"
-
+#include "openair2/RRC/NR/rrc_gNB_du.h"
 #define TELNETSERVERCODE
 #include "telnetsrv.h"
 
@@ -132,8 +132,6 @@ int trigger_reestab(char *buf, int debug, telnet_printfunc_t prnt)
   return 0;
 }
 
-extern nr_rrc_du_container_t *get_du_for_ue(gNB_RRC_INST *rrc, uint32_t ue_id);
-
 /** @brief Get connected DU by the UE ID */
 int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
 {
@@ -163,7 +161,6 @@ int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
   }
 }
 
-extern void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id);
 /**
  * @brief Trigger F1 handover for UE
  * @param buf: RRC UE ID or NULL for the first UE in list
@@ -193,8 +190,6 @@ int rrc_gNB_trigger_f1_ho(char *buf, int debug, telnet_printfunc_t prnt)
   prnt("RRC F1 handover triggered for UE %u\n", UE->rrc_ue_id);
   return 0;
 }
-
-extern void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, uint32_t rrc_ue_id);
 
 /** @brief Trigger N2 handover for UE
  *  @param buf: Neighbour PCI, SCell PCI, RRC UE ID
@@ -301,7 +296,7 @@ static int trigger_ngap_pdu_session_release(char *buf, int debug, telnet_printfu
     ERROR_MSG_RET("Missing input. Usage: trigger_pdu_session_release [ue_id=gNB_ue_ngap_id(int,opt)],pdusession_id(int)[,pdusession_id(int)...]\n");
   }
 
-  char *tokens[NGAP_MAX_PDU_SESSION + 1];
+  char *tokens[NR_MAX_NB_PDU_SESSIONS + 1];
   int count = 0;
 
   for (char *tok = strtok(buf, ","); tok != NULL && count < (int)sizeofArray(tokens); tok = strtok(NULL, ",")) {

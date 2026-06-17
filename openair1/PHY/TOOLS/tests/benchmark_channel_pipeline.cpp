@@ -25,7 +25,7 @@ extern "C" void exit_function(const char *file, const char *function, const int 
   exit(EXIT_FAILURE);
 }
 
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
 static void BM_channel_convolution_gpu(benchmark::State &state)
 {
   int nb_rx = state.range(0);
@@ -203,7 +203,7 @@ static void BM_channel_convolution_tpool(benchmark::State &state)
   }
 }
 
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
 BENCHMARK(BM_channel_convolution_gpu)
     ->ArgsProduct({
         {1, 2, 4, 16, 64}, // nb_rx

@@ -43,7 +43,7 @@
 #define NB_RB_MAX (11 + 3) /* LTE_maxDRB from LTE_asn_constant.h + 3 SRBs */
 #define NR_NB_RB_MAX (29 + 3) /* NR_maxDRB from NR_asn_constant.hm + 3 SRBs */
 
-#define NGAP_MAX_PDU_SESSION (256) /* As defined in TS 38.413 9.2.1.1 Range Bound for PDU Sessions. */
+#define NR_MAX_NB_PDU_SESSIONS (256)
 
 #define MAX_DRBS_PER_UE         (32)  /* Maximum number of Data Radio Bearers per UE
                                        * defined for NGAP in TS 38.413 - maxnoofDRBs */

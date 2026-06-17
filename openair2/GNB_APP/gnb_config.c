@@ -40,6 +40,7 @@
 #include "f1ap_common.h"
 #include "gnb_paramdef.h"
 #include "lib/f1ap_interface_management.h"
+#include "F1AP_CauseRadioNetwork.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "nfapi_pnf.h"
 #include "nfapi_vnf.h"
@@ -237,16 +238,6 @@ static struct NR_SCS_SpecificCarrier configure_scs_carrier(int mu, int N_RB)
   return scs_sc;
 }
 
-static struct NR_PUSCH_TimeDomainResourceAllocation *add_PUSCH_TimeDomainResourceAllocation(int startSymbolAndLength)
-{
-  struct NR_PUSCH_TimeDomainResourceAllocation *pusch_alloc = calloc_or_fail(1, sizeof(*pusch_alloc));
-  pusch_alloc->k2 = calloc_or_fail(1, sizeof(*pusch_alloc->k2));
-  *pusch_alloc->k2 = 6;
-  pusch_alloc->mappingType = NR_PUSCH_TimeDomainResourceAllocation__mappingType_typeB;
-  pusch_alloc->startSymbolAndLength = startSymbolAndLength;
-  return pusch_alloc;
-}
-
 /**
  * Fill ServingCellConfigCommon struct members for unitary simulators
  */
@@ -344,9 +335,6 @@ void fill_scc_sim(NR_ServingCellConfigCommon_t *scc, uint64_t *ssb_bitmap, int N
   rach_ConfigCommon->choice.setup->restrictedSetConfig = NR_RACH_ConfigCommon__restrictedSetConfig_unrestrictedSet;
   *rach_ConfigCommon->choice.setup->msg1_SubcarrierSpacing = mu_ul;
   struct NR_SetupRelease_PUSCH_ConfigCommon *pusch_ConfigCommon = initialUplinkBWP->pusch_ConfigCommon;
-
-  asn1cSeqAdd(&pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList->list, add_PUSCH_TimeDomainResourceAllocation(55));
-  asn1cSeqAdd(&pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList->list, add_PUSCH_TimeDomainResourceAllocation(38));
 
   *pusch_ConfigCommon->choice.setup->msg3_DeltaPreamble = 1;
   *pusch_ConfigCommon->choice.setup->p0_NominalWithGrant = -90;
@@ -523,12 +511,6 @@ void fix_scc(NR_ServingCellConfigCommon_t *scc, uint64_t ssbmap)
     rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow = min(NR_RACH_ConfigGeneric__ra_ResponseWindow_sl80, NR_RACH_ConfigGeneric__ra_ResponseWindow_sl10 + mu);
   }
   DevAssert(rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow >= 0);
-
-  // prepare DL Allocation lists
-  nr_rrc_config_dl_tda(dlcc->initialDownlinkBWP->pdsch_ConfigCommon->choice.setup->pdsch_TimeDomainAllocationList,
-                       frame_type,
-                       scc->tdd_UL_DL_ConfigurationCommon,
-                       NRRIV2BW(dlcc->initialDownlinkBWP->genericParameters.locationAndBandwidth, MAX_BWP_SIZE));
 
   if (frame_type == FDD) {
     ASN_STRUCT_FREE(asn_DEF_NR_TDD_UL_DL_ConfigCommon, scc->tdd_UL_DL_ConfigurationCommon);
@@ -816,12 +798,6 @@ void RCconfig_NR_L1(void)
         LOG_D(NR_PHY, "Copying %d blacklisted PRB to L1 context\n", RC.gNB[j]->num_ulprbbl);
         memcpy(RC.gNB[j]->ulprbbl, prbbl, MAX_BWP_SIZE * sizeof(prbbl[0]));
       }
-
-      // Antenna ports
-      set_antenna_ports(&GNBParamList, &gNB->ap_N1, &gNB->ap_N2, &gNB->ap_XP);
-      AssertFatal(gNB->ap_N1 * gNB->ap_N2 * gNB->ap_XP <= NR_MAX_CSI_PORTS,
-                  "Number of antenna ports set in config file exceeds the supported value of %d\n",
-                  NR_MAX_CSI_PORTS);
     }
 
     // L1 params
@@ -944,7 +920,6 @@ static NR_ServingCellConfigCommon_t *get_scc_config(int minRXTXTIME, int do_SRS)
       check_ssb_raster(ssb_freq, *frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing);
     fix_scc(scc, ssb_bitmap);
   }
-  nr_rrc_config_ul_tda(scc, minRXTXTIME, do_SRS);
 
   // the gNB uses the servingCellConfigCommon everywhere, even when it should use the servingCellConfigCommonSIB.
   // previously (before this commit), the following fields were indirectly populated through get_SIB1_NR().
@@ -1503,6 +1478,20 @@ static double complex **read_dbt_from_config(const char *prefix,
   return table;
 }
 
+static void config_spatial_stream_index(const paramdef_t *param, const size_t np, nr_mac_config_t *radio_config, int num_ru_ports)
+{
+  const int n = gpd(param, np, MACRLC_SPATIAL_STREAM_IDX)->numelt;
+  if (n == 0) {
+    // No indices provided in config file. Set default indices starting from 0.
+    for (int i = 0; i < num_ru_ports; i++)
+      radio_config->spatial_stream_index[i] = i;
+  } else {
+    AssertFatal(n == num_ru_ports, "Number of spatial stream indices must match number of RU ports\n");
+    for (int i = 0; i < n; i++)
+      radio_config->spatial_stream_index[i] = gpd(param, np, MACRLC_SPATIAL_STREAM_IDX)->uptr[i];
+  }
+}
+
 void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
 {
   int j = 0;
@@ -1531,21 +1520,32 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
   // RU
   GET_PARAMS_LIST(RUParamList, RUParams, RUPARAMS_DESC, CONFIG_STRING_RU_LIST, NULL);
   int num_tx = 0;
+  int beams_per_period;
+  if (MacRLC_ParamList.numelt > 0)
+    beams_per_period = *gpd(MacRLC_ParamList.paramarray[0], sizeofArray(MacRLC_Params), MACRLC_BEAMS_PERIOD)->u8ptr;
+  else
+    beams_per_period = 1;
   if (RUParamList.numelt > 0) {
     for (int i = 0; i < RUParamList.numelt; i++)
       num_tx += *(RUParamList.paramarray[i][RU_NB_TX_IDX].uptr);
-    AssertFatal(num_tx >= config.pdsch_AntennaPorts.XP * config.pdsch_AntennaPorts.N1 * config.pdsch_AntennaPorts.N2,
-                "Number of logical antenna ports (set in config file with pdsch_AntennaPorts) cannot be larger than physical antennas (nb_tx)\n");
+    AssertFatal(num_tx >= p->XP * p->N1 * p->N2 * beams_per_period,
+                "Number of logical antenna ports (set in config file with pdsch_AntennaPorts and beams_per_period) cannot be "
+                "larger than physical "
+                "antennas (nb_tx)\n");
+    AssertFatal(p->XP * p->N1 * p->N2 <= NR_MAX_CSI_PORTS,
+                "Number of antenna ports set in config file exceeds the supported value of %d\n",
+                NR_MAX_CSI_PORTS);
   } else {
     // TODO temporary solution for 3rd party RU or nFAPI, in which case we don't have RU section present in the config file
-    num_tx = config.pdsch_AntennaPorts.XP * config.pdsch_AntennaPorts.N1 * config.pdsch_AntennaPorts.N2;
+    num_tx = p->XP * p->N1 * p->N2 * beams_per_period;
     LOG_E(GNB_APP, "RU information not present in config file. Assuming physical antenna ports equal to logical antenna ports %d\n", num_tx);
   }
   config.minRXTXTIME = *GNBParamList.paramarray[0][GNB_MINRXTXTIME_IDX].iptr;
   LOG_I(GNB_APP, "minTXRXTIME %d\n", config.minRXTXTIME);
   config.do_TCI = *GNBParamList.paramarray[0][GNB_DO_TCI_IDX].iptr;
   config.do_CSIRS = *GNBParamList.paramarray[0][GNB_DO_CSIRS_IDX].iptr;
-  config.do_SRS = *GNBParamList.paramarray[0][GNB_DO_SRS_IDX].iptr;
+  const char *srs_type_s = *GNBParamList.paramarray[0][GNB_DO_SRS_IDX].strptr;
+  config.do_SRS = config_get_processedint(cfg, &GNBParamList.paramarray[0][GNB_DO_SRS_IDX]);
   config.max_num_rsrp = *GNBParamList.paramarray[0][GNB_LIMIT_RSRP_REPORT_IDX].iptr;
   const char *report_type_s = *GNBParamList.paramarray[0][GNB_CONFIG_REP_IDX].strptr;
   config.report_type = config_get_processedint(cfg, &GNBParamList.paramarray[0][GNB_CONFIG_REP_IDX]);
@@ -1559,9 +1559,9 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
   if (config.disable_harq)
     LOG_W(GNB_APP, "\"disable_harq\" is a REL17 feature and is incompatible with REL15 and REL16 UEs!\n");
   LOG_I(GNB_APP,
-        "CSI-RS %d, SRS %d, report type %d (%s), 256 QAM %s, delta_MCS %s, maxMIMO_Layers %d, HARQ feedback %s, num DLHARQ:%d, num ULHARQ:%d\n",
+        "CSI-RS %d, SRS %s, report type %d (%s), 256 QAM %s, delta_MCS %s, maxMIMO_Layers %d, HARQ feedback %s, num DLHARQ:%d, num ULHARQ:%d\n",
         config.do_CSIRS,
-        config.do_SRS,
+        srs_type_s,
         config.report_type,
         report_type_s,
         config.force_256qam_off ? "force off" : "may be on",
@@ -1741,15 +1741,14 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
       }
       // config_get_processedint() takes only paramdef_t *, so cast const away
       paramdef_t *p_ab = (paramdef_t *)gpd(params, np, MACRLC_ANALOG_BEAMFORMING);
-      RC.nrmac[j]->beam_info.beam_mode = config_get_processedint(cfg, p_ab);
+      NR_beam_info_t *beam_info = &RC.nrmac[j]->beam_info;
+      beam_info->beam_mode = config_get_processedint(cfg, p_ab);
+      beam_info->beams_per_period = beams_per_period;
       if (RC.nrmac[j]->beam_info.beam_mode != NO_BEAM_MODE) {
         if (RC.nrmac[j]->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX)
           AssertFatal(NFAPI_MODE == NFAPI_MONOLITHIC, "Analog beamforming only supported for monolithic scenario\n");
-        NR_beam_info_t *beam_info = &RC.nrmac[j]->beam_info;
-        int beams_per_period = *gpd(params, np, MACRLC_BEAMS_PERIOD)->u8ptr;
         beam_info->beam_allocation = malloc16(beams_per_period * sizeof(beam_info->beam_allocation));
         beam_info->beam_duration = *gpd(params, np, MACRLC_BEAM_DURATION)->u8ptr;
-        beam_info->beams_per_period = beams_per_period;
         beam_info->beam_allocation_size = -1; // to be initialized once we have information on frame configuration
       }
       bool das_enabled = false;
@@ -1799,6 +1798,10 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         config.bt.beam_weights =
             read_dbt_from_config(prefix, &config.bt.num_beams, &config.bt.num_weights_per_beam, &config.bt.beam_ids);
       }
+
+      // Read spatial stream indices
+      config_spatial_stream_index(params, np, &RC.nrmac[j]->radio_config, num_tx);
+
       // triggers also PHY initialization in case we have L1 via FAPI
       nr_mac_config_scc(RC.nrmac[j], scc, &config);
     } //  for (j=0;j<RC.nb_nr_macrlc_inst;j++)

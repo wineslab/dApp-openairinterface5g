@@ -109,7 +109,11 @@ typedef struct Gtpv1uExtHeader {
 #define GTP_END_MARKER (254)
 #define GTP_GPDU (255)
 
-// GTP bearer context: for sending data
+/** NO_QFI: indicates no QFI marking (F1-U tunnel or N3-U tunnel with no SDAP header)
+ * Used when there is no UL PDU Session Information (SDAP header) present */
+#define NO_QFI (-1)
+
+/** GTP bearer context: for sending data */
 typedef struct gtpv1u_bearer_s {
   int sock_fd;
   struct sockaddr_storage ip;
@@ -118,7 +122,6 @@ typedef struct gtpv1u_bearer_s {
   uint16_t seqNum;
   uint8_t npduNum;
   int32_t nru_sequence_number;
-  int outgoing_qfi;
 } gtpv1u_bearer_t;
 
 typedef struct {
@@ -127,11 +130,15 @@ typedef struct {
 
 typedef struct {
   ue_id_t ue_id;
-  ebi_t incoming_rb_id;
+  /** Incoming TEID mapping key:
+   *  - F1-U: DRB ID (direct TEID-to-DRB routing on non-SDAP callback path)
+   *  - N3-U: PDU session ID (TEID-to-PDU session; SDAP callback then resolves QFI-to-DRB) */
+  uint16_t incoming_rb_id;
   gtpCallback callBack;
   teid_t outgoing_teid;
   gtpCallbackSDAP callBackSDAP;
-  int pdusession_id;
+  /** PDU Session ID (1..255) */
+  uint16_t pdusession_id;
 } ueidData_t;
 
 typedef struct {
@@ -314,9 +321,13 @@ static int gtpv1uCreateAndSendMsg(gtpv1u_bearer_t *bearer,
   return !GTPNOK;
 }
 
+/** Internal function to send GTP-U packet with optional QFI marking
+ * Per TS 29.281 §5.2, QFI is carried in PDU Session Container extension header for N3-U
+ * @param qfi QoS Flow Identifier (0..63) for N3-U, or NO_QFI (-1) for F1-U */
 static void _gtpv1uSendDirect(instance_t instance,
                               ue_id_t ue_id,
                               int bearer_id,
+                              int qfi,
                               uint8_t *buf,
                               size_t len,
                               bool seqNumFlag,
@@ -357,11 +368,10 @@ static void _gtpv1uSendDirect(instance_t instance,
 
   int extension_count = 0;
   gtpu_extension_header_t ext[2];
-  if (bearer.outgoing_qfi != -1) {
-    /* 29.281 Figure 5.2.1-3 note 4 says PDU Session Container must come first.
-     * GTPU_EXT_UL_PDU_SESSION_INFORMATION is within a PDU Session Container
-     * so it must be put before any other extension.
-     */
+  /** Add PDU Session Container extension header if QFI is present (N3-U tunnel)
+   * Per TS 29.281 Figure 5.2.1-3 note 4, PDU Session Container must be the first Extension Header
+   * Per TS 29.281 §5.2, QFI is carried in UL PDU Session Information IE for N3-U */
+  if (qfi != NO_QFI) {
     ext[extension_count] = {
       .type = GTPU_EXT_UL_PDU_SESSION_INFORMATION,
       .ul_pdu_session_information = {
@@ -371,10 +381,16 @@ static void _gtpv1uSendDirect(instance_t instance,
         .snp = false,
         .n3n9_delay_ind = false,
         .new_ie_flag = false,
-        .qfi = bearer.outgoing_qfi
+        .qfi = qfi,
       }
     };
     extension_count++;
+    LOG_D(GTPU,
+          "UL TX: Adding PDU Session Container with QFI=%d (ue=%ld bearer_id=%d outgoing_teid=0x%x)\n",
+          qfi,
+          ue_id,
+          bearer_id,
+          bearer.teid_outgoing);
   }
 
   if (nru_seqnum != -1) {
@@ -406,6 +422,21 @@ static void _gtpv1uSendDirect(instance_t instance,
                          extension_count);
 }
 
+/** Send GTP-U packet with QFI marking for N3-U tunnel
+ * Per TS 29.281 §5.2, QFI is carried in PDU Session Container extension header
+ * Used by SDAP layer when forwarding UL packets to N3-U tunnel
+ * @param qfi QoS Flow Identifier (0..63) extracted from SDAP header */
+void gtpv1uSendDirectWithQFI(instance_t instance, ue_id_t ue_id, int bearer_id, int qfi, uint8_t *buf, size_t len)
+{
+  AssertFatal(qfi >= 0 && qfi < MAX_QOS_FLOWS,
+              "Invalid QFI %d for gtpv1uSendDirectWithQFI (expected 0..%d)\n",
+              qfi,
+              MAX_QOS_FLOWS - 1);
+  _gtpv1uSendDirect(instance, ue_id, bearer_id, qfi, buf, len, false, false, -1);
+}
+
+/** Send GTP-U packet with no QFI marking for F1-U tunnel
+ * @note qfi is set to NO_QFI (-1) for F1-U */
 void gtpv1uSendDirect(instance_t instance,
                       ue_id_t ue_id,
                       int bearer_id,
@@ -414,14 +445,7 @@ void gtpv1uSendDirect(instance_t instance,
                       bool seqNumFlag,
                       bool npduNumFlag)
 {
-  _gtpv1uSendDirect(instance,
-                    ue_id,
-                    bearer_id,
-                    buf,
-                    len,
-                    seqNumFlag,
-                    npduNumFlag,
-                    -1);
+  _gtpv1uSendDirect(instance, ue_id, bearer_id, NO_QFI, buf, len, seqNumFlag, npduNumFlag, -1);
 }
 
 void gtpv1uSendDirectWithNRUSeqNum(instance_t instance,
@@ -447,14 +471,7 @@ void gtpv1uSendDirectWithNRUSeqNum(instance_t instance,
 
   pthread_mutex_unlock(&globGtp.gtp_lock);
 
-  _gtpv1uSendDirect(instance,
-                    ue_id,
-                    bearer_id,
-                    buf,
-                    len,
-                    false,
-                    false,
-                    nru_seqnum);
+  _gtpv1uSendDirect(instance, ue_id, bearer_id, NO_QFI, buf, len, false, false, nru_seqnum);
 }
 
 static void fillDlDeliveryStatusReport(gtpu_extension_header_t *ext, uint32_t RLC_buffer_availability, uint32_t NR_PDCP_PDU_SN)
@@ -677,7 +694,6 @@ teid_t newGtpuCreateTunnel(instance_t instance,
                            int incoming_bearer_id,
                            int outgoing_bearer_id,
                            teid_t outgoing_teid,
-                           int outgoing_qfi,
                            transport_layer_addr_t remoteAddr,
                            gtpCallback callBack,
                            gtpCallbackSDAP callBackSDAP)
@@ -709,7 +725,6 @@ teid_t newGtpuCreateTunnel(instance_t instance,
     .sock_fd = (int) compatInst(instance), // avoid warning on narrowing conversion: instance is long, sock_fd is int
     .teid_incoming = incoming_teid,
     .teid_outgoing = outgoing_teid,
-    .outgoing_qfi = outgoing_qfi,
   };
 
   int addrs_length_in_bytes = remoteAddr.length / 8;
@@ -778,7 +793,6 @@ int gtpv1u_create_s1u_tunnel(instance_t instance,
                                       incoming_rb_id,
                                       create_tunnel_req->eps_bearer_id[i],
                                       create_tunnel_req->sgw_S1u_teid[i],
-                                      -1, // no pdu session in 4G
                                       create_tunnel_req->sgw_addr[i],
                                       callBack,
                                       NULL);
@@ -843,36 +857,31 @@ int gtpv1u_create_ngu_tunnel(const instance_t instance,
                              gtpCallbackSDAP callBackSDAP)
 {
   LOG_D(GTPU,
-        "[%ld] Start create tunnels for ue id %lu, num_tunnels %d, TEID 0x%x\n",
+        "[%ld] Create tunnel for UE ID %lu, outgoing TEID 0x%x\n",
         instance,
         create_tunnel_req->ue_id,
-        create_tunnel_req->num_tunnels,
-        create_tunnel_req->outgoing_teid[0]);
+        create_tunnel_req->outgoing_teid);
   pthread_mutex_lock(&globGtp.gtp_lock);
   getInstRetInt(compatInst(instance));
 
   uint8_t addr[inst->foundAddrLen];
   memcpy(addr, inst->foundAddr, inst->foundAddrLen);
   pthread_mutex_unlock(&globGtp.gtp_lock);
-  for (int i = 0; i < create_tunnel_req->num_tunnels; i++) {
-    teid_t teid = newGtpuCreateTunnel(instance,
-                                      create_tunnel_req->ue_id,
-                                      create_tunnel_req->incoming_rb_id[i],
-                                      create_tunnel_req->pdusession_id[i],
-                                      create_tunnel_req->outgoing_teid[i],
-                                      create_tunnel_req->outgoing_qfi[i],
-                                      create_tunnel_req->dst_addr[i],
-                                      callBack,
-                                      callBackSDAP);
-    create_tunnel_resp->status = 0;
-    create_tunnel_resp->ue_id = create_tunnel_req->ue_id;
-    create_tunnel_resp->num_tunnels = create_tunnel_req->num_tunnels;
-    create_tunnel_resp->gnb_NGu_teid[i] = teid;
-    memcpy(create_tunnel_resp->gnb_addr.buffer, addr, sizeof(addr));
-    create_tunnel_resp->gnb_addr.length = sizeof(addr);
-    create_tunnel_resp->pdusession_id[i] = create_tunnel_req->pdusession_id[i];
-  }
-
+  teid_t teid = newGtpuCreateTunnel(instance,
+                                    create_tunnel_req->ue_id,
+                                    create_tunnel_req->incoming_rb_id,
+                                    create_tunnel_req->pdusession_id,
+                                    create_tunnel_req->outgoing_teid,
+                                    create_tunnel_req->dst_addr,
+                                    callBack,
+                                    callBackSDAP);
+  /* Fill response */
+  create_tunnel_resp->status = 0;
+  create_tunnel_resp->ue_id = create_tunnel_req->ue_id;
+  create_tunnel_resp->gnb_NGu_teid = teid;
+  memcpy(create_tunnel_resp->gnb_addr.buffer, addr, sizeof(addr));
+  create_tunnel_resp->gnb_addr.length = sizeof(addr);
+  create_tunnel_resp->pdusession_id = create_tunnel_req->pdusession_id;
   return !GTPNOK;
 }
 
@@ -1224,7 +1233,7 @@ static int Gtpv1uHandleGpdu(int h, uint8_t *msgBuf, uint32_t msgBufLen, const st
   // manyother attributes may come from create tunnel
   protocol_ctxt_t ctxt = { .enb_flag = 1, .rntiMaybeUEid = uedata.ue_id, };
   const srb_flag_t srb_flag = SRB_FLAG_NO;
-  const rb_id_t rb_id = uedata.incoming_rb_id;
+  uint16_t rb_id = uedata.incoming_rb_id;
   const mui_t mui = RLC_MUI_UNDEFINED;
   const confirm_t confirm = RLC_SDU_CONFIRM_NO;
   const sdu_size_t sdu_buffer_size = msgBufLen - offset;
@@ -1234,7 +1243,7 @@ static int Gtpv1uHandleGpdu(int h, uint8_t *msgBuf, uint32_t msgBufLen, const st
   const uint32_t destinationL2Id = 0;
 
   if (sdu_buffer_size > 0) {
-    if (qfi != -1 && uedata.callBackSDAP) {
+    if (qfi != NO_QFI && uedata.callBackSDAP) {
       if (!uedata.callBackSDAP(&ctxt,
                                        uedata.ue_id,
                                        srb_flag,
@@ -1248,14 +1257,23 @@ static int Gtpv1uHandleGpdu(int h, uint8_t *msgBuf, uint32_t msgBufLen, const st
                                        qfi,
                                        rqi,
                                        uedata.pdusession_id))
-        LOG_E(GTPU, "[%d] down layer refused incoming packet\n", h);
+        LOG_E(GTPU, "[%d] down layer refused incoming SDAP packet\n", h);
     } else {
+      /* Non-SDAP callback path: direct TEID-to-incoming_rb_id delivery via callBack.
+       * QFI must be absent on this path */
+      AssertFatal(qfi == NO_QFI,
+                  "[%d] Non-SDAP callback configured but QFI=%d is present (ue=%lu teid=0x%x)\n",
+                  h,
+                  qfi,
+                  uedata.ue_id,
+                  ntohl(msgHdr->teid));
       if (!uedata.callBack(&ctxt, srb_flag, rb_id, mui, confirm, sdu_buffer_size, sdu_buffer, mode, &sourceL2Id, &destinationL2Id))
         LOG_E(GTPU, "[%d] down layer refused incoming packet\n", h);
     }
   }
 
-  if (NR_PDCP_PDU_SN > 0 && NR_PDCP_PDU_SN % 5 == 0) {
+  /* Delivery status report path uses DRB-based RLC state: keep it on non-SDAP path only. */
+  if (!uedata.callBackSDAP && NR_PDCP_PDU_SN > 0 && NR_PDCP_PDU_SN % 5 == 0) {
     LOG_D(GTPU, "Create and send DL DATA Delivery status for the previously received PDU, NR_PDCP_PDU_SN: %u \n", NR_PDCP_PDU_SN);
     int rlc_tx_buffer_space = nr_rlc_get_available_tx_space(ctxt.rntiMaybeUEid, rb_id + 3);
     LOG_D(GTPU, "Available buffer size in RLC for Tx: %d \n", rlc_tx_buffer_space);

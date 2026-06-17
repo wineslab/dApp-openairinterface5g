@@ -142,7 +142,6 @@ uint8_t abstraction_flag=0;
 bler_struct bler_data[NUM_MCS];
 // needed for pdcp.c
 RAN_CONTEXT_t RC;
-instance_t CUuniqInstance=0;
 /* forward declarations */
 void set_default_frame_parms(LTE_DL_FRAME_PARMS *frame_parms[MAX_NUM_CCs]);
 

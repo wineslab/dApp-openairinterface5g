@@ -133,7 +133,10 @@ void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_sy
   unsigned int tmp_n0_subband[frame_parms->nb_antennas_rx][frame_parms->N_RB_UL];
   memset(tmp_n0_subband, 0, sizeof(tmp_n0_subband));
 
-  // TODO modify the measurements to take into account concurrent beams
+  /* Noise measurements is done on all spatial streams here. Later these
+  measurements are used in estimating SNR of individual signal with their
+  corresponding streams.
+  */
   for (int s = first_symb; s < first_symb + num_symb; s++) {
     int offset0 = ((slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot + s) * frame_parms->ofdm_symbol_size;
     for (int rb = 0; rb < frame_parms->N_RB_UL; rb++) {
@@ -142,11 +145,11 @@ void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_sy
         int offset = offset0 + (frame_parms->first_carrier_offset + (rb*12))%frame_parms->ofdm_symbol_size;
         nb_symb[rb]++;
         for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
-          c16_t *ul_ch = &common_vars->rxdataF[0][aarx][offset];
+          c16_t *ul_ch = &common_vars->rxdataF[aarx][offset];
           int32_t signal_energy;
           if (((frame_parms->N_RB_UL & 1) == 1) && (rb == (frame_parms->N_RB_UL >> 1))) {
             signal_energy = signal_energy_nodc(ul_ch, 6);
-            ul_ch = &common_vars->rxdataF[0][aarx][offset0];
+            ul_ch = &common_vars->rxdataF[aarx][offset0];
             signal_energy += signal_energy_nodc(ul_ch, 6);
           } else {
             signal_energy = signal_energy_nodc(ul_ch, 12);

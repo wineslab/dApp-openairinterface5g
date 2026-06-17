@@ -11,4 +11,3 @@ The logging facility doesn't create any thread, all api's are executed in the co
 Data used by the logging utility are defined by the `log_t` structure which is allocated at init time, when calling the `logInit` function.
 
 [logging facility  main page](log.md)
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

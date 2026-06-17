@@ -138,7 +138,7 @@ static void test_copy(const nfapi_nr_tx_data_request_t *msg)
   free_tx_data_request(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

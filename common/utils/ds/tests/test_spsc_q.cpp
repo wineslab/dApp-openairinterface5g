@@ -8,7 +8,8 @@ extern "C" {
 }
 
 TEST(spsc_q, basic_test) {
-  spsc_q_t rb = spsc_q_alloc(2, sizeof(int));
+  spsc_q_t rb;
+  EXPECT_TRUE(spsc_q_alloc(&rb, 2, sizeof(int)));
 
   int a = 1;
   EXPECT_TRUE(spsc_q_put(&rb, &a, sizeof(a)));
@@ -26,7 +27,8 @@ TEST(spsc_q, basic_test) {
 }
 
 TEST(spsc_q, cont_write) {
-  spsc_q_t rb = spsc_q_alloc(10, sizeof(int));
+  spsc_q_t rb;
+  EXPECT_TRUE(spsc_q_alloc(&rb, 10, sizeof(int)));
 
   int a = 1;
   for (int i = 0; i < 1111; ++i) {
@@ -57,7 +59,8 @@ bool count(const void *data, void *user)
   return true; /* count all */
 }
 TEST(spsc_q, iterator) {
-  spsc_q_t rb = spsc_q_alloc(10, sizeof(int));
+  spsc_q_t rb;
+  EXPECT_TRUE(spsc_q_alloc(&rb, 10, sizeof(int)));
   int n = 8;
   for (int i = 0; i < n; ++i)
     EXPECT_TRUE(spsc_q_put(&rb, &i, sizeof(i)));
@@ -85,7 +88,8 @@ bool drop(const void *data, void *user)
   return true; /* drop all */
 }
 TEST(spsc_q, drop) {
-  spsc_q_t rb = spsc_q_alloc(10, sizeof(int));
+  spsc_q_t rb;
+  EXPECT_TRUE(spsc_q_alloc(&rb, 10, sizeof(int)));
   int n = 8;
   for (int i = 0; i < n; ++i)
     EXPECT_TRUE(spsc_q_put(&rb, &i, sizeof(i)));
@@ -104,7 +108,8 @@ TEST(spsc_q, drop) {
 
 TEST(spsc_q, full) {
   int n = 3;
-  spsc_q_t rb = spsc_q_alloc(n, sizeof(int));
+  spsc_q_t rb;
+  EXPECT_TRUE(spsc_q_alloc(&rb, n, sizeof(int)));
   int a = 1;
   EXPECT_TRUE(spsc_q_put(&rb, &a, sizeof(a)));
   a++;

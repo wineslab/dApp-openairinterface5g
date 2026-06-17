@@ -3,10 +3,11 @@
 cmake_minimum_required (VERSION 3.19)
 project (OpenAirInterface LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(OAI_VERSION 2.4.0)
 
-option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
-if(CUDA_ENABLE)
+option(ENABLE_CHANNEL_SIM_CUDA "Enable CUDA accelerated channel simulation" OFF)
+if(ENABLE_CHANNEL_SIM_CUDA)
     find_package(CUDA REQUIRED)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "CUDA explicitly enabled, building with GPU acceleration support.")
@@ -34,7 +35,7 @@ if(CUDA_ENABLE)
         message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
     endif()
 
-    add_compile_definitions(ENABLE_CUDA)
+    add_compile_definitions(CHANNEL_SIM_CUDA)
 endif()
 
 #########################################################
@@ -155,14 +156,17 @@ add_boolean_option(AVX512 ${AUTODETECT_AVX512} "Whether AVX512 intrinsics is ava
 eval_boolean(AUTODETECT_AVX2 DEFINED CPUFLAGS AND CPUFLAGS MATCHES "avx2")
 add_boolean_option(AVX2 ${AUTODETECT_AVX2} "Whether AVX2 intrinsics is available on the host processor" ON)
 
+eval_boolean(AUTODETECT_GFNI DEFINED CPUFLAGS AND CPUFLAGS MATCHES "gfni")
+add_boolean_option(GFNI ${AUTODETECT_GFNI} "Whether GFNI intrinsics is available on the host processor" ON)
+
 message(STATUS "CPU architecture is ${CMAKE_SYSTEM_PROCESSOR}")
 if (CROSS_COMPILE)
   message(STATUS "setting as aarch64")
   set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -lgcc -lrt")
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   # The following intrinsics are assumed to be available on any x86 system
-  # (avx, f16c, fma, gnfi, mmx, pclmul, sse, sse2, sse3, xop)
-  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_AVX_NATIVE -DSIMDE_X86_AVX_NATIVE -DSIMDE_X86_F16C_NATIVE -DSIMDE_X86_FMA_NATIVE -DSIMDE_X86_GFNI_NATIVE -DSIMDE_X86_MMX_NATIVE -DSIMDE_X86_PCLMUL_NATIVE -DSIMDE_X86_SSE2_NATIVE -DSIMDE_X86_SSE3_NATIVE -DSIMDE_X86_SSE_NATIVE -DSIMDE_X86_XOP_HAVE_COM_ -DSIMDE_X86_XOP_NATIVE")
+  # (avx, f16c, fma, mmx, pclmul, sse, sse2, sse3, xop)
+  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_AVX_NATIVE -DSIMDE_X86_AVX_NATIVE -DSIMDE_X86_F16C_NATIVE -DSIMDE_X86_FMA_NATIVE -DSIMDE_X86_MMX_NATIVE -DSIMDE_X86_PCLMUL_NATIVE -DSIMDE_X86_SSE2_NATIVE -DSIMDE_X86_SSE3_NATIVE -DSIMDE_X86_SSE_NATIVE -DSIMDE_X86_XOP_HAVE_COM_ -DSIMDE_X86_XOP_NATIVE")
   message(STATUS "AVX512 intrinsics are ${AVX512}")
   if(${AVX512})
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_AVX512BW_NATIVE -DSIMDE_X86_AVX512F_NATIVE -DSIMDE_X86_AVX512VL_NATIVE -mavx512bw -march=skylake-avx512 -mtune=skylake-avx512")
@@ -173,13 +177,17 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   if(${AVX2})
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_AVX2_NATIVE -DSIMDE_X86_VPCLMULQDQ_NATIVE")
   endif()
-  if (CPUINFO MATCHES "sse4_1")
+  message(STATUS "GFNI intrinsics are ${GFNI}")
+  if(${GFNI})
+    set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_GFNI_NATIVE -mgfni")
+  endif()
+  if (CPUFLAGS MATCHES "sse4_1")
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_SSE4_1_NATIVE")
   endif()
-  if(CPUINFO MATCHES "sse4_2")
+  if(CPUFLAGS MATCHES "sse4_2")
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_SSE4_2_NATIVE")
   endif()
-  if(CPUINFO MATCHES "ssse3")
+  if(CPUFLAGS MATCHES "ssse3")
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -DSIMDE_X86_SSSE3_NATIVE")
   endif()
 elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
@@ -221,16 +229,14 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set(commonOpts "${commonOpts} -Wno-packed-bitfield-compat")
 endif()
 # clang: suppress complaints about unused command line argument (-rdynamic only
-# used during linking)
+# used during linking) and "const member leaves the object uninitialized"
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(commonOpts "${commonOpts} -Wno-unused-command-line-argument")
+  set(commonOpts "${commonOpts} -Wno-unused-command-line-argument -Wno-default-const-init-field-unsafe")
 endif()
 
 set(CMAKE_C_FLAGS
   "${C_FLAGS_PROCESSOR} ${commonOpts} -std=gnu11 -funroll-loops ${CMAKE_C_FLAGS}")
-set(CMAKE_CXX_FLAGS
-  "${C_FLAGS_PROCESSOR}  ${commonOpts} -std=c++11 ${CMAKE_CXX_FLAGS}")
-
+set(CMAKE_CXX_FLAGS "${C_FLAGS_PROCESSOR} ${commonOpts} ${CMAKE_CXX_FLAGS}")
 
 add_boolean_option(SANITIZE_ADDRESS OFF "enable the address sanitizer (ASan)" ON)
 if (SANITIZE_ADDRESS)
@@ -623,12 +629,6 @@ include_directories("${OPENAIR2_DIR}/COMMON")
 include_directories("${OPENAIR2_DIR}/UTIL")
 include_directories("${OPENAIR3_DIR}/COMMON")
 include_directories("${OPENAIR3_DIR}/UTILS")
-include_directories("${NFAPI_DIR}/nfapi/public_inc")
-include_directories("${NFAPI_DIR}/common/public_inc")
-include_directories("${NFAPI_DIR}/pnf/public_inc")
-include_directories("${NFAPI_DIR}/nfapi/inc")
-include_directories("${NFAPI_DIR}/sim_common/inc")
-include_directories("${NFAPI_DIR}/pnf_sim/inc")
 include_directories("${OPENAIR1_DIR}")
 include_directories("${OPENAIR2_DIR}")
 include_directories("${OPENAIR3_DIR}/NAS/TOOLS")
@@ -725,6 +725,7 @@ set(SCHED_SRC
 )
 add_library(SCHED_LIB ${SCHED_SRC})
 target_link_libraries(SCHED_LIB PRIVATE asn1_lte_rrc_hdrs)
+target_link_libraries(SCHED_LIB PRIVATE nfapi_pnf_lib)
 
 set(SCHED_NR_SRC
   ${OPENAIR1_DIR}/SCHED_NR/phy_procedures_nr_gNB.c
@@ -734,7 +735,7 @@ set(SCHED_NR_SRC
 )
 add_library(SCHED_NR_LIB ${SCHED_NR_SRC})
 target_link_libraries(SCHED_NR_LIB PRIVATE asn1_nr_rrc_hdrs UTIL)
-target_link_libraries(SCHED_NR_LIB PRIVATE NFAPI_LIB) # some FAPI messages pack "subPDUs"
+target_link_libraries(SCHED_NR_LIB PRIVATE nfapi_nr_lib nfapi_user_lib) # some FAPI messages pack "subPDUs"
 if(E3_AGENT)
   target_compile_definitions(SCHED_NR_LIB PRIVATE E3_AGENT)
 endif()
@@ -744,7 +745,7 @@ set(SCHED_SRC_RU
   ${OPENAIR1_DIR}/SCHED/prach_procedures.c
 )
 add_library(SCHED_RU_LIB ${SCHED_SRC_RU})
-target_link_libraries(SCHED_RU_LIB PRIVATE asn1_lte_rrc_hdrs)
+target_link_libraries(SCHED_RU_LIB PRIVATE asn1_lte_rrc_hdrs nfapi_user_lib)
 
 set(SCHED_SRC_UE
   ${OPENAIR1_DIR}/SCHED_UE/phy_procedures_lte_ue.c
@@ -766,80 +767,6 @@ set(SCHED_SRC_NR_UE
 add_library(SCHED_NR_UE_LIB ${SCHED_SRC_NR_UE})
 target_link_libraries(SCHED_NR_UE_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
 
-# nFAPI
-#################################
-set(NFAPI_SRC
-  ${NFAPI_DIR}/nfapi/src/nfapi_p4.c
-  ${NFAPI_DIR}/nfapi/src/nfapi_p5.c
-  ${NFAPI_DIR}/nfapi/src/nfapi_p7.c
-)
-add_library(NFAPI_LIB ${NFAPI_SRC})
-target_link_libraries(NFAPI_LIB PUBLIC nfapi_common)
-target_link_libraries(NFAPI_LIB PUBLIC nr_fapi_p5 nr_fapi_p7)
-target_link_libraries(NFAPI_LIB PRIVATE z)
-
-if(OAI_WLS)
-  target_compile_definitions(NFAPI_LIB PRIVATE ENABLE_WLS)
-else()
-  target_compile_definitions(NFAPI_LIB PRIVATE ENABLE_SOCKET)
-endif()
-include_directories(${NFAPI_DIR}/nfapi/public_inc)
-include_directories(${NFAPI_DIR}/nfapi/inc)
-
-set(NFAPI_PNF_SRC
-  ${NFAPI_DIR}/pnf/src/pnf.c
-  ${NFAPI_DIR}/pnf/src/pnf_interface.c
-  ${NFAPI_DIR}/pnf/src/pnf_p7.c
-  ${NFAPI_DIR}/pnf/src/pnf_p7_interface.c
-)
-add_library(NFAPI_PNF_LIB ${NFAPI_PNF_SRC})
-target_link_libraries(NFAPI_PNF_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
-target_link_libraries(NFAPI_PNF_LIB PUBLIC nr_fapi_p7)
-
-if(OAI_WLS)
-  target_compile_definitions(NFAPI_PNF_LIB PRIVATE ENABLE_WLS)
-endif()
-include_directories(${NFAPI_DIR}/pnf/public_inc)
-include_directories(${NFAPI_DIR}/pnf/inc)
-
-set(NFAPI_VNF_SRC
-  ${NFAPI_DIR}/vnf/src/vnf.c
-  ${NFAPI_DIR}/vnf/src/vnf_interface.c
-  ${NFAPI_DIR}/vnf/src/vnf_p7.c
-  ${NFAPI_DIR}/vnf/src/vnf_p7_interface.c
-)
-add_library(NFAPI_VNF_LIB ${NFAPI_VNF_SRC})
-target_link_libraries(NFAPI_VNF_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
-target_link_libraries(NFAPI_VNF_LIB PRIVATE nr_fapi_p5 nr_fapi_p7)
-if(OAI_AERIAL)
-  target_compile_definitions(NFAPI_VNF_LIB PRIVATE ENABLE_AERIAL)
-endif()
-include_directories(${NFAPI_DIR}/vnf/public_inc)
-include_directories(${NFAPI_DIR}/vnf/inc)
-
-if(OAI_WLS)
-  target_compile_definitions(NFAPI_VNF_LIB PRIVATE ENABLE_WLS)
-endif()
-# nFAPI user defined code
-#############################
-set(NFAPI_USER_SRC
-  ${NFAPI_USER_DIR}/nfapi.c
-  ${NFAPI_USER_DIR}/nfapi_pnf.c
-  ${NFAPI_USER_DIR}/nfapi_vnf.c
-  ${NFAPI_USER_DIR}/gnb_ind_vars.c
-)
-add_library(NFAPI_USER_LIB ${NFAPI_USER_SRC})
-if(OAI_WLS)
-  target_compile_definitions(NFAPI_USER_LIB PRIVATE ENABLE_WLS)
-elseif (OAI_AERIAL)
-  target_compile_definitions(NFAPI_USER_LIB PRIVATE ENABLE_AERIAL)
-else()
-  target_compile_definitions(NFAPI_USER_LIB PRIVATE ENABLE_SOCKET)
-endif()
-target_link_libraries(NFAPI_USER_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
-target_link_libraries(NFAPI_USER_LIB PRIVATE nr_fapi_p7)
-include_directories(${NFAPI_USER_DIR})
-
 # Layer 1
 #############################
 set(PHY_TURBOIF
@@ -851,6 +778,7 @@ set(PHY_NRLDPC_CODINGIF
 )
 
 add_library(dfts MODULE ${OPENAIR1_DIR}/PHY/TOOLS/oai_dfts.c ${OPENAIR1_DIR}/PHY/TOOLS/oai_dfts_neon.c)
+target_compile_options(dfts PRIVATE -fno-semantic-interposition)
 
 set(PHY_SRC_COMMON
   ${OPENAIR1_DIR}/PHY/LTE_TRANSPORT/dci_tools_common.c
@@ -1005,7 +933,6 @@ set(PHY_SRC_UE
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_ulsch.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_sch_dmrs.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_prach.c
-  ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_ulsch_llr_computation.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_ulsch_demodulation.c
   ${OPENAIR1_DIR}/PHY/NR_REFSIG/ul_ref_seq_nr.c
   ${OPENAIR1_DIR}/PHY/NR_REFSIG/nr_dmrs_rx.c
@@ -1145,11 +1072,19 @@ set(NR_PDCP_SRC
   ${OPENAIR2_DIR}/LAYER2/nr_pdcp/nr_pdcp_integrity_nia2.c
   ${OPENAIR2_DIR}/LAYER2/nr_pdcp/nr_pdcp_integrity_nia1.c
   ${OPENAIR2_DIR}/LAYER2/nr_pdcp/asn1_utils.c
+  )
+
+# gNB: PDCP + CU-CP/CU-UP interface
+set(NR_PDCP_SRC_GNB
+  ${NR_PDCP_SRC}
   openair2/LAYER2/nr_pdcp/cucp_cuup_handler.c
   openair2/LAYER2/nr_pdcp/cuup_cucp_if.c
   openair2/LAYER2/nr_pdcp/cuup_cucp_direct.c
   openair2/LAYER2/nr_pdcp/cuup_cucp_e1ap.c
   )
+
+# UE build: PDCP only; CU-CP/CU-UP interface is gNB-only.
+set(NR_PDCP_SRC_UE ${NR_PDCP_SRC})
 
 set(NR_SDAP_SRC
   ${OPENAIR2_DIR}/SDAP/nr_sdap/nr_sdap.c
@@ -1194,7 +1129,7 @@ set(L2_LTE_SRC
   )
 
 set(L2_NR_SRC
-  ${NR_PDCP_SRC}
+  ${NR_PDCP_SRC_GNB}
   ${NR_SDAP_SRC}
   ${NR_RRC_DIR}/rrc_gNB.c
   ${NR_RRC_DIR}/mac_rrc_dl_direct.c
@@ -1230,7 +1165,7 @@ set(L2_RRC_SRC_UE
   )
 
 set(NR_L2_SRC_UE
-  ${NR_PDCP_SRC}
+  ${NR_PDCP_SRC_UE}
   ${NR_SDAP_SRC}
   ${NR_UE_RRC_DIR}/L2_interface_ue.c
   ${NR_UE_RRC_DIR}/main_ue.c
@@ -1272,7 +1207,9 @@ set (MAC_NR_SRC
   ${NR_GNB_MAC_DIR}/gNB_scheduler.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_bch.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_dlsch.c
+  ${NR_GNB_MAC_DIR}/gNB_scheduler_dlsch_default_policies.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_ulsch.c
+  ${NR_GNB_MAC_DIR}/gNB_scheduler_ulsch_default_policies.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_primitives.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_phytest.c
   ${NR_GNB_MAC_DIR}/gNB_scheduler_uci.c
@@ -1335,6 +1272,7 @@ set (MISC_NFAPI_LTE
  )
 
 add_library(MISC_NFAPI_LTE_LIB ${MISC_NFAPI_LTE})
+target_link_libraries(MISC_NFAPI_LTE_LIB PRIVATE nfapi_vnf_lib nfapi_pnf_lib)
 
 add_library(L2
   ${L2_SRC}
@@ -1344,6 +1282,7 @@ add_library(L2
   )
 target_link_libraries(L2 PRIVATE x2ap s1ap lte_rrc m2ap)
 target_link_libraries(L2 PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
+target_link_libraries(L2 PRIVATE nfapi_vnf_lib nfapi_pnf_lib)
 if(E2_AGENT)
   target_compile_definitions(L2 PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
 endif()
@@ -1362,6 +1301,7 @@ add_library(L2_NR
   )
 target_link_libraries(L2_NR PRIVATE ds alg)
 target_link_libraries(L2_NR PRIVATE f1ap_lib)
+target_link_libraries(L2_NR PRIVATE nfapi_vnf_lib)
 target_include_directories(L2_NR PRIVATE ${F1AP_DIR}/lib)
 if(E2_AGENT)
   target_compile_definitions(L2_NR PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
@@ -1375,6 +1315,7 @@ add_library(e1_if
 target_link_libraries(e1_if PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs asn1_f1ap SECURITY ${OPENSSL_LIBRARIES} e1ap GTPV1U)
 
 target_link_libraries(L2_NR PRIVATE f1ap x2ap s1ap ngap nr_rrc e1ap nr_rlc nr_common)
+target_compile_definitions(L2_NR PRIVATE PDCP_CUCP_CUUP)
 if(OAI_AERIAL)
     target_compile_definitions(L2_NR PRIVATE ENABLE_AERIAL)
 endif()
@@ -1386,10 +1327,10 @@ endif()
 add_library(L2_LTE_NR
   # temporary solution until 4G/5G code completely untangled (as evidenced by deletion of the following file)
   ${MAC_DIR}/dummy_functions.c
-  ${ENB_APP_SRC}
 )
 
 target_link_libraries(L2_LTE_NR PRIVATE f1ap s1ap nr_rrc)
+target_link_libraries(L2_LTE_NR PRIVATE nfapi_vnf_lib)
 
 add_library(L2_UE
   ${L2_SRC_UE}
@@ -1397,6 +1338,7 @@ add_library(L2_UE
 )
 target_link_libraries(L2_UE PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 target_link_libraries(L2_UE PRIVATE GTPV1U)
+target_link_libraries(L2_UE PRIVATE nfapi_pnf_lib)
 
 target_link_libraries(L2_UE PRIVATE asn1_lte_rrc_hdrs)
 
@@ -1430,6 +1372,7 @@ set (MME_APP_SRC
 add_library(MME_APP ${MME_APP_SRC})
 target_link_libraries(MME_APP PRIVATE m2ap m3ap)
 target_link_libraries(MME_APP PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+target_link_libraries(MME_APP PRIVATE nfapi_vnf_lib nfapi_user_lib)
 
 find_package(sctp REQUIRED)
 set(SCTP_SRC
@@ -1733,7 +1676,6 @@ endif()
 
 include_directories("${NFAPI_DIR}/nfapi/public_inc")
 include_directories("${NFAPI_DIR}/common/public_inc")
-include_directories("${NFAPI_DIR}/pnf/public_inc")
 include_directories("${NFAPI_DIR}/nfapi/inc")
 include_directories("${NFAPI_DIR}/sim_common/inc")
 include_directories("${NFAPI_DIR}/pnf_sim/inc")
@@ -1775,7 +1717,7 @@ add_dependencies(lte-softmodem oai_iqplayer)
 target_link_libraries(lte-softmodem PRIVATE
   -Wl,--start-group
   lte_rrc nr_rrc s1ap m2ap x2ap m3ap GTPV1U SECURITY UTIL SCTP_CLIENT MME_APP SCHED_LIB SCHED_RU_LIB
-  PHY_COMMON PHY PHY_RU  L2 L2_LTE NFAPI_LIB NFAPI_VNF_LIB NFAPI_PNF_LIB NFAPI_USER_LIB MISC_NFAPI_LTE_LIB
+  PHY_COMMON PHY PHY_RU  L2 L2_LTE nfapi_vnf_lib nfapi_pnf_lib nfapi_user_lib MISC_NFAPI_LTE_LIB
   ${NAS_UE_LIB} ITTI SIMU radio_common softmodem_common
   -Wl,--end-group dl)
 
@@ -1829,7 +1771,7 @@ target_link_libraries(lte-uesoftmodem PRIVATE
   -Wl,--start-group
   lte_rrc nr_rrc s1ap x2ap m2ap m3ap
   SECURITY UTIL SCTP_CLIENT MME_APP SCHED_RU_LIB SCHED_UE_LIB PHY_COMMON
-  PHY_UE PHY_RU L2_UE L2_LTE SIMU NFAPI_LIB NFAPI_PNF_LIB NFAPI_USER_LIB MISC_NFAPI_LTE_LIB
+  PHY_UE PHY_RU L2_UE L2_LTE SIMU nfapi_pnf_lib nfapi_user_lib MISC_NFAPI_LTE_LIB
   ${NAS_UE_LIB} ITTI radio_common softmodem_common
   -Wl,--end-group dl)
 
@@ -1840,7 +1782,6 @@ target_link_libraries(lte-uesoftmodem PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs
 # force the generation of ASN.1 so that we don't need to wait during the build
 target_link_libraries(lte-uesoftmodem PRIVATE
                       asn1_lte_rrc asn1_s1ap asn1_m2ap asn1_m3ap asn1_x2ap)
-
 # nr RRU
 add_executable(nr-oru
   ${OPENAIR_DIR}/executables/nr-ru.c
@@ -1853,9 +1794,9 @@ add_executable(nr-oru
 )
 target_link_libraries(nr-oru PRIVATE
   UTIL NR_PHY_RU PHY_NR shlib_loader dl
-  radio_common softmodem_common)
+  radio_common softmodem_common nfapi_pnf_lib)
 target_link_libraries(nr-oru PRIVATE pthread m CONFIG_LIB rt ${T_LIB} utils
-  barrier actor)
+  barrier actor nfapi_user_lib)
 target_link_libraries(nr-oru PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs nr_phy_common time_management)
 
 # nr-softmodem
@@ -1878,7 +1819,7 @@ target_link_libraries(nr-softmodem PRIVATE
   -Wl,--start-group
   UTIL SCTP_CLIENT SCHED_LIB SCHED_NR_LIB PHY_NR PHY PHY_NR_COMMON NR_PHY_RU GTPV1U SECURITY
   ITTI ${NAS_UE_LIB} nr_rrc
-  ngap s1ap L2_LTE_NR L2_NR MAC_NR_COMMON NFAPI_LIB NFAPI_VNF_LIB NFAPI_PNF_LIB NFAPI_USER_LIB SIMU
+  ngap s1ap L2_LTE_NR L2_NR MAC_NR_COMMON nfapi_vnf_lib nfapi_pnf_lib nfapi_user_lib SIMU
   x2ap f1ap m2ap m3ap e1ap radio_common
   time_management softmodem_common
   -Wl,--end-group dl)
@@ -1888,15 +1829,14 @@ target_link_libraries(nr-softmodem PRIVATE ${T_LIB})
 target_link_libraries(nr-softmodem PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 target_link_libraries(nr-softmodem PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 add_boolean_option(OAI_WLS OFF "Activate OAI's WLS driver" OFF)
+add_boolean_option(OAI_AERIAL OFF "Activate OAI's AERIAL driver" OFF)
 if (OAI_WLS)
     target_link_libraries(nr-softmodem PUBLIC wls_integration_lib)
+elseif (OAI_AERIAL)
+    target_compile_definitions(nr-softmodem PUBLIC ENABLE_AERIAL)
+    target_link_libraries(nr-softmodem PUBLIC aerial_lib)
 else()
     target_link_libraries(nr-softmodem PUBLIC nfapi_socket_lib)
-endif()
-add_boolean_option(OAI_AERIAL OFF "Activate OAI's AERIAL driver" OFF)
-if (OAI_AERIAL)
-  target_compile_definitions(nr-softmodem PUBLIC ENABLE_AERIAL)
-  target_link_libraries(nr-softmodem PUBLIC aerial_lib)
 endif()
 if(E2_AGENT)
   target_link_libraries(nr-softmodem PUBLIC e2_agent e2_agent_arg e2_ran_func_du_cucp_cuup)
@@ -1917,7 +1857,7 @@ add_executable(nr-cuup
   executables/nr-cuup.c
   ${NR_RRC_DIR}/rrc_gNB_UE_context.c
   ${OPENAIR2_DIR}/E1AP/e1ap_setup.c
-  ${NR_PDCP_SRC}
+  ${NR_PDCP_SRC_GNB}
   ${NR_SDAP_SRC}
   )
 
@@ -1928,6 +1868,7 @@ target_link_libraries(nr-cuup PRIVATE
                       alg
                       dl pthread ${T_LIB})
 target_link_libraries(nr-cuup PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
+target_compile_definitions(nr-cuup PRIVATE PDCP_CUCP_CUUP)
 if(E2_AGENT)
   target_link_libraries(nr-cuup PRIVATE e2_agent e2_agent_arg e2_ran_func_cuup)
   if(E3_AGENT)
@@ -1955,7 +1896,7 @@ add_executable(nr-uesoftmodem
 target_link_libraries(nr-uesoftmodem PRIVATE
   -Wl,--start-group
   nr_rrc SECURITY UTIL SCHED_NR_UE_LIB
-  PHY_NR_COMMON PHY_NR_UE NR_L2_UE MAC_NR_COMMON NFAPI_LIB
+  PHY_NR_COMMON PHY_NR_UE NR_L2_UE MAC_NR_COMMON nfapi_nr_lib
   ITTI SIMU radio_common
   time_management softmodem_common
   -Wl,--end-group dl)
@@ -2112,13 +2053,13 @@ target_link_libraries(nr_srssim PRIVATE
   m pthread ITTI dl nr_ue_phy_meas physim_common softmodem_common
   )
 
-if(CUDA_ENABLE)
+if(ENABLE_CHANNEL_SIM_CUDA)
   if (TARGET oai_cuda_lib)
       target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
       target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
 
-      target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
-      target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
+      target_compile_definitions(nr_dlsim PRIVATE CHANNEL_SIM_CUDA)
+      target_compile_definitions(nr_ulsim PRIVATE CHANNEL_SIM_CUDA)
   endif()
 endif()
 
@@ -2175,7 +2116,7 @@ if (${T_TRACER})
         params_libconfig
         oai_eth_transpro UTIL
         SECURITY SCHED_LIB SCHED_NR_LIB SCHED_RU_LIB SCHED_UE_LIB SCHED_NR_UE_LIB
-        NFAPI_LIB NFAPI_PNF_LIB NFAPI_VNF_LIB NFAPI_USER_LIB
+        nfapi_lte_lib nfapi_nr_lib nfapi_pnf_lib nfapi_vnf_lib nfapi_user_lib
         MISC_NFAPI_LTE_LIB
         PHY_COMMON PHY PHY_UE PHY_NR PHY_NR_COMMON PHY_NR_UE PHY_RU NR_PHY_RU
         L2 L2_LTE L2_NR L2_LTE_NR L2_UE NR_L2_UE MAC_NR_COMMON MAC_UE_NR ngap
@@ -2220,7 +2161,7 @@ if(ENABLE_TESTS)
       NAME benchmark
       GITHUB_REPOSITORY google/benchmark
       VERSION 1.9.0
-      OPTIONS "BENCHMARK_ENABLE_TESTING OFF"
+      OPTIONS "BENCHMARK_ENABLE_TESTING OFF" "BENCHMARK_ENABLE_WERROR OFF"
     )
   endif()
 endif()
@@ -2234,6 +2175,11 @@ add_subdirectory(openair2)
 add_subdirectory(openair3)
 add_subdirectory(radio)
 add_subdirectory(tests)
+
+add_boolean_option(OAI_RU_FRONTHAUL OFF "Whether to configure OAI fronthaul library" OFF)
+if(OAI_RU_FRONTHAUL)
+  add_subdirectory(fronthaul)
+endif()
 
 if(TARGET oai_cuda_lib)
     message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")

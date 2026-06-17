@@ -13,9 +13,6 @@
 #include "openair2/E2AP/flexric/src/util/time_now_us.h"
 
 static
-const int mod_id = 0;
-
-static
 uint32_t num_act_rb(NR_UEs_t* const UE_info)
 {
   assert(UE_info!= NULL);
@@ -57,19 +54,21 @@ bool read_rlc_sm(void* data)
   rlc_ind_data_t* rlc = (rlc_ind_data_t*)data;
   //fill_rlc_ind_data(rlc);
   // use MAC structures to get RNTIs
-  NR_UEs_t *UE_info = &RC.nrmac[mod_id]->UE_info;
+  gNB_MAC_INST *mac_inst = RC.nrmac[0];
+  NR_SCHED_LOCK(&mac_inst->sched_lock);
+  NR_UEs_t *UE_info = &mac_inst->UE_info;
   uint32_t const act_rb = num_act_rb(UE_info);
 
-  //assert(0!=0 && "Read RLC called");
+  rlc->msg.len = act_rb;
+  if (act_rb == 0) {
+    NR_SCHED_UNLOCK(&mac_inst->sched_lock);
+    return false;
+  }
+  rlc->msg.rb = calloc(rlc->msg.len, sizeof(rlc_radio_bearer_stats_t));
+  assert(rlc->msg.rb != NULL && "Memory exhausted");
 
   // activate the rlc to calculate the average tx time
   active_avg_to_tx(UE_info);
-
-  rlc->msg.len = act_rb;
-  if(rlc->msg.len > 0){
-    rlc->msg.rb = calloc(rlc->msg.len, sizeof(rlc_radio_bearer_stats_t));
-    assert(rlc->msg.rb != NULL && "Memory exhausted");
-  }
 
   rlc->msg.tstamp = time_now_us();
 
@@ -143,6 +142,7 @@ bool read_rlc_sm(void* data)
       ++i;
     }
   }
+  NR_SCHED_UNLOCK(&mac_inst->sched_lock);
 
   return act_rb > 0;
 }

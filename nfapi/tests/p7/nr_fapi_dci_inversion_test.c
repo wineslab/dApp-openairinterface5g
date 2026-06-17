@@ -35,7 +35,7 @@ void test_pack_payload(uint8_t payloadSizeBits, uint8_t payload[])
   // All tests successful!
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
   uint8_t upper = 8 * DCI_PAYLOAD_BYTE_LEN;

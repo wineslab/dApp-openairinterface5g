@@ -94,6 +94,7 @@ uint16_t ue_process_rar(const module_id_t module_idP, const int CC_id, const fra
         (uint16_t) rar[5] + (rar[4] << 8));
 #endif
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = UE_mac_inst[module_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = dlsch_buffer,
                     .pdu_buffer_size = n_rarh + n_rarpy * 6,
                     .ueid = module_idP,

@@ -10,7 +10,7 @@ extern "C" {
 #endif
 #include "common/platform_types.h"
 
-#ifdef CUDA_ENABLE
+#ifdef CHANNEL_SIM_CUDA
 void *cuda_channel_pipeline_init(int max_samples);
 void cuda_channel_pipeline_shutdown(void *context_handle);
 void cuda_channel_pipeline(void *context_handle,

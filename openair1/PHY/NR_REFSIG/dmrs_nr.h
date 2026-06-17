@@ -37,7 +37,9 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
                               uint8_t num_symbols,
                               uint8_t start_symbol,
                               uint16_t dmrs_bitmap,
-                              uint16_t num_rbs);
+                              uint16_t num_rbs,
+                              uint8_t nb_layers,
+                              uint8_t num_streams);
 
 int8_t get_num_dmrs_re_per_rb(const uint8_t dmrs_type, const uint8_t num_cdm_grp_no_data);
 

@@ -31,15 +31,20 @@ void nr_fill_srs(PHY_VARS_gNB *gNB, frame_t frame, slot_t slot, nfapi_nr_srs_pdu
 {
   NR_gNB_SRS_job_t srs = {.frame = frame, .slot = slot, .srs_pdu = *srs_pdu};
   if (gNB->common_vars.beam_id) {
-    const uint8_t l0 = gNB->frame_parms.symbols_per_slot - 1 - srs_pdu->time_start_position;
+    const uint8_t l0 = srs_pdu->time_start_position; // L2 already sends the absolute symbol index
     int bitmap = SL_to_bitmap(l0, 1 << srs_pdu->num_symbols);
     int fapi_beam_idx = srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-    srs.beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                        fapi_beam_idx,
-                                        &gNB->common_vars,
-                                        slot,
-                                        gNB->frame_parms.symbols_per_slot,
-                                        bitmap);
+    const nfapi_v4_srs_parameters_t *p = &srs_pdu->srs_parameters_v4;
+    // We assume the ports are sequential so taking the first port index here
+    const uint16_t ant_port_start = p->num_ul_spatial_streams_ports > 0 ? p->Ul_spatial_stream_ports[0] : 0;
+    beam_index_allocation(fapi_beam_idx,
+                          ant_port_start,
+                          p->num_ul_spatial_streams_ports,
+                          NR_SYMBOLS_PER_SLOT,
+                          slot,
+                          bitmap,
+                          gNB->frame_parms.nb_antennas_rx,
+                          gNB->common_vars.beam_id);
   }
   bool found = spsc_q_put(&gNB->srs_queue, &srs, sizeof(srs));
   if (!found)
@@ -57,7 +62,7 @@ int nr_get_srs_signal(PHY_VARS_gNB *gNB,
   const NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
   const uint16_t n_symbols = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot; // number of symbols until this slot
-  const uint8_t l0 = frame_parms->symbols_per_slot - 1 - srs_pdu->time_start_position; // starting symbol in this slot
+  const uint8_t l0 = srs_pdu->time_start_position; // starting symbol in this slot (L2 sends absolute symbol index)
   const uint64_t symbol_offset = (n_symbols + l0) * frame_parms->ofdm_symbol_size;
   const uint64_t subcarrier_offset = frame_parms->first_carrier_offset + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
 
@@ -65,9 +70,10 @@ int nr_get_srs_signal(PHY_VARS_gNB *gNB,
   const uint8_t N_symb_SRS = 1 << srs_pdu->num_symbols;
   const uint8_t K_TC = 2 << srs_pdu->comb_size;
   const uint16_t M_sc_b_SRS = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index) * NR_NB_SC_PER_RB / K_TC;
+  const uint8_t num_sp_streams = srs_pdu->srs_parameters_v4.num_ul_spatial_streams_ports;
 
   bool no_srs_signal = true;
-  for (int ant = 0; ant < frame_parms->nb_antennas_rx; ant++) {
+  for (int ant = 0; ant < num_sp_streams; ant++) {
     memset(srs_received_signal[ant], 0, frame_parms->ofdm_symbol_size * sizeof(c16_t));
     memset(srs_received_noise[ant], 0, frame_parms->ofdm_symbol_size * sizeof(c16_t));
     c16_t *rx_signal = &rxdataF[ant][symbol_offset];

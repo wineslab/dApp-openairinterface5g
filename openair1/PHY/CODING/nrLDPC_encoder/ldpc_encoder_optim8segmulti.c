@@ -169,23 +169,23 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
 
   if(impp->tinput != NULL) stop_meas(impp->tinput);
 
-  if ((BG==1 && Zc>=176) || (BG==2 && Zc>=72)) {
-    // extend matrix
-    if(impp->tprep != NULL) start_meas(impp->tprep);
-    if(impp->tprep != NULL) stop_meas(impp->tprep);
+  if ((BG == 1 && Zc >= 176) || (BG == 2 && Zc >= 72)) {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    encode_parity_check_part_optim(cc, dd, BG, Zc, Kb, simd_size, ncols);
+    encode_parity_check_part_optim(cc, dd, BG, Zc, simd_size, ncols, impp->tinput_memcpy);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
-  }
-  else {
+  } else {
     if (encode_parity_check_part_orig(cc, dd, BG, Zc, Kb, block_length)!=0) {
       printf("Problem with encoder\n");
       return(-1);
     }
   }
+  if (impp->toutput != NULL)
+    start_meas(impp->toutput);
   memcpy(output,&cc[2*Zc],(block_length-(2*Zc)));
   memcpy(output+block_length-(2*Zc),dd,((nrows-no_punctured_columns) * Zc-removed_bit));
+  if (impp->toutput != NULL)
+    stop_meas(impp->toutput);
   return 0;
 }
 

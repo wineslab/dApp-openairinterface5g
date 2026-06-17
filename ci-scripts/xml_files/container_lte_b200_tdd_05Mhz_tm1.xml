@@ -34,7 +34,7 @@
 
   <testCase>
     <class>Create_Workspace</class>
-    <desc>Create new Workspace for server 0</desc>
+    <desc>Create new Workspace</desc>
     <node>starsky</node>
   </testCase>
 

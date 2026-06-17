@@ -52,4 +52,6 @@ f1ap_ue_context_rel_cplt_t cp_ue_context_rel_cplt(const f1ap_ue_context_rel_cplt
 bool eq_ue_context_rel_cplt(const f1ap_ue_context_rel_cplt_t *a, const f1ap_ue_context_rel_cplt_t *b);
 void free_ue_context_rel_cplt(f1ap_ue_context_rel_cplt_t *cplt);
 
+f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig);
+
 #endif /* F1AP_UE_CONTEXT_SETUP_REQ_H_ */

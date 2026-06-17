@@ -112,6 +112,7 @@ rx_sdu(const module_id_t enb_mod_idP,
   start_meas(&mac->rx_ulsch_sdu);
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_RX_SDU, 1);
   ws_trace_t tmp = {.direction = DIRECTION_UPLINK,
+                    .type = mac->common_channels[CC_idP].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = sduP,
                     .pdu_buffer_size = sdu_lenP,
                     .ueid = 0,

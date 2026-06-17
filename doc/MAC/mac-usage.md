@@ -10,7 +10,9 @@ out the various configuration options that influence its behavior.
 
 The 5G MAC scheduler is a proportional fair (PF) scheduler, "approximating
 wide-band CQI" (for lack of a better term, but CQI is typically used for PF)
-through the selection of an MCS to use.
+through the selection of an MCS to use. For a detailed description of the
+scheduler pipeline and how to replace individual policies, see
+[Scheduler Architecture](scheduler-architecture.md).
 
 Concretely, the scheduler loops through all UEs and calculates the PF
 coefficient using the currently selected MCS, and the historical achieved rate.
@@ -22,9 +24,13 @@ UEs with retransmissions are allocated first; similarly, UEs that have not been
 scheduled for some time in UL are scheduled automatically in UL and have
 therefore priority over data with "normal" traffic.
 
-The MCS selection is done in `get_mcs_from_bler()` in file
-[`gNB_scheduler_primitives.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_primitives.c).
-It consider two thresholds for a "BLER" that is computed from the number of
+The MCS selection is done in `nr_dl_mcs_select_default()` / `nr_ul_mcs_select_default()` in files
+[`gNB_scheduler_dlsch_default_policies.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c)
+and
+[`gNB_scheduler_ulsch_default_policies.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch_default_policies.c).
+The BLER estimation itself is computed separately in `update_bler_stats()` in
+[`gNB_scheduler_primitives.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_primitives.c),
+and the MCS policy reads the result. It considers two thresholds for a "BLER" that is computed from the number of
 first-round retransmissions over total transmissions in the last window (50ms).
 If that ratio is higher than an "upper" threshold (see
 `dl/ul_bler_target_upper` in the configuration section below), it is
@@ -33,11 +39,11 @@ lower than a "lower" threshold (see `dl/ul_bler_target_lower`), it is
 interpreted as "good channel" and MCS is incremented by 1. This happens each
 window.
 
-The actual scheduler implementation can be found in functions `pf_dl()` and
-`pf_ul()` in files
-[`gNB_scheduler_dlsch.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch.c)
+The actual scheduler implementation can be found in functions `nr_dl_proportional_fair()` and
+`nr_ul_proportional_fair()` in files
+[`gNB_scheduler_dlsch_default_policies.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c)
 (for DL) and
-[`gNB_scheduler_ulsch.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch.c)
+[`gNB_scheduler_ulsch_default_policies.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch_default_policies.c)
 (for UL), respectively.
 
 ## PDCCH aggregation level
@@ -120,9 +126,8 @@ Example:
 UE RNTI 2460 CU-UE-ID 2 in-sync PH 28 dB PCMAX 24 dBm, average RSRP -74 (8 meas), average SINR 40.0 (32 meas)
 UE 2460: CQI 15, RI 2, PMI (14,1)
 UE 2460: UL-RI 2 TPMI 0
-UE 2460: dlsch_rounds 32917/5113/1504/560, dlsch_errors 211, pucch0_DTX 1385 (SNR 19.8+0.2 dB), BLER 0.19557 MCS (1) 23 CCE fail 3
-UE 2460: ulsch_rounds 3756/353/182/179, ulsch_errors 170, ulsch_DTX 285, BLER 0.33021 MCS (1) 27 (Qm 8  dB) NPRB 5 SNR 31.0 (-1.0) dB CCE fail 0
-UE 2460: MAC:    TX     1530943191 RX         194148 bytes
+UE 2460: dlsch_rounds 32917/5113/1504/560, dlsch_errors 211, pucch0_DTX 1385 (SNR 19.8+0.2 dB), BLER 0.19557 MCS (1) 23 CCE fail 3, goodput 120.50 Mbps
+UE 2460: ulsch_rounds 3756/353/182/179, ulsch_errors 170, ulsch_DTX 285, BLER 0.33021 MCS (1) 27 (Qm 8 deltaMCS 0 dB) NPRB 5 SNR 31.0 (-1.0) dB CCE fail 0, goodput 12.30 Mbps
 UE 2460: LCID 1: TX            651 RX           3031 bytes
 UE 2460: LCID 2: TX              0 RX              0 bytes
 UE 2460: LCID 4: TX     1526169592 RX          16152 bytes
@@ -209,11 +214,11 @@ The fourth and fifth line show HARQ-related information:
 * Both ULSCH/DLSCH `CCE fail`: lists the number of failed CCE attempts. If this
   number gets high, it signifies that the scheduler tried to scheduled this UE,
   but could not allocate the DCI.
+* Both ULSCH/DLSCH `goodput`: smoothed (EWMA) goodput in Mbps, reflecting the
+  actual MAC-layer throughput achieved by the UE.
 
 In the last lines:
 
-* `MAC` shows the amount of MAC PDU bytes scheduled in transmit (`TX`,
-  `1530943191`) and receive (`RX`, `194148`) directions
 * `LCID X` shows the amount of MAC SDU/RLC PDU data for Logical Channel ID with
   ID `X` in transmit and receive directions. LCIDs 1 and 2 are mapped to SRBs 1
   and 2. LCIDs 4 and onward are mapped to DRBs 1 onward. If you have an LCID 4,
@@ -301,7 +306,7 @@ configuration](../RRC/rrc-usage.md) as well for SIB configuration.
   in downlink
 * `do_CSIRS` (default 0): flag whether to use channel-state information
   reference signal (CSI-RS)
-* `do_SRS` (default 0): flag whether to use sounding reference signal (SRS)
+* `do_SRS` (default `none`): string to define SRS type (options: `none`, `periodic`, or `aperiodic`)
 * `CSI_report_type` (default `ssb_rsrp`): parameter to enable different CSI reporting (options: `ssb_rsrp`, `ssb_sinr` and `cri_rsrp`)
   Default setting of CSI reporting quantity is SSB-RSRP.
 * `min_rxtxtime` (default 2): minimum feedback time for UE to respond to

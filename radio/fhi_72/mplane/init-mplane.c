@@ -103,6 +103,17 @@ bool init_mplane(ru_session_list_t *ru_session_list)
       memcpy(ru_session->ru_mplane_config.du_mac_addr[j], du_mac_addr[idx], strlen(du_mac_addr[idx]) + 1);
       ru_session->ru_mplane_config.vlan_tag[j] = vlan_tag[idx];
     }
+
+    // get compression parameters from the config file, if any
+    paramdef_t rup[] = ORAN_RU_DESC;
+    int nru = sizeofArray(rup);
+    int comp_type_idx = config_paramidx_fromname(rup, nru, ORAN_RU_COMP_HDR_TYPE);
+    AssertError(comp_type_idx >= 0, return false, "[MPLANE] Index for %s config option not found!\n", ORAN_RU_COMP_HDR_TYPE);
+    const paramdef_t *comp_type_pd = gpd(rup, nru, ORAN_RU_COMP_HDR_TYPE);
+    ru_session->xran_mplane.comp_hdr_type = comp_type_pd->paramflags & PARAMFLAG_PARAMSET ? config_get_processedint(config_get_if(), &rup[comp_type_idx]) : 1; // 0 -> XRAN_COMP_HDR_TYPE_DYNAMIC, 1 -> XRAN_COMP_HDR_TYPE_STATIC
+    const paramdef_t *iq_pd = gpd(rup, nru, ORAN_RU_CONFIG_IQWIDTH);
+    ru_session->xran_mplane.iq_width = iq_pd->paramflags & PARAMFLAG_PARAMSET ? *iq_pd->u8ptr : 255; // 255 if nothing set via config file
+    AssertError(ru_session->xran_mplane.iq_width <= 16 || ru_session->xran_mplane.iq_width == 255, return false, "[MPLANE] IQ bitwidth cannot be higher than 16.\n");
   }
 
   nc_client_init();
@@ -199,11 +210,14 @@ bool manage_ru(ru_session_t *ru_session, const openair0_config_t *oai, const siz
   while (1) {
     sleep(5);
     if (!ru_session->ru_notif.ptp_state && !ru_session->ru_notif.hardware.oper_state && !ru_session->ru_notif.hardware.admin_state && !ru_session->ru_notif.hardware.avail_state) {
+      success = get_running_u_plane_config(ru_session);
+      AssertError(success, return false, "[MPLANE] Unable to get running U-plane configuration.\n");
+
       char *content = NULL;
       success = configure_ru_from_yang(ru_session, oai, num_rus, &content);
       AssertError(success, return false, "[MPLANE] Unable to create content for <edit-config> RPC for start-up procedure.\n");
 
-      success = edit_val_commmit_rpc(ru_session, content);
+      success = edit_val_commmit_rpc(ru_session, content, NC_RPC_EDIT_DFLTOP_MERGE);
       AssertError(success, return false, "[MPLANE] Unable to continue.\n");
       free(content);
       break;
@@ -220,7 +234,7 @@ bool pm_conf(ru_session_t *ru_session, const char *active)
 {
   char *content = get_pm_content(ru_session, active);
 
-  bool success = edit_val_commmit_rpc(ru_session, content);
+  bool success = edit_val_commmit_rpc(ru_session, content, NC_RPC_EDIT_DFLTOP_MERGE);
   AssertError(success, return false, "[MPLANE] Cannot continue.\n");
 
   free(content);

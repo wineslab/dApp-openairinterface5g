@@ -65,21 +65,16 @@ def ExecuteActionWithParam(action, ctx, node):
 	global HTML
 	global CONTAINERS
 	global CLUSTER
-	if action == 'Build_eNB' or action == 'Build_Image' or action == 'Build_Proxy' or action == "Build_Cluster_Image" or action == "Build_Run_Tests":
+	if action == 'Build_eNB' or action == 'Build_Image' or action == "Build_Cluster_Image" or action == "Build_Run_Tests":
 		RAN.Build_eNB_args=test.findtext('Build_eNB_args')
 		CONTAINERS.imageKind=test.findtext('kind')
-		proxy_commit = test.findtext('proxy_commit')
 		dockerfile = test.findtext('dockerfile') or ''
 		runtime_opt = test.findtext('runtime-opt') or ''
 		ctest_opt = test.findtext('ctest-opt') or ''
-		if proxy_commit is not None:
-			CONTAINERS.proxyCommit = proxy_commit
 		if action == 'Build_eNB':
-			success = cls_native.Native.Build(ctx, node, HTML, RAN.eNBSourceCodePath, RAN.Build_eNB_args)
+			success = cls_native.Native.Build(ctx, node, HTML, RAN.workspace, RAN.Build_eNB_args)
 		elif action == 'Build_Image':
 			success = CONTAINERS.BuildImage(ctx, node, HTML)
-		elif action == 'Build_Proxy':
-			success = CONTAINERS.BuildProxy(ctx, node, HTML)
 		elif action == 'Build_Cluster_Image':
 			success = CLUSTER.BuildClusterImage(ctx, node, HTML)
 		elif action == 'Build_Run_Tests':
@@ -153,16 +148,16 @@ def ExecuteActionWithParam(action, ctx, node):
 	elif action == 'Deploy_Run_OC_PhySim':
 		oc_release = test.findtext('oc_release')
 		script = "scripts/oc-deploy-physims.sh"
-		image_tag = cls_containerize.CreateTag(CLUSTER.ranCommitID, CLUSTER.ranBranch, CLUSTER.ranAllowMerge)
-		options = f"oaicicd-core-for-ci-ran {oc_release} {image_tag} {CLUSTER.eNBSourceCodePath}"
-		workdir = CLUSTER.eNBSourceCodePath
+		image_tag = CLUSTER.branch
+		options = f"oaicicd-core-for-ci-ran {oc_release} {image_tag} {CLUSTER.workspace}"
+		workdir = CLUSTER.workspace
 		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
 
 	elif action == 'Build_Deploy_PhySim':
 		ctest_opt = test.findtext('ctest-opt') or ''
 		script = test.findtext('script')
-		options = f"{CONTAINERS.eNBSourceCodePath} {ctest_opt}"
-		workdir = CONTAINERS.eNBSourceCodePath
+		options = f"{CONTAINERS.workspace} {ctest_opt}"
+		workdir = CONTAINERS.workspace
 		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
 
 	elif action == 'DeployCoreNetwork' or action == 'UndeployCoreNetwork':
@@ -170,11 +165,20 @@ def ExecuteActionWithParam(action, ctx, node):
 		core_op = getattr(cls_oaicitest.OaiCiTest, action)
 		success = core_op(cn_id, ctx, HTML)
 
+	elif action == 'DeployWithScript' or action == 'UndeployWithScript':
+		script = test.findtext('script')
+		options = test.findtext('options')
+		if action == 'DeployWithScript':
+			deploymentTag = RAN.branch
+			success = cls_oaicitest.DeployWithScript(HTML, node, script, options, deploymentTag)
+		elif action == 'UndeployWithScript':
+			success = cls_oaicitest.UndeployWithScript(HTML, ctx, node, script, options)
+
 	elif action == 'Deploy_Object' or action == 'Undeploy_Object' or action == "Create_Workspace" or action == "Stop_Object":
 		CONTAINERS.yamlPath = test.findtext('yaml_path')
 		CONTAINERS.services = test.findtext('services')
 		CONTAINERS.num_attempts = int(test.findtext('num_attempts') or 1)
-		CONTAINERS.deploymentTag = cls_containerize.CreateTag(CONTAINERS.ranCommitID, CONTAINERS.ranBranch, CONTAINERS.ranAllowMerge)
+		CONTAINERS.deploymentTag = CONTAINERS.branch
 		if action == 'Deploy_Object':
 			success = CONTAINERS.DeployObject(ctx, node, HTML)
 		elif action == 'Stop_Object':
@@ -195,7 +199,7 @@ def ExecuteActionWithParam(action, ctx, node):
 			success = CONTAINERS.Create_Workspace(node, HTML)
 
 	elif action == 'LicenceAndFormattingCheck':
-		success = SCA.StaticCodeAnalysis.LicenceAndFormattingCheck(ctx, node, HTML, RAN.eNBSourceCodePath, RAN.ranBranch, RAN.ranAllowMerge, RAN.ranTargetBranch)
+		success = SCA.StaticCodeAnalysis.LicenceAndFormattingCheck(ctx, node, HTML, RAN.workspace, RAN.branch, RAN.merge, RAN.targetBranch)
 
 	elif action == 'Push_Local_Registry':
 		tag_prefix = test.findtext('tag_prefix') or ""
@@ -219,14 +223,14 @@ def ExecuteActionWithParam(action, ctx, node):
 	elif action == 'Custom_Command':
 		command = test.findtext('command')
 		# Allow referencing repository workspace path in XML via %%workspace%%
-		command = command.replace("%%workspace%%", CONTAINERS.eNBSourceCodePath)
+		command = command.replace("%%workspace%%", CONTAINERS.workspace)
 		success = cls_oaicitest.Custom_Command(HTML, node, command)
 
 	elif action == 'Custom_Script':
 		script = test.findtext('script')
 		args = test.findtext('args')
 		# Allow referencing repository workspace path in XML via %%workspace%%
-		script = script.replace("%%workspace%%", CONTAINERS.eNBSourceCodePath)
+		script = script.replace("%%workspace%%", CONTAINERS.workspace)
 		success = cls_oaicitest.Custom_Script(HTML, node, script, args)
 
 	elif action == 'Pull_Cluster_Image':
@@ -370,15 +374,15 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	logging.info('\u001B[1m  Starting Scenario: ' + CiTestObj.testXMLfiles[0] + '\u001B[0m')
 	logging.info('\u001B[1m----------------------------------------\u001B[0m')
 	if re.match('^TesteNB$', mode, re.IGNORECASE):
-		if RAN.ranRepository == '' or RAN.ranBranch == '' or RAN.eNBSourceCodePath == '':
+		if RAN.repository == '' or RAN.branch == '' or RAN.workspace == '':
 			HELP.GenericHelp(CONST.Version)
-			if RAN.ranRepository == '':
-				HELP.GitSrvHelp(RAN.ranRepository, RAN.ranBranch, RAN.ranCommitID, RAN.ranAllowMerge, RAN.ranTargetBranch)
-			if RAN.eNBSourceCodePath == '':
-				HELP.eNBSrvHelp(RAN.eNBSourceCodePath)
+			if RAN.repository == '':
+				HELP.GitSrvHelp(RAN.repository, RAN.branch, RAN.merge, RAN.targetBranch)
+			if RAN.workspace == '':
+				HELP.SrvHelp(RAN.workspace)
 			sys.exit('Insufficient Parameter')
 	else:
-		if CiTestObj.ranRepository == '' or CiTestObj.ranBranch == '':
+		if CiTestObj.repository == '' or CiTestObj.branch == '':
 			HELP.GenericHelp(CONST.Version)
 			sys.exit('UE: Insufficient Parameter')
 

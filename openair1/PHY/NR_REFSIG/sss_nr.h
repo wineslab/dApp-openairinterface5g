@@ -43,18 +43,17 @@
 
 #define SSS_METRIC_FLOOR_NR   (30000)
 
-void init_context_sss_nr(int amp);
-void free_context_sss_nr(void);
+typedef struct {
+  int nb_antennas_rx;
+  int samples_per_slot_wCP;
+  int ofdm_symbol_size;
+  int first_carrier_offset;
+  int ssb_start_subcarrier;
+  int subcarrier_spacing;
+} nr_sss_params_t;
+sss_detection_result_t rx_sss_nr(nr_sss_params_t *params,
+                                 pss_detection_result_t *pss,
+                                 int target_Nid_cell,
+                                 c16_t rxdataF[NR_N_SYMBOLS_SSB][params->nb_antennas_rx][params->ofdm_symbol_size]);
 
-bool rx_sss_nr(const NR_DL_FRAME_PARMS *frame_parms,
-               int nid2,
-               int target_Nid_cell,
-               int freq_offset_pss,
-               int ssb_start_subcarrier,
-               int *Nid_cell,
-               int32_t *tot_metric,
-               uint8_t *phase_max,
-               int *freq_offset_sss,
-               c16_t rxdataF[][frame_parms->samples_per_slot_wCP]);
 #endif /* SSS_NR_H */
-

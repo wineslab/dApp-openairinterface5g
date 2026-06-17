@@ -6,29 +6,34 @@
 #define XNAP_MESSAGES_TYPES_H_
 
 #include "common/5g_platform_types.h"
+#include "common/utils/ds/byte_array.h"
+#include "common/platform_types.h"
+#include "common/platform_constants.h"
 
 typedef struct {
-  // PLMN Identity
+  // PLMN Identity (M)
   plmn_id_t plmn;
   // Number of supported S-NSSAIs
   uint16_t num_nssai;
-  // List of supported S-NSSAIs
+  // List of supported S-NSSAIs (M)
   nssai_t *nssai;
 } xnap_plmn_support_t;
 
+/* TAI Support Item */
 typedef struct {
-  // Tracking Area Code
+  // Tracking Area Code (M)
   uint32_t tac;
   // Number of supported PLMNs
   uint8_t num_plmn;
-  // List of supported PLMNs
+  // List of supported PLMNs (M)
   xnap_plmn_support_t *plmn_support;
 } xnap_tai_support_t;
 
+/* 3GPP TS 38.423 9.2.3.83 AMF Region Information */
 typedef struct {
-  // PLMN Identity
+  // PLMN Identity (M)
   plmn_id_t plmn;
-  // AMF Region Identifier
+  // AMF Region Identifier (M)
   uint8_t amf_region_id;
 } xnap_amf_region_info_t;
 
@@ -159,5 +164,222 @@ typedef struct {
   // Cause (M)
   xnap_cause_t cause;
 } xnap_setup_failure_t;
+
+/* 3GPP TS 38.423 9.2.2.7 – NR CGI */
+typedef struct {
+  // PLMN Identity (M)
+  plmn_id_t plmn_id;
+  // NR Cell Identity (M)
+  uint64_t nrcell_id;
+} xnap_ngran_cgi_t;
+
+/*  3GPP TS 38.423 9.2.3.4 – Bit Rate */
+typedef uint64_t bitrate_t;
+
+/* 3GPP TS 38.423 9.2.3.17 – UE Aggregate Maximum Bit Rate */
+typedef struct {
+  bitrate_t br_ul;
+  bitrate_t br_dl;
+} xnap_ambr_t;
+
+/* 3GPP TS 38.423 9.2.3.49 – UE Security Capabilities */
+typedef struct {
+  uint16_t nRencryption_algorithms;
+  uint16_t nRintegrity_algorithms;
+  uint16_t eUTRAencryption_algorithms;
+  uint16_t eUTRAintegrity_algorithms;
+} xnap_security_capabilities_t;
+
+/* 3GPP TS 38.423 9.2.3.13 Packet Error Rate */
+typedef struct xnap_per_s {
+  // Scalar (M)
+  uint8_t scalar;
+  // Exponent (M)
+  uint8_t exponent;
+} xnap_per_t;
+
+/* 3GPP TS 38.423 9.2.3.8 Non-Dynamic 5QI Descriptor */
+typedef struct xnap_nondynamic_5qi_s {
+  // 5QI (M)
+  int fiveQI;
+} xnap_nondynamic_5qi_t;
+
+/* 3GPP TS 38.423 9.2.3.9 Dynamic 5QI Descriptor */
+typedef struct xnap_dynamic_5qi_s {
+  // QoS Priority Level (M)
+  int prio;
+  // Packet Delay Budget (M)
+  int pdb;
+  // Packet Error Rate (M)
+  xnap_per_t per;
+} xnap_dynamic_5qi_t;
+
+/* 3GPP TS 38.423 9.2.3.5 QoS Flow Level QoS Parameters */
+typedef struct xnap_qos_flow_param_s {
+  fiveQI_t qos_type;
+  union {
+    // Non dynamic 5QI Descriptor (M)
+    xnap_nondynamic_5qi_t nondyn;
+    // Dynamic 5QI Descriptor (M)
+    xnap_dynamic_5qi_t dyn;
+  };
+  // Allocation and Retention Priority (M)
+  qos_arp_t arp;
+} xnap_qos_flow_param_t;
+
+typedef struct {
+  // QoS Flow Identifier (M)
+  uint8_t qfi;
+  // QoS Flow Level QoS Parameters (M)
+  xnap_qos_flow_param_t qos_params;
+} xnap_qos_flow_tobe_setup_item_t;
+
+/* 3GPP TS 38.423 9.2.1.1 PDU Session Resources To Be Setup Item */
+typedef struct {
+  // PDU Session ID (M)
+  uint8_t pdusession_id;
+  // S-NSSAI (M)
+  nssai_t *nssai;
+  // UL NG-U UP TNL Information at UPF (M)
+  gtpu_tunnel_t n3_incoming;
+  // PDU Session Type (M)
+  pdu_session_type_t pdu_session_type;
+  // QoS Flows To Be Setup List (M)
+  uint8_t num_qos;
+  xnap_qos_flow_tobe_setup_item_t *qos_list;
+} xnap_pdusession_resources_tobe_setup_item_t;
+
+typedef struct {
+  // NG-C UE associated Signalling reference (M)
+  uint64_t ngc_ue_sig_ref;
+  // Signalling TNL association address at source NG-C side (M)
+  transport_layer_addr_t cp_tnl_ip_source;
+  // UE Security Capabilities (M)
+  xnap_security_capabilities_t security_capabilities;
+  // AS Security Information (M)
+  uint8_t as_security_key_ranstar[32];
+  long as_security_ncc;
+  // UE Aggregate Maximum Bit Rate (M)
+  xnap_ambr_t ue_ambr;
+  // RRC Context (M)(3GPP TS 38.331 11.2.2 HandoverPreparationInformation message)
+  byte_array_t rrc_context;
+  // PDU Session Resources To Be Setup List (M)
+  uint8_t num_pdu;
+  xnap_pdusession_resources_tobe_setup_item_t *pdusession_resources_tobe_setup_list;
+} xnap_ue_context_info_t;
+
+/* Last Visited Cell Information */
+typedef struct {
+  // Last Visited Cell Type
+  uint8_t xnap_cell_type;
+  // 3GPP TS 38.413 9.3.1.97 Last Visited NG-RAN Cell Information
+  byte_array_t last_visited_cell_info;
+} ue_history_info_t;
+
+/* 3GPP TS 38.423 9.1.1.1 – Handover Request */
+typedef struct {
+  // Source NG-RAN node UE XnAP ID reference (M)
+  uint32_t s_ng_node_ue_xnap_id;
+  // Cause (M)
+  xnap_cause_t cause;
+  // Target Cell Global ID (M)
+  xnap_ngran_cgi_t target_cgi;
+  // GUAMI (M)
+  nr_guami_t guami;
+  // UE Context Information (M)
+  xnap_ue_context_info_t ue_context;
+  // UE History Information (M)
+  uint8_t num_last_visited_cells;
+  ue_history_info_t *ue_history_info;
+} xnap_handover_req_t;
+
+/* QoS Flows Admitted Item */
+typedef struct {
+  // QoS Flow Identifier
+  uint8_t qfi;
+} xnap_qos_admitted_item_t;
+
+/* 3GPP TS 38.423 9.2.1.2 – PDU Session Resources Admitted Item */
+typedef struct {
+  // PDU Session ID
+  uint8_t pdusession_id;
+  // QoS Flows Admitted List
+  uint8_t num_qos;
+  xnap_qos_admitted_item_t *qos_list;
+} xnap_pdusession_admitted_item_t;
+
+/* 3GPP TS 38.423 9.1.1.2 – Handover Request Acknowledge */
+typedef struct {
+  // Source NG-RAN node UE XnAP ID (M)
+  uint32_t s_ng_node_ue_xnap_id;
+  // Target NG-RAN node UE XnAP ID (M)
+  uint32_t t_ng_node_ue_xnap_id;
+  // PDU Session Resources Admitted List (M)
+  uint8_t num_pdu_admitted;
+  xnap_pdusession_admitted_item_t *pdusession_admitted_list;
+  // Target NG-RAN node To Source NG-RAN node Transparent Container (M)
+  // (3GPP TS 38.331 11.2.2 HandoverCommand message )
+  byte_array_t target2source;
+} xnap_handover_req_ack_t;
+
+/* 3GPP TS 38.423 9.1.1.3 – Handover Preparation Failure */
+typedef struct {
+  // Source NG-RAN node UE XnAP ID (M) //
+  uint32_t s_ng_node_ue_xnap_id;
+  // Cause (M)
+  xnap_cause_t cause;
+} xnap_handover_preparation_failure_t;
+
+/** 3GPP TS 38.423 – 9.1.1.4 SN Status Transfer 
+ * COUNT value used for both UL and DL PDCP SN + HFN (12-bit or 18-bit SN) */
+
+// Indicates PDCP SN length
+typedef enum { XNAP_SN_LENGTH_12 = 0, XNAP_SN_LENGTH_18 = 1 } xnap_sn_length_t;
+
+/* 3GPP TS 38.423 9.2.3.37 – COUNT Value for PDCP */
+typedef struct {
+  // PDCP Sequence Number (M)
+  uint32_t pdcp_sn;
+  // Hyper Frame Number (M)
+  uint32_t hfn;
+  // SN length
+  xnap_sn_length_t sn_len;
+} xnap_drb_count_value_t;
+
+/* 3GPP TS 38.423 9.2.1.14 – DRBs Subject To Status Transfer Item */
+typedef struct {
+  // DRB ID (M)
+  uint8_t drb_id;
+  // UL COUNT value (M)
+  xnap_drb_count_value_t ul_count;
+  // DL COUNT value (M)
+  xnap_drb_count_value_t dl_count;
+} xnap_drb_status_t;
+
+/* DRBs Subject To Status Transfer List */
+typedef struct {
+  // Number of DRBs in the list
+  uint8_t nb_drb;
+  // DRB Status List
+  xnap_drb_status_t drb_status_list[MAX_DRBS_PER_UE];
+} xnap_ran_status_container_t;
+
+/* 3GPP TS 38.423 9.1.1.4 – SN Status Transfer */
+typedef struct {
+  // Source NG-RAN node UE XnAP ID (M)
+  uint32_t s_ng_node_ue_xnap_id;
+  // Target NG-RAN node UE XnAP ID (M)
+  uint32_t t_ng_node_ue_xnap_id;
+  // DRBs Subject To Status Transfer List (M)
+  xnap_ran_status_container_t ran_status;
+} xnap_sn_status_transfer_t;
+
+/* 3GPP TS 38.423 9.1.1.5 – UE CONTEXT RELEASE */
+typedef struct {
+  /* Source NG-RAN node UE XnAP ID (M) */
+  uint32_t s_ng_node_ue_xnap_id;
+  /* Target NG-RAN node UE XnAP ID (M) */
+  uint32_t t_ng_node_ue_xnap_id;
+} xnap_ue_context_release_t;
 
 #endif /* XNAP_MESSAGES_TYPES_H_ */

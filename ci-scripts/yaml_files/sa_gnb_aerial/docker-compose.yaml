@@ -59,7 +59,6 @@ services:
                 - gpu
     network_mode: host
     shm_size: 4096m
-    stdin_open: true
     tty: true
     volumes:
       - ../../conf_files/gnb-vnf.sa.band78.273prb.aerial.conf:/opt/oai-gnb/etc/gnb.conf

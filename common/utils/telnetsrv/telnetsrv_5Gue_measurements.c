@@ -28,8 +28,7 @@
 #include "telnetsrv_cpumeasur_def.h"
 #include "openair2/LAYER2/NR_MAC_UE/mac_defs.h"
 #include "openair1/PHY/defs_nr_UE.h"
-
-extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
+#include "openair1/PHY/phy_extern_nr_ue.h"
 
 void measurcmd_display_macstats(telnet_printfunc_t prnt);
 void measurcmd_display_macstats_ue(telnet_printfunc_t prnt);
@@ -64,7 +63,7 @@ int get_measurgroups(telnet_measurgroupdef_t **measurgroups) {
 
 
 void measurcmd_display_phycpu(telnet_printfunc_t prnt) {
-  PHY_VARS_NR_UE *UE = PHY_vars_UE_g[0][0];
+  PHY_VARS_NR_UE *UE = nrPHY_vars_UE_g[0][0];
   telnet_cpumeasurdef_t cpumeasur[MAX_CPU_STAT_TYPE] = {};
   for (int i = 0; i < MAX_CPU_STAT_TYPE; i++) {
     sprintf(cpumeasur[i].statname, "%s", UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
@@ -80,7 +79,7 @@ void measurcmd_display_phycpu(telnet_printfunc_t prnt) {
 }
 void measurcmd_display_phyta(telnet_printfunc_t prnt)
 {
-  PHY_VARS_NR_UE *UE = PHY_vars_UE_g[0][0];
+  PHY_VARS_NR_UE *UE = nrPHY_vars_UE_g[0][0];
   prnt("%s PHY TA stats\n", HDR);
   prnt("N_TA_offset %d\n", UE->N_TA_offset);
   prnt("TA command %d\n", UE->ta_command);

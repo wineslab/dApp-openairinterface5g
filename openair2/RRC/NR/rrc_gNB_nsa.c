@@ -330,17 +330,20 @@ void rrc_add_nsa_user(gNB_RRC_INST *rrc, x2ap_ENDC_sgnb_addition_req_t *m, sctp_
   if (f1inst >= 0) {
       gtpv1u_gnb_create_tunnel_req_t req = {
         .ue_id = UE->rrc_ue_id,
-        .incoming_rb_id[0] = drb_id,
-        .pdusession_id[0] = drb_id,
-        .outgoing_teid[0] = 0xffff, // will be updated later
-        .dst_addr[0].length = 32,
-        .num_tunnels = 1,
+        .incoming_rb_id = drb_id,
+        .pdusession_id = drb_id,
+        .outgoing_teid = 0xffff, // will be updated later
+        .dst_addr.length = 32,
       };
       gtpv1u_gnb_create_tunnel_resp_t resp = {0};
       int ret = gtpv1u_create_ngu_tunnel(f1inst, &req, &resp, NULL, NULL);
       AssertFatal(ret == 0, "gtpv1u_create_ngu_tunnel failed: ret %d\n", ret);
-      memcpy(&drb->up_ul_tnl[0].tl_address, &resp.gnb_addr.buffer, 4);
-      drb->up_ul_tnl[0].teid = resp.gnb_NGu_teid[0];
+      AssertFatal(resp.gnb_addr.length == sizeof(in_addr_t),
+                  "GTP tunnel response address length %d does not match IPv4 size %zu\n",
+                  resp.gnb_addr.length,
+                  sizeof(in_addr_t));
+      memcpy(&drb->up_ul_tnl[0].tl_address, &resp.gnb_addr.buffer, resp.gnb_addr.length);
+      drb->up_ul_tnl[0].teid = resp.gnb_NGu_teid;
       drb->up_ul_tnl_len = 1;
   }
   uint64_t *ue_agg_mbr_ul = malloc_or_fail(sizeof(*ue_agg_mbr_ul));

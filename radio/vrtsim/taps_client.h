@@ -11,8 +11,9 @@ extern "C" {
 
 #include "sim.h"
 
-void taps_client_connect(int id, const char *socket_path, int num_tx_antennas, int num_rx_antennas, channel_desc_t **channel_desc);
-void taps_client_stop();
+void *taps_client_connect(const char *socket_path, int num_tx_ant, int num_rx_ant);
+channel_desc_t *taps_client_get_model(void *handle, int id);
+void taps_client_stop(void *handle);
 
 #ifdef __cplusplus
 }

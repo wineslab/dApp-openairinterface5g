@@ -72,5 +72,6 @@
 #include "E1AP_QoS-Flow-Failed-List.h"
 #include "E1AP_QoS-Flow-Failed-Item.h"
 #include "E1AP_DRB-Failed-To-Modify-Item-NG-RAN.h"
+#include "E1AP_ActivityNotificationLevel.h"
 
 #endif /* E1AP_LIB_INCLUDES_H_ */

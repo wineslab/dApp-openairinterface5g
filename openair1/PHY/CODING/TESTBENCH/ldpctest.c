@@ -100,7 +100,7 @@ one_measurement_t test_ldpc(short max_iterations,
   double sigma;
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
-  uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS];
+  uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS];
   uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
   memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
@@ -334,7 +334,7 @@ one_measurement_t test_ldpc(short max_iterations,
 
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                           (int8_t *)channel_output_fixed[j],
-                                          (int8_t *)estimated_output[j],
+                                          estimated_output[j],
                                           &decoder_profiler,
                                           &dec_abort);
       stop_meas(&ret.time_decoder);

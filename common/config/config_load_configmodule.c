@@ -417,12 +417,31 @@ void end_configmodule(configmodule_interface_t *cfgptr)
     
     cfgptr->numptrs=0;
     pthread_mutex_unlock(&cfgptr->memBlocks_mutex);
+    for (int i = 0; i < cfgptr->num_cfgP; i++) {
+      if (cfgptr->cfgP[i] != NULL) {
+        free(cfgptr->cfgP[i]);
+      }
+    }
     if (cfgptr->cfgmode)
       free(cfgptr->cfgmode);
 
     if (cfgptr->argv_info)
       free(cfgptr->argv_info);
 
+    if (cfgptr->tmpdir)
+      free(cfgptr->tmpdir);
+
+    if (cfgptr->status) {
+      if (cfgptr->status->debug_cfgname)
+        free(cfgptr->status->debug_cfgname);
+      free(cfgptr->status);
+    }
+
     free(cfgptr);
+    for (int i = 0; i < sizeofArray(Config_Params); i++) {
+      Config_Params[i].voidptr = NULL;
+      Config_Params[i].numelt = 0;
+      Config_Params[i].paramflags &= ~PARAMFLAG_PARAMSETDEF;
+    }
   }
 }

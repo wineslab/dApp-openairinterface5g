@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #include "TLVEncoder.h"
 #include "TLVDecoder.h"
@@ -17,7 +18,7 @@
 int decode_fgc_nas_message_container(FGCNasMessageContainer *nasmessagecontainer, uint8_t iei, uint8_t *buffer, uint32_t len)
 {
   int decoded = 0;
-  uint8_t ielen = 0;
+  uint16_t ielen = 0;
   int decode_result;
 
   if (iei > 0) {
@@ -25,8 +26,10 @@ int decode_fgc_nas_message_container(FGCNasMessageContainer *nasmessagecontainer
     decoded++;
   }
 
-  ielen = *(buffer + decoded);
-  decoded += 2;
+  uint16_t encoded_ielen;
+  memcpy(&encoded_ielen, buffer + decoded, sizeof(encoded_ielen));
+  ielen = ntohs(encoded_ielen);
+  decoded += sizeof(encoded_ielen);
   CHECK_LENGTH_DECODER(len - decoded, ielen);
 
   if ((decode_result =
@@ -38,6 +41,7 @@ int decode_fgc_nas_message_container(FGCNasMessageContainer *nasmessagecontainer
 
   return decoded;
 }
+
 int encode_fgc_nas_message_container(const FGCNasMessageContainer *nasmessagecontainer, uint8_t iei, uint8_t *buffer, uint32_t len)
 {
   uint32_t encoded = 0;

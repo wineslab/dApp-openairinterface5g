@@ -17,7 +17,7 @@
 
 #include "PHY/defs_nr_common.h"
 #include "PHY/NR_REFSIG/ss_pbch_nr.h"
-
+#include "PHY/defs_nr_UE.h"
 /************** CODE GENERATION ***********************************/
 
 //#define PSS_DECIMATOR                          /* decimation of sample is done between time correlation */
@@ -53,32 +53,25 @@
   #define  SYNCHRO_RATE_CHANGE_FACTOR  (1)
 #endif
 
-void init_context_synchro_nr(NR_DL_FRAME_PARMS *frame_parms_ue);
-int pss_synchro_nr(const c16_t **rxdata,
-                   const NR_DL_FRAME_PARMS *frame_parms,
-                   const c16_t pssTime[NUMBER_PSS_SEQUENCE][frame_parms->ofdm_symbol_size],
-                   int is,
-                   bool fo_flag,
-                   int target_Nid_cell,
-                   int *nid2,
-                   int *f_off,
-                   int *pssPeak,
-                   int *pssAvg);
-int pss_search_time_nr(const c16_t **rxdata,
-                       const NR_DL_FRAME_PARMS *frame_parms,
-                       const c16_t pssTime[NUMBER_PSS_SEQUENCE][frame_parms->ofdm_symbol_size],
-                       bool fo_flag,
-                       int is,
-                       int target_Nid_cell,
-                       int *nid2,
-                       int *f_off,
-                       int *pssPeak,
-                       int *pssAvg,
-                       int search_start,
-                       int search_length);
-void generate_pss_nr_time(const NR_DL_FRAME_PARMS *fp, const int N_ID_2, int ssbFirstSCS, c16_t pssTime[fp->ofdm_symbol_size]);
-int16_t *get_primary_synchro_nr2(const int nid2);
+typedef struct {
+  c16_t **rxdata;
+  int nb_antennas_rx;
+  int rxdata_length;
+  int ofdm_symbol_size;
+  int subcarrier_spacing;
+  bool fo_flag;
+  int target_Nid_cell;
+  c16_t *pssTime;
+} pss_search_t;
 
+pss_detection_result_t pss_search_time_nr(const pss_search_t *p);
+
+void generate_pss_nr_time(int ofdm_symbol_size,
+                          int first_carrier_offset,
+                          const int N_ID_2,
+                          int ssbFirstSCS,
+                          c16_t pssTime[ofdm_symbol_size]);
+void generate_pss_nr(const int N_ID_2, int16_t *pss);
 #endif /* PSS_NR_H */
 
 

@@ -102,7 +102,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   int Ptx = cfg->carrier_config.num_tx_ant.value;
   int Prx = cfg->carrier_config.num_rx_ant.value;
-  int max_ul_mimo_layers = 4;
+  int max_ul_mimo_layers = NR_MAX_NB_LAYERS;
 
   AssertFatal(Ptx > 0 && Ptx < 9,"Ptx %d is not supported\n", Ptx);
   AssertFatal(Prx > 0 && Prx < 9,"Prx %d is not supported\n", Prx);
@@ -119,8 +119,6 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   nr_init_fde(); // Init array for frequency equalization of transform precoding of PUSCH
 
-  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface);
-  AssertFatal(ret_loader == 0, "error loading LDPC library\n");
 
   gNB->max_nb_pdsch = MAX_MOBILES_PER_GNB;
   init_delay_table(fp->ofdm_symbol_size, MAX_DELAY_COMP, NR_MAX_OFDM_SYMBOL_SIZE, fp->delay_table);
@@ -141,27 +139,26 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   /// Transport init necessary for NR synchro
   init_nr_transport(gNB);
 
+  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface, 16 * gNB->max_nb_pusch);
+  AssertFatal(ret_loader == 0, "error loading LDPC library\n");
+
   init_DLSCH_struct(gNB);
 
   /* Do NOT allocate per-antenna rxdataF: the gNB gets a pointer to the
    * RU to copy/recover freq-domain memory from there */
-  common_vars->rxdataF = (c16_t ***)malloc16(common_vars->num_beams_period * sizeof(c16_t**));
-  for (int i = 0; i < common_vars->num_beams_period; i++)
-    common_vars->rxdataF[i] = (c16_t **)malloc16(Prx * sizeof(c16_t*));
+  common_vars->rxdataF = malloc16_clear(Prx * sizeof(*common_vars->rxdataF));
 
+  /* beam_id array is common for tx and rx so the max number of both is taken */
+  const unsigned int num_antenna_ports = max(Ptx, Prx);
   if (cfg->analog_beamforming_ve.analog_bf_vendor_ext.value) {
-    common_vars->beam_id = (int **)malloc16(common_vars->num_beams_period * sizeof(int*));
-    for (int i = 0; i < common_vars->num_beams_period; i++) {
-      common_vars->beam_id[i] = (int*)malloc16(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
-      memset(common_vars->beam_id[i], -1, fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
-    }
+    common_vars->beam_id = (uint16_t **)malloc16(fp->slots_per_frame * fp->symbols_per_slot * sizeof(*common_vars->beam_id));
+    for (int i = 0; i < fp->slots_per_frame * fp->symbols_per_slot; i++)
+      common_vars->beam_id[i] = (uint16_t *)malloc16_clear(num_antenna_ports * sizeof(**common_vars->beam_id));
   }
-  common_vars->txdataF = (c16_t ***)malloc16(common_vars->num_beams_period * sizeof(c16_t**));
-  for (int i = 0; i < common_vars->num_beams_period; i++) {
-    common_vars->txdataF[i] = (c16_t**)malloc16_clear(Ptx * sizeof(c16_t*));
-    for (int j = 0; j < Ptx; j++)
-      common_vars->txdataF[i][j] = (c16_t*)malloc16_clear(fp->samples_per_slot_wCP * sizeof(c16_t));
-  }
+
+  common_vars->txdataF = (c16_t **)malloc16_clear(Ptx * sizeof(*common_vars->txdataF));
+  for (int j = 0; j < Ptx; j++)
+    common_vars->txdataF[j] = (c16_t *)malloc16_clear(fp->samples_per_slot_wCP * sizeof(**common_vars->txdataF));
   common_vars->debugBuff = (int32_t*)malloc16_clear(fp->samples_per_frame*sizeof(int32_t)*100);	
   common_vars->debugBuff_sample_offset = 0; 
 
@@ -179,14 +176,14 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
     NR_gNB_PUSCH *pusch = &gNB->pusch_vars[ULSCH_id];
     pusch->ul_ch_estimates = (int32_t **)malloc16(n_buf * sizeof(int32_t *));
     pusch->ptrs_phase_per_slot = (int32_t **)malloc16(n_buf * sizeof(int32_t *));
-    pusch->rxdataF_comp = (c16_t **)malloc16(n_buf * sizeof(*pusch->rxdataF_comp));
     for (int i = 0; i < n_buf; i++) {
       pusch->ul_ch_estimates[i] = (int32_t *)malloc16_clear(sizeof(int32_t) * fp->ofdm_symbol_size * fp->symbols_per_slot);
       pusch->ptrs_phase_per_slot[i] = (int32_t *)malloc16_clear(sizeof(int32_t) * fp->symbols_per_slot); // symbols per slot
-      pusch->rxdataF_comp[i] = (c16_t *)malloc16_clear(sizeof(**pusch->rxdataF_comp) * nb_re_pusch2 * fp->symbols_per_slot);
     }
 
+    pusch->rxdataF_comp = (c16_t **)malloc16(max_ul_mimo_layers * sizeof(*pusch->rxdataF_comp));
     for (int i = 0; i < max_ul_mimo_layers; i++) {
+      pusch->rxdataF_comp[i] = (c16_t *)malloc16_clear(sizeof(**pusch->rxdataF_comp) * nb_re_pusch2 * fp->symbols_per_slot);
     }
     pusch->llr = (int16_t *)malloc16_clear((8 * ((3 * 8 * 6144) + 12))
                                            * sizeof(int16_t)); // [hna] 6144 is LTE and (8*((3*8*6144)+12)) is not clear
@@ -196,9 +193,8 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
 void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
 {
-  const int Ptx = gNB->gNB_config.carrier_config.num_tx_ant.value;
   const int Prx = gNB->gNB_config.carrier_config.num_rx_ant.value;
-  const int max_ul_mimo_layers = 4; // taken from phy_init_nr_gNB()
+  const int max_ul_mimo_layers = NR_MAX_NB_LAYERS;
   const int n_buf = Prx * max_ul_mimo_layers;
 
   PHY_MEASUREMENTS_gNB *meas = &gNB->measurements;
@@ -213,22 +209,21 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
   destroy_DLSCH_struct(gNB);
 
   NR_gNB_COMMON * common_vars = &gNB->common_vars;
-  for (int j = 0; j < common_vars->num_beams_period; j++) {
-    if (common_vars->beam_id)
+  if (common_vars->beam_id) {
+    for (int j = 0; j < gNB->frame_parms.slots_per_frame * gNB->frame_parms.symbols_per_slot; j++) {
       free_and_zero(common_vars->beam_id[j]);
-    for (int i = 0; i < Ptx; i++) {
-      free_and_zero(common_vars->txdataF[j][i]);
     }
-    free_and_zero(common_vars->txdataF[j]);
   }
+  free_and_zero(common_vars->beam_id);
+
+  for (int i = 0; i < gNB->frame_parms.nb_antennas_tx; i++) {
+    free_and_zero(common_vars->txdataF[i]);
+  }
+  free_and_zero(common_vars->txdataF);
 
   /* Do NOT free per-antenna txdataF/rxdataF: the gNB gets a pointer to the
    * RU's txdataF/rxdataF, and the RU will free that */
-  for (int j = 0; j < common_vars->num_beams_period; j++)
-    free_and_zero(common_vars->rxdataF[j]);
-  free_and_zero(common_vars->txdataF);
   free_and_zero(common_vars->rxdataF);
-  free_and_zero(common_vars->beam_id);
 
   free_and_zero(common_vars->debugBuff);
 
@@ -237,8 +232,10 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
     for (int i = 0; i < n_buf; i++) {
       free_and_zero(pusch_vars->ul_ch_estimates[i]);
       free_and_zero(pusch_vars->ptrs_phase_per_slot[i]);
-      free_and_zero(pusch_vars->rxdataF_comp[i]);
     }
+    for (int i = 0; i < max_ul_mimo_layers; i++)
+      free_and_zero(pusch_vars->rxdataF_comp[i]);
+
     free_and_zero(pusch_vars->ul_ch_estimates);
     free_and_zero(pusch_vars->ptrs_phase_per_slot);
     free_and_zero(pusch_vars->ul_valid_re_per_slot);
@@ -249,7 +246,6 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
   free(gNB->pusch_vars);
 
   free_nrLDPC_coding_interface(&gNB->nrLDPC_coding_interface);
-
 }
 
 void nr_phy_config_request_sim(PHY_VARS_gNB *gNB,
@@ -313,7 +309,7 @@ void nr_phy_config_request_sim(PHY_VARS_gNB *gNB,
 
   fp->ofdm_offset_divisor = UINT_MAX;
   init_symbol_rotation(fp);
-  init_timeshift_rotation(fp);
+  init_timeshift_rotation(fp->ofdm_symbol_size, fp->nb_prefix_samples, fp->ofdm_offset_divisor, fp->timeshift_symbol_rotation);
 
   gNB->configured = 1;
 }
@@ -365,7 +361,7 @@ void nr_phy_config_request(NR_PHY_Config_t *phy_config)
 
   fp->ofdm_offset_divisor = RC.gNB[Mod_id]->ofdm_offset_divisor;
   init_symbol_rotation(fp);
-  init_timeshift_rotation(fp);
+  init_timeshift_rotation(fp->ofdm_symbol_size, fp->nb_prefix_samples, fp->ofdm_offset_divisor, fp->timeshift_symbol_rotation);
 }
 
 static void init_DLSCH_struct(PHY_VARS_gNB *gNB)
@@ -424,11 +420,15 @@ void init_nr_transport(PHY_VARS_gNB *gNB)
   gNB->max_nb_pusch = buffer_ul_slots ? MAX_MOBILES_PER_GNB * buffer_ul_slots : 1;
 
   int max_nb_pucch = buffer_ul_slots ? MAX_MOBILES_PER_GNB * buffer_ul_slots : 1;
-  gNB->pucch_queue = spsc_q_alloc(max_nb_pucch, sizeof(NR_gNB_PUCCH_job_t));
-  gNB->pusch_queue = spsc_q_alloc(gNB->max_nb_pusch, sizeof(NR_gNB_PUSCH_job_t));
+  bool ret;
+  ret = spsc_q_alloc(&gNB->pucch_queue, max_nb_pucch, sizeof(NR_gNB_PUCCH_job_t));
+  DevAssert(ret);
+  ret = spsc_q_alloc(&gNB->pusch_queue, gNB->max_nb_pusch, sizeof(NR_gNB_PUSCH_job_t));
+  DevAssert(ret);
 
   int max_nb_srs = buffer_ul_slots ? buffer_ul_slots << 1 : 1; // assuming at most 2 SRS per slot
-  gNB->srs_queue = spsc_q_alloc(max_nb_srs, sizeof(NR_gNB_SRS_job_t));
+  ret = spsc_q_alloc(&gNB->srs_queue, max_nb_srs, sizeof(NR_gNB_SRS_job_t));
+  DevAssert(ret);
 
   gNB->ulsch = (NR_gNB_ULSCH_t *)malloc16(gNB->max_nb_pusch * sizeof(NR_gNB_ULSCH_t));
   for (int i = 0; i < gNB->max_nb_pusch; i++) {

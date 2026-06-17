@@ -28,7 +28,7 @@
 
   <testCase>
     <class>Create_Workspace</class>
-    <desc>Create new Workspace for server 0</desc>
+    <desc>Create new Workspace</desc>
     <node>cacofonix</node>
   </testCase>
 

@@ -46,12 +46,9 @@ void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t 
   if (gNB->common_vars.beam_id) {
     int fapi_beam_idx = pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
     int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
-    pucch.beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                           fapi_beam_idx,
-                                           &gNB->common_vars,
-                                           slot,
-                                           gNB->frame_parms.symbols_per_slot,
-                                           bitmap);
+    const nfapi_nr_spatial_stream_index_t *p = &pucch_pdu->param_v4;
+    const uint16_t ant_port = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
+    beam_index_allocation(fapi_beam_idx, ant_port, 1, NR_SYMBOLS_PER_SLOT, slot, bitmap, gNB->frame_parms.nb_antennas_rx, gNB->common_vars.beam_id);
   }
   bool found = spsc_q_put(&gNB->pucch_queue, &pucch, sizeof(pucch));
   if (!found)
@@ -206,8 +203,10 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
   x_re[1] = table_5_2_2_2_2_Re[u[1]];
   x_im[1] = table_5_2_2_2_2_Im[u[1]];
 
-  c64_t xr[frame_parms->nb_antennas_rx][pucch_pdu->nr_of_symbols][12] __attribute__((aligned(32)));
-  memset(xr, 0, frame_parms->nb_antennas_rx * pucch_pdu->nr_of_symbols * 12 * sizeof(c64_t));
+  const uint8_t num_sp_streams = pucch_pdu->param_v4.numSpatialStreamIndices;
+
+  c64_t xr[num_sp_streams][pucch_pdu->nr_of_symbols][12] __attribute__((aligned(32)));
+  memset(xr, 0, sizeof(xr));
 
   int64_t xrtmag = 0, xrtmag_next = 0;
   uint8_t maxpos = 0;
@@ -223,7 +222,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
     if (re_offset[l] >= frame_parms->ofdm_symbol_size)
       re_offset[l] -= frame_parms->ofdm_symbol_size;
 
-    for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
+    for (int aa = 0; aa < num_sp_streams; aa++) {
       c16_t rp[nb_re_pucch];
       memset(rp, 0, sizeof(rp));
       c16_t *tmp_rp = &rxdataF[aa][soffset + l2 * frame_parms->ofdm_symbol_size];
@@ -248,7 +247,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
         signal_energy_ant0 += energ;
     }
   }
-  signal_energy /= (pucch_pdu->nr_of_symbols * frame_parms->nb_antennas_rx);
+  signal_energy /= (pucch_pdu->nr_of_symbols * num_sp_streams);
   signal_energy_ant0 /= pucch_pdu->nr_of_symbols;
   int pucch_power_dBtimes10 = 10 * dB_fixed(signal_energy);
 
@@ -256,8 +255,8 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
   int seq_index = 0;
 
   for (int i = 0; i < nr_sequences; i++) {
-    c64_t corr[frame_parms->nb_antennas_rx][2];
-    for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
+    c64_t corr[num_sp_streams][2];
+    for (int aa = 0; aa < num_sp_streams; aa++) {
       for (int l = 0; l < pucch_pdu->nr_of_symbols; l++) {
         seq_index =
             (pucch_pdu->initial_cyclic_shift + mcs[i] + gNB->pucch0_lut.lut[cs_ind][slot][l + pucch_pdu->start_symbol_index]) % 12;
@@ -291,10 +290,10 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
     int64_t temp = 0;
     if (pucch_pdu->freq_hop_flag == 0) {
       if (pucch_pdu->nr_of_symbols == 1) { // non-coherent correlation
-        for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++)
+        for (int aa = 0; aa < num_sp_streams; aa++)
           temp += squaredMod(corr[aa][0]);
       } else {
-        for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
+        for (int aa = 0; aa < num_sp_streams; aa++) {
           c64_t corr2;
           csum(corr2, corr[aa][0], corr[aa][1]);
           // coherent combining of 2 symbols and then complex modulus for
@@ -304,7 +303,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
       }
     } else {
       // full non-coherent combining of 2 symbols for frequency-hopping case
-      for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++)
+      for (int aa = 0; aa < num_sp_streams; aa++)
         temp += squaredMod(corr[aa][0]) + squaredMod(corr[aa][1]);
     }
 
@@ -315,7 +314,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
       maxpos = i;
       uci_stats->current_pucch0_stat0 = 0;
       int64_t temp2 = 0, temp3 = 0;
-      for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
+      for (int aa = 0; aa < num_sp_streams; aa++) {
         temp2 += squaredMod(corr[aa][0]);
         if (pucch_pdu->nr_of_symbols == 2)
           temp3 += squaredMod(corr[aa][1]);
@@ -483,7 +482,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
    *
    */
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  uint8_t n_rx = frame_parms->nb_antennas_rx;
+  const uint8_t n_rx = pucch_pdu->param_v4.numSpatialStreamIndices;
 
   const int soffset = (slot & 3) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
   // lprime is the index of the OFDM symbol in the slot that corresponds to the first OFDM symbol of the PUCCH transmission in the
@@ -1152,7 +1151,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   }
   AssertFatal(pucch_pdu->prb_size * nb_symbols > 1, "number of PRB*SYMB (%d,%d)< 2", pucch_pdu->prb_size, nb_symbols);
 
-  int Prx = gNB->gNB_config.carrier_config.num_rx_ant.value;
+  int Prx = pucch_pdu->param_v4.numSpatialStreamIndices;
   //  AssertFatal((pucch_pdu->prb_size&1) == 0,"prb_size %d is not a multiple of2\n",pucch_pdu->prb_size);
   // use 2 for Nb antennas in case of single antenna to allow the following allocations
   const int nb_re_pucch = 12 * pucch_pdu->prb_size;
@@ -1583,69 +1582,4 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   if (pucch_pdu->bit_len_csi_part2 > 0) {
     uci_pdu->pduBitmap |= 8;
   }
-}
-
-void nr_dump_uci_stats(FILE *fd, PHY_VARS_gNB *gNB, int frame)
-{
-  int strpos = 0;
-  char output[16384];
-
-  for (int i = 0; i < MAX_MOBILES_PER_GNB; i++) {
-    NR_gNB_PHY_STATS_t *stats = &gNB->phy_stats[i];
-    if (!stats->active)
-      return;
-    NR_gNB_UCI_STATS_t *uci_stats = &stats->uci_stats;
-    if (uci_stats->pucch0_sr_trials > 0)
-      strpos += sprintf(output + strpos,
-                        "UCI %d RNTI %x: pucch0_sr_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_sr_thres %d dB, current "
-                        "pucch1_stat0 %d dB, current pucch1_stat1 %d dB, positive SR count %d\n",
-                        i,
-                        stats->rnti,
-                        uci_stats->pucch0_sr_trials,
-                        uci_stats->pucch0_n00,
-                        uci_stats->pucch0_n01,
-                        uci_stats->pucch0_sr_thres,
-                        dB_fixed(uci_stats->current_pucch0_sr_stat0),
-                        dB_fixed(uci_stats->current_pucch0_sr_stat1),
-                        uci_stats->pucch0_positive_SR);
-    if (uci_stats->pucch01_trials > 0)
-      strpos += sprintf(output + strpos,
-                        "UCI %d RNTI %x: pucch01_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_thres %d dB, current "
-                        "pucch0_stat0 %d dB, current pucch1_stat1 %d dB, pucch01_DTX %d\n",
-                        i,
-                        stats->rnti,
-                        uci_stats->pucch01_trials,
-                        uci_stats->pucch0_n01,
-                        uci_stats->pucch0_n01,
-                        uci_stats->pucch0_thres,
-                        dB_fixed(uci_stats->current_pucch0_stat0),
-                        dB_fixed(uci_stats->current_pucch0_stat1),
-                        uci_stats->pucch01_DTX);
-
-    if (uci_stats->pucch02_trials > 0)
-      strpos += sprintf(output + strpos,
-                        "UCI %d RNTI %x: pucch01_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_thres %d dB, current "
-                        "pucch0_stat0 %d dB, current pucch0_stat1 %d dB, pucch01_DTX %d\n",
-                        i,
-                        stats->rnti,
-                        uci_stats->pucch02_trials,
-                        uci_stats->pucch0_n00,
-                        uci_stats->pucch0_n01,
-                        uci_stats->pucch0_thres,
-                        dB_fixed(uci_stats->current_pucch0_stat0),
-                        dB_fixed(uci_stats->current_pucch0_stat1),
-                        uci_stats->pucch02_DTX);
-
-    if (uci_stats->pucch2_trials > 0)
-      strpos += sprintf(output + strpos,
-                        "UCI %d RNTI %x: pucch2_trials %d, pucch2_DTX %d\n",
-                        i,
-                        stats->rnti,
-                        uci_stats->pucch2_trials,
-                        uci_stats->pucch2_DTX);
-  }
-  if (fd)
-    fprintf(fd, "%s", output);
-  else
-    printf("%s", output);
 }

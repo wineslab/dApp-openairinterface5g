@@ -21,6 +21,7 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include <executables/softmodem-common.h>
 #include <executables/thread-common.h>
+#include "executables/nr-softmodem.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -32,12 +33,6 @@ int sf_ahead = 4;
 int emulate_rf = 0;
 
 RAN_CONTEXT_t RC;
-
-extern void kill_NR_RU_proc(int inst);
-extern void set_function_spec_param(RU_t *ru);
-extern void start_NR_RU();
-extern void init_NR_RU(configmodule_interface_t *cfg, char *);
-
 int64_t uplink_frequency_offset[MAX_NUM_CCs][4];
 
 void nfapi_setmode(nfapi_mode_t nfapi_mode)
@@ -112,11 +107,14 @@ struct timespec timespec_sub(struct timespec, struct timespec)
   return t;
 };
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation)
+void perform_symbol_rotation(const int nsymb, const int numerology_index, double f0, c16_t *symbol_rotation)
 {
   return;
 }
-void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
+void init_timeshift_rotation(const int ofdm_symbol_size,
+                             const int nb_prefix_samples,
+                             const uint ofdm_offset_divisor,
+                             c16_t *timeshift_symbol_rotation)
 {
   return;
 };
@@ -129,6 +127,10 @@ int beam_index_allocation(bool das,
 {
   return 0;
 }
+uint16_t get_first_ant_idx(bool das, uint16_t num_ports_beams, uint16_t beam_id, uint16_t fapi_start_port)
+{
+  return 0;
+};
 void nr_fill_du(uint16_t N_ZC, const uint16_t *prach_root_sequence_map, uint16_t nr_du[NR_PRACH_SEQ_LEN_L - 1])
 {
   return;

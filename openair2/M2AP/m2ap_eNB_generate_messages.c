@@ -449,7 +449,7 @@ int m2ap_eNB_set_cause (M2AP_Cause_t * cause_p,
 //  //@TODO: consider to update this value
 //  ie->value.choice.UE_ContextInformation.mME_UE_S1AP_ID = m2ap_handover_req->mme_ue_s1ap_id;
 //
-//  KENB_STAR_TO_BIT_STRING(m2ap_handover_req->kenb,&ie->value.choice.UE_ContextInformation.aS_SecurityInformation.key_eNodeB_star);
+//  AS_KEY_STAR_TO_BIT_STRING(m2ap_handover_req->kenb,&ie->value.choice.UE_ContextInformation.aS_SecurityInformation.key_eNodeB_star);
 //
 //  if (m2ap_handover_req->kenb_ncc >=0) { // Check this condition
 //    ie->value.choice.UE_ContextInformation.aS_SecurityInformation.nextHopChainingCount = m2ap_handover_req->kenb_ncc;

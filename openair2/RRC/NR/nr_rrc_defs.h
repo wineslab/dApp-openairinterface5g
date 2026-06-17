@@ -70,9 +70,7 @@ typedef struct nr_e_rab_param_s {
 
 typedef enum pdu_session_satus_e {
   PDU_SESSION_STATUS_NEW,
-  PDU_SESSION_STATUS_DONE,
   PDU_SESSION_STATUS_ESTABLISHED,
-  PDU_SESSION_STATUS_REESTABLISHED, // after HO
   PDU_SESSION_STATUS_TOMODIFY, // ENDC NSA
   PDU_SESSION_STATUS_FAILED,
   PDU_SESSION_STATUS_TORELEASE, // to release DRB between eNB and UE
@@ -153,6 +151,8 @@ typedef struct nr_redcap_ue_cap {
 typedef struct {
   int drb_id;
   pdusession_level_qos_parameter_t qos;
+  /** Indicate if the QoS flow is pending for NGAP modify response. */
+  bool ngap_pending;
 } nr_rrc_qos_t;
 
 typedef struct {

@@ -4,14 +4,9 @@
 
 #ifndef OPENAIRINTERFACE_NR_NFAPI_P7_H
 #define OPENAIRINTERFACE_NR_NFAPI_P7_H
-#include "nfapi_interface.h"
-#include "nfapi_nr_interface_scf.h"
+#include "nfapi_common_interface.h"
 
 void *nfapi_p7_allocate(size_t size, nfapi_p7_codec_config_t *config);
-
-uint8_t pack_ue_release_request(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p7_codec_config_t *config);
-
-uint8_t pack_ue_release_response(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p7_codec_config_t *config);
 
 uint8_t pack_nr_dl_node_sync(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p7_codec_config_t *config);
 

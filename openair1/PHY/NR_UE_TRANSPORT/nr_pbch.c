@@ -23,16 +23,14 @@
 #define PBCH_MAX_RE (PBCH_MAX_RE_PER_SYMBOL*4)
 #define print_shorts(s,x) printf("%s : %d,%d,%d,%d,%d,%d,%d,%d\n",s,((int16_t*)x)[0],((int16_t*)x)[1],((int16_t*)x)[2],((int16_t*)x)[3],((int16_t*)x)[4],((int16_t*)x)[5],((int16_t*)x)[6],((int16_t*)x)[7])
 
-static uint16_t nr_pbch_extract(uint32_t rxdataF_sz,
-                                const c16_t rxdataF[][rxdataF_sz],
-                                const int estimateSz,
-                                struct complex16 dl_ch_estimates[][estimateSz],
+static uint16_t nr_pbch_extract(const NR_DL_FRAME_PARMS *frame_parms,
+                                const c16_t rxdataF[][frame_parms->ofdm_symbol_size],
+                                const c16_t dl_ch_estimates[][frame_parms->ofdm_symbol_size],
                                 struct complex16 rxdataF_ext[][PBCH_MAX_RE_PER_SYMBOL],
                                 struct complex16 dl_ch_estimates_ext[][PBCH_MAX_RE_PER_SYMBOL],
                                 uint32_t symbol,
                                 uint32_t s_offset,
                                 int ssb_start_subcarrier,
-                                const NR_DL_FRAME_PARMS *frame_parms,
                                 int nid)
 {
   uint16_t rb;
@@ -45,7 +43,7 @@ static uint16_t nr_pbch_extract(uint32_t rxdataF_sz,
   for (aarx=0; aarx<frame_parms->nb_antennas_rx; aarx++) {
     unsigned int rx_offset = frame_parms->first_carrier_offset + ssb_start_subcarrier;
     rx_offset = (rx_offset)%(frame_parms->ofdm_symbol_size);
-    const struct complex16 *rxF = &rxdataF[aarx][(symbol + s_offset) * frame_parms->ofdm_symbol_size];
+    const struct complex16 *rxF = rxdataF[aarx];
     struct complex16 *rxF_ext = rxdataF_ext[aarx];
 #ifdef DEBUG_PBCH
     printf("extract_rbs (nushift %d): rx_offset=%d, symbol %u\n",
@@ -117,7 +115,7 @@ static uint16_t nr_pbch_extract(uint32_t rxdataF_sz,
       }
     }
 
-    struct complex16 *dl_ch0 = &dl_ch_estimates[aarx][((symbol+s_offset)*(frame_parms->ofdm_symbol_size))];
+    const struct complex16 *dl_ch0 = dl_ch_estimates[aarx];
 
     //printf("dl_ch0 addr %p\n",dl_ch0);
     struct complex16 *dl_ch0_ext = dl_ch_estimates_ext[aarx];
@@ -178,8 +176,8 @@ static uint16_t nr_pbch_extract(uint32_t rxdataF_sz,
   return(0);
 }
 
-void nr_pbch_channel_compensation(struct complex16 rxdataF_ext[][PBCH_MAX_RE_PER_SYMBOL],
-                                  struct complex16 dl_ch_estimates_ext[][PBCH_MAX_RE_PER_SYMBOL],
+void nr_pbch_channel_compensation(const struct complex16 rxdataF_ext[][PBCH_MAX_RE_PER_SYMBOL],
+                                  const struct complex16 dl_ch_estimates_ext[][PBCH_MAX_RE_PER_SYMBOL],
                                   int nb_re,
                                   struct complex16 rxdataF_comp[][PBCH_MAX_RE_PER_SYMBOL],
                                   const NR_DL_FRAME_PARMS *frame_parms,
@@ -257,7 +255,7 @@ void nr_pbch_unscrambling(int16_t *demod_pbch_e,
   }
 }
 
-void nr_pbch_quantize(int16_t *pbch_llr8, int16_t *pbch_llr, uint16_t len)
+void nr_pbch_quantize(int16_t *pbch_llr8, const int16_t *pbch_llr, const uint16_t len)
 {
   for (int i=0; i<len; i++) {
     if (pbch_llr[i]>31)
@@ -277,124 +275,127 @@ unsigned char sign(int8_t x) {
 const uint8_t pbch_deinterleaving_pattern[32] = {28, 0, 31, 30, 7,  29, 25, 27, 5,  8,  24, 9,  10, 11, 12, 13,
                                                  1,  4, 3,  14, 15, 16, 17, 2,  26, 18, 19, 20, 21, 22, 6,  23};
 
-int nr_rx_pbch(PHY_VARS_NR_UE *ue,
-               const UE_nr_rxtx_proc_t *proc,
-               bool is_synchronized,
-               int estimateSz,
-               struct complex16 dl_ch_estimates[][estimateSz],
-               const NR_DL_FRAME_PARMS *frame_parms,
-               uint8_t i_ssb,
-               int ssb_start_subcarrier,
-               int Nid_cell,
-               fapiPbch_t *result,
-               int *half_frame_bit,
-               int *ssb_index,
-               int *ret_symbol_offset,
-               int rxdataFSize,
-               const struct complex16 rxdataF[][rxdataFSize])
+void nr_generate_pbch_llr(const PHY_VARS_NR_UE *ue,
+                          const UE_nr_rxtx_proc_t *proc,
+                          const NR_DL_FRAME_PARMS *frame_parms,
+                          const int symbolSSB,
+                          const int i_ssb,
+                          const int nid,
+                          const int ssb_start_subcarrier,
+                          const c16_t rxdataF[frame_parms->nb_antennas_rx][frame_parms->ofdm_symbol_size],
+                          const c16_t dl_ch_estimates[frame_parms->nb_antennas_rx][frame_parms->ofdm_symbol_size],
+                          int16_t pbch_e_rx[NR_POLAR_PBCH_E])
 {
-  TracyCZone(ctx, true);
-  int symbol;
-  uint8_t Lmax=frame_parms->Lmax;
-  int M = NR_POLAR_PBCH_E;
-  int nushift = (Lmax == 4) ? i_ssb & 3 : i_ssb & 7;
-  int16_t pbch_e_rx[960]= {0}; //Fixme: previous version erase only NR_POLAR_PBCH_E bytes
-  int16_t pbch_unClipped[960]= {0};
-  int pbch_e_rx_idx=0;
-  int symbol_offset=1;
+  const int symbol_offset = nr_get_ssb_start_symbol(frame_parms, i_ssb) % (NR_SYMBOLS_PER_SLOT);
+  const int nb_re = (symbolSSB == 2) ? 72 : 180;
 
-  if (is_synchronized)
-    symbol_offset=nr_get_ssb_start_symbol(frame_parms, i_ssb)%(frame_parms->symbols_per_slot);
-  else
-    symbol_offset=0;
+  __attribute__((aligned(32))) struct complex16 rxdataF_ext[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
+  __attribute__((aligned(32))) struct complex16 dl_ch_estimates_ext[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
+  memset(dl_ch_estimates_ext, 0, sizeof dl_ch_estimates_ext);
 
+  nr_pbch_extract(frame_parms,
+                  rxdataF,
+                  dl_ch_estimates,
+                  rxdataF_ext,
+                  dl_ch_estimates_ext,
+                  symbolSSB,
+                  symbol_offset,
+                  ssb_start_subcarrier,
+                  nid);
 #ifdef DEBUG_PBCH
-  //printf("address dataf %p",nr_ue_common_vars->rxdataF);
-  write_output("rxdataF0_pbch.m","rxF0pbch",
-               &rxdataF[0][(symbol_offset+1)*frame_parms->ofdm_symbol_size],frame_parms->ofdm_symbol_size*3,1,1);
+  LOG_I(PHY, "[PHY] PBCH Symbol %d ofdm size %d\n", symbolSSB, frame_parms->ofdm_symbol_size);
+  LOG_I(PHY, "[PHY] PBCH starting channel_level\n");
 #endif
-  // symbol refers to symbol within SSB. symbol_offset is the offset of the SSB wrt start of slot
+
   double log2_maxh = 0;
-
-  for (symbol=1; symbol<4; symbol++) {
-    const uint16_t nb_re=symbol == 2 ? 72 : 180;
-    __attribute__ ((aligned(32))) struct complex16 rxdataF_ext[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
-    __attribute__ ((aligned(32))) struct complex16 dl_ch_estimates_ext[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
-    memset(dl_ch_estimates_ext,0, sizeof  dl_ch_estimates_ext);
-    nr_pbch_extract(frame_parms->samples_per_slot_wCP,
-                    rxdataF,
-                    estimateSz,
-                    dl_ch_estimates,
-                    rxdataF_ext,
-                    dl_ch_estimates_ext,
-                    symbol,
-                    symbol_offset,
-                    ssb_start_subcarrier,
-                    frame_parms,
-                    Nid_cell);
-#ifdef DEBUG_PBCH
-    LOG_I(PHY,"[PHY] PBCH Symbol %d ofdm size %d\n",symbol, frame_parms->ofdm_symbol_size);
-    LOG_I(PHY,"[PHY] PBCH starting channel_level\n");
-#endif
-
-    int max_h = 0;
-    if (symbol == 1) {
-      int avg[frame_parms->nb_antennas_rx];
-      nr_channel_level(0, PBCH_MAX_RE_PER_SYMBOL, dl_ch_estimates_ext, frame_parms->nb_antennas_rx, 1, avg, nb_re);
-      max_h = avg[0];
-      for (int i = 1; i < frame_parms->nb_antennas_rx; i++)
-        max_h = cmax(avg[i], max_h);
-      log2_maxh = 3 + (log2_approx(max_h) / 2);
-    }
-
-#ifdef DEBUG_PBCH
-    LOG_I(PHY,"[PHY] PBCH log2_maxh = %f (%d)\n", log2_maxh, max_h);
-#endif
-    __attribute__ ((aligned(32))) struct complex16 rxdataF_comp[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
-    nr_pbch_channel_compensation(rxdataF_ext,
-                                 dl_ch_estimates_ext,
-                                 nb_re,
-                                 rxdataF_comp,
-                                 frame_parms,
-                                 log2_maxh); // log2_maxh+I0_shift
-
-    /*if (frame_parms->nb_antennas_rx > 1)
-      pbch_detection_mrc(frame_parms,
-                         rxdataF_comp,
-                         symbol);*/
-
-    int nb=symbol==2 ? 144 : 360;
-    nr_pbch_quantize(pbch_e_rx+pbch_e_rx_idx,
-		     (short *)rxdataF_comp[0],
-		     nb);
-    memcpy(pbch_unClipped+pbch_e_rx_idx, rxdataF_comp[0], nb*sizeof(int16_t));
-    pbch_e_rx_idx+=nb;
+  uint32_t max_h = 0;
+  if (symbolSSB == 1) {
+    int avg[frame_parms->nb_antennas_rx];
+    nr_channel_level(0, PBCH_MAX_RE_PER_SYMBOL, dl_ch_estimates_ext, frame_parms->nb_antennas_rx, 1, avg, nb_re);
+    max_h = avg[0];
+    for (int i = 1; i < frame_parms->nb_antennas_rx; i++)
+      max_h = cmax(avg[i], max_h);
+    log2_maxh = 3 + (log2_approx(max_h) / 2);
   }
 
-  // legacy code use int16, but it is complex16
+#ifdef DEBUG_PBCH
+  LOG_I(PHY, "[PHY] PBCH log2_maxh = %f (%d)\n", log2_maxh, max_h);
+#endif
+  __attribute__((aligned(32))) struct complex16 rxdataF_comp[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
+  nr_pbch_channel_compensation(rxdataF_ext, dl_ch_estimates_ext, nb_re, rxdataF_comp, frame_parms,
+                               log2_maxh); // log2_maxh+I0_shift
+
+  /*if (frame_parms->nb_antennas_rx > 1)
+    pbch_detection_mrc(frame_parms,
+                        rxdataF_comp,
+                        symbol);*/
+
+  /*
+      if (mimo_mode == ALAMOUTI) {
+        nr_pbch_alamouti(frame_parms,rxdataF_comp,symbol);
+      } else if (mimo_mode != SISO) {
+        LOG_I(PHY,"[PBCH][RX] Unsupported MIMO mode\n");
+        return(-1);
+      }
+  */
+  int pbch_e_rx_idx = 0;
+  if (symbolSSB == 1) {
+    pbch_e_rx_idx = 0;
+  } else if (symbolSSB == 2) {
+    pbch_e_rx_idx = 360;
+  } else if (symbolSSB == 3) {
+    pbch_e_rx_idx = 360 + 144;
+  }
+
   if (ue) {
     metadata meta = {.slot = proc->nr_slot_rx, .frame = proc->frame_rx};
-    UEscopeCopyWithMetadata(ue, pbchRxdataF_comp, pbch_unClipped, sizeof(struct complex16), frame_parms->nb_antennas_rx, pbch_e_rx_idx / 2, 0, &meta);
-    UEscopeCopyWithMetadata(ue, pbchLlr, pbch_e_rx, sizeof(int16_t), frame_parms->nb_antennas_rx, pbch_e_rx_idx, 0, &meta);
+    UEscopeCopyWithMetadata(ue, pbchRxdataF_comp, rxdataF_comp[0], sizeof(c16_t), 1, nb_re, pbch_e_rx_idx / 2, &meta);
   }
+
+  const int nb = (symbolSSB == 2) ? 144 : 360;
+  nr_pbch_quantize(pbch_e_rx + pbch_e_rx_idx, (short *)rxdataF_comp[0], nb);
 #ifdef DEBUG_PBCH
+  char fname[50];
+  sprintf(fname, "rxdataF_comp_%d.m", symbolSSB);
+  write_output(fname, "rxFcomp", rxdataF[0], 240, 1, 1);
+
   for (int cnt = 0; cnt < 864  ; cnt++)
     printf("pbch rx llr %d\n", *(pbch_e_rx + cnt));
+
 #endif
+}
+
+int nr_pbch_decode(PHY_VARS_NR_UE *ue,
+                   const NR_DL_FRAME_PARMS *frame_parms,
+                   const UE_nr_rxtx_proc_t *proc,
+                   const int i_ssb,
+                   const int Nid_cell,
+                   int16_t pbch_e_rx[NR_POLAR_PBCH_E],
+                   int *half_frame_bit,
+                   int *ssb_index,
+                   int *ret_symbol_offset,
+                   fapiPbch_t *result)
+{
+  TracyCZone(ctx, true);
+  if (ue) {
+    UEscopeCopy(ue, pbchLlr, pbch_e_rx, sizeof(int16_t), frame_parms->nb_antennas_rx, NR_POLAR_PBCH_E, 0);
+  }
   // un-scrambling
-  uint32_t unscrambling_mask = (Lmax==64)?0x100006D:0x1000041;
-  uint32_t pbch_a_interleaved=0;
-  uint32_t pbch_a_prime=0;
-  nr_pbch_unscrambling(pbch_e_rx, Nid_cell, nushift, M, NR_POLAR_PBCH_E,
-		       0, 0,  pbch_a_prime, &pbch_a_interleaved);
+  const uint8_t Lmax = frame_parms->Lmax;
+  const int unscrambling_mask = (Lmax == 64) ? 0x100006D : 0x1000041;
+  unsigned int pbch_a_interleaved = 0;
+  int pbch_a_prime = 0;
+  int M = NR_POLAR_PBCH_E;
+  int nushift = (Lmax == 4) ? i_ssb & 3 : i_ssb & 7;
+  nr_pbch_unscrambling(pbch_e_rx, Nid_cell, nushift, M, NR_POLAR_PBCH_E, 0, 0, pbch_a_prime, &pbch_a_interleaved);
   //polar decoding de-rate matching
-  uint64_t tmp=0;
-  const uint32_t decoderState = polar_decoder_int16(pbch_e_rx,
-                                                    (uint64_t *)&tmp,
-                                                    0,
-                                                    NR_POLAR_PBCH_MESSAGE_TYPE,
-                                                    NR_POLAR_PBCH_PAYLOAD_BITS,
-                                                    NR_POLAR_PBCH_AGGREGATION_LEVEL);
+  uint64_t tmp = 0;
+  const int decoderState = polar_decoder_int16(pbch_e_rx,
+                                               (uint64_t *)&tmp,
+                                               0,
+                                               NR_POLAR_PBCH_MESSAGE_TYPE,
+                                               NR_POLAR_PBCH_PAYLOAD_BITS,
+                                               NR_POLAR_PBCH_AGGREGATION_LEVEL);
   pbch_a_prime = tmp;
 
   nr_downlink_indication_t dl_indication;
@@ -404,7 +405,7 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
   if (decoderState) {
     if (ue) { // decoding failed in synced state
       nr_fill_dl_indication(&dl_indication, NULL, &rx_ind, proc, ue, NULL);
-      nr_fill_rx_indication(&rx_ind, FAPI_NR_RX_PDU_TYPE_SSB, ue, NULL, NULL, number_pdus, proc, NULL, NULL);
+      nr_fill_rx_indication(&rx_ind, FAPI_NR_RX_PDU_TYPE_SSB, ue, 0, 0, NULL, number_pdus, proc, NULL, NULL);
       if (ue->if_inst && ue->if_inst->dl_indication)
         ue->if_inst->dl_indication(&dl_indication);
     }
@@ -453,7 +454,7 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
     *ret_symbol_offset += (frame_parms->slots_per_frame >> 1) * frame_parms->symbols_per_slot;
 
 #ifdef DEBUG_PBCH
-  printf("xtra_byte %x payload %x\n", result->xtra_byte, payload);
+  printf("xtra_byte %x payload %lx\n", result->xtra_byte, payload);
 
   for (int i=0; i<(NR_POLAR_PBCH_PAYLOAD_BITS>>3); i++) {
     //     printf("unscrambling pbch_a[%d] = %x \n", i,pbch_a[i]);
@@ -464,7 +465,7 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
 
   if (ue) {
     nr_fill_dl_indication(&dl_indication, NULL, &rx_ind, proc, ue, NULL);
-    nr_fill_rx_indication(&rx_ind, FAPI_NR_RX_PDU_TYPE_SSB, ue, NULL, NULL, number_pdus, proc, (void *)result, NULL);
+    nr_fill_rx_indication(&rx_ind, FAPI_NR_RX_PDU_TYPE_SSB, ue, 0, 0, NULL, number_pdus, proc, (void *)result, NULL);
 
     if (ue->if_inst && ue->if_inst->dl_indication)
       ue->if_inst->dl_indication(&dl_indication);
@@ -475,14 +476,10 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
 }
 
 double nr_ue_pbch_freq_offset(const NR_DL_FRAME_PARMS *frame_parms,
-                              int estimateSz,
-                              const c16_t dl_ch_estimates[][estimateSz])
+                              const c16_t dl_ch_est_symb1[NR_PBCH_NUM_RB * NR_NB_SC_PER_RB],
+                              const c16_t dl_ch_est_symb3[NR_PBCH_NUM_RB * NR_NB_SC_PER_RB])
 {
-  const int i_ssb = frame_parms->ssb_index;
-  const int symbol_offset = nr_get_ssb_start_symbol(frame_parms, i_ssb) % frame_parms->symbols_per_slot;
-  const c16_t *dl_ch_est_symb1 = &dl_ch_estimates[0][(symbol_offset + 1) * frame_parms->ofdm_symbol_size];
-  const c16_t *dl_ch_est_symb3 = &dl_ch_estimates[0][(symbol_offset + 3) * frame_parms->ofdm_symbol_size];
-  const int nb_re = 240;
+  const int nb_re = NR_PBCH_NUM_RB * NR_NB_SC_PER_RB;
   const c32_t dot_prod_res = dot_product(dl_ch_est_symb1, dl_ch_est_symb3, nb_re, 8);
   const double res_phase = atan2(dot_prod_res.i, dot_prod_res.r);
   const int samples_per_symbol = frame_parms->ofdm_symbol_size + frame_parms->nb_prefix_samples;

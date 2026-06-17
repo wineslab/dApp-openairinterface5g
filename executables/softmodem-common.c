@@ -155,14 +155,14 @@ void softmodem_verify_mode(const softmodem_params_t *p)
   AssertFatal(num_modes == 1, "--phy-test, --do-ra, and --nsa are mutually exclusive\n");
 }
 
-void softmodem_printresources(int sig, telnet_printfunc_t pf) {
+static void softmodem_printresources(telnet_printfunc_t pf)
+{
   struct rusage usage;
   struct timespec stop;
 
   clock_gettime(CLOCK_BOOTTIME, &stop);
 
   uint64_t elapse = (stop.tv_sec - start.tv_sec) ;   // in seconds
-
 
   int st = getrusage(RUSAGE_SELF,&usage);
   if (!st) {
@@ -195,7 +195,7 @@ void signal_handler(int sig) {
     exit(-1);
   } else {
     if(sig==SIGINT ||sig==SOFTMODEM_RTSIGNAL)
-      softmodem_printresources(sig,(telnet_printfunc_t)printf);
+      softmodem_printresources((telnet_printfunc_t)printf);
     if (sig != SOFTMODEM_RTSIGNAL) {
       printf("Linux signal %s...\n",strsignal(sig));
       exit_function(__FILE__, __FUNCTION__, __LINE__, "softmodem starting exit procedure\n", OAI_EXIT_NORMAL);

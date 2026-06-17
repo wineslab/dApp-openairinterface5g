@@ -60,7 +60,7 @@ RUN /bin/bash -c "if [[ -v NEEDED_GIT_PROXY ]]; then git config --global http.pr
 # Copying only the needed files to create ran-base
 WORKDIR /oai-ran/cmake_targets/tools
 COPY cmake_targets/tools/build_helper \
-     cmake_targets/tools/uhd-4.x-tdd-patch.diff \
+     cmake_targets/tools/uhd-4.5plus-tdd-patch.diff \
      ./
 
 WORKDIR /oai-ran/cmake_targets

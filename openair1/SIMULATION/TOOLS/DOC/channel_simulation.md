@@ -248,5 +248,3 @@ channelmod modify 0 noise_power_dB 3
 
 ### rfsimu module
 This module can be used to set a different channel model, e.g. `rfsimu setmodel AWGN`.
-
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

@@ -386,6 +386,7 @@ static F1AP_QoSFlowLevelQoSParameters_t encode_qos_flow_param(const f1ap_qos_flo
   if (p->qos_type == NON_DYNAMIC) {
     f1ap.qoS_Characteristics.present = F1AP_QoS_Characteristics_PR_non_Dynamic_5QI;
     asn1cCalloc(f1ap.qoS_Characteristics.choice.non_Dynamic_5QI, nd);
+    DevAssert(p->nondyn.fiveQI >= MIN_FIVEQI && p->nondyn.fiveQI <= MAX_FIVEQI);
     nd->fiveQI = p->nondyn.fiveQI;
   } else {
     DevAssert(p->qos_type == DYNAMIC);
@@ -412,6 +413,19 @@ static F1AP_QoSFlowLevelQoSParameters_t encode_qos_flow_param(const f1ap_qos_flo
   arp->priorityLevel = p->arp.prio;
   arp->pre_emptionCapability = p->arp.preempt_cap;
   arp->pre_emptionVulnerability = p->arp.preempt_vuln;
+
+  // GBR QoS Flow Information (optional)
+  if (p->gbr_qos_flow_information != NULL) {
+    const gbr_qos_flow_information_t *gbr = p->gbr_qos_flow_information;
+    asn1cCalloc(f1ap.gBR_QoS_Flow_Information, gbr_ie);
+
+    // Bit rates: uint64_t -> ASN.1 INTEGER_t
+    asn_ulong2INTEGER(&gbr_ie->maxFlowBitRateDownlink, gbr->dl.maximumFlowBitRate);
+    asn_ulong2INTEGER(&gbr_ie->maxFlowBitRateUplink, gbr->ul.maximumFlowBitRate);
+    asn_ulong2INTEGER(&gbr_ie->guaranteedFlowBitRateDownlink, gbr->dl.guaranteedFlowBitRate);
+    asn_ulong2INTEGER(&gbr_ie->guaranteedFlowBitRateUplink, gbr->ul.guaranteedFlowBitRate);
+  }
+
   return f1ap;
 }
 
@@ -443,10 +457,23 @@ static bool decode_qos_flow_param(const F1AP_QoSFlowLevelQoSParameters_t *f1ap, 
   out->arp.prio = arp->priorityLevel;
   out->arp.preempt_cap = arp->pre_emptionCapability;
   out->arp.preempt_vuln = arp->pre_emptionVulnerability;
+
+  // Decode GBR QoS Flow Information (optional)
+  if (f1ap->gBR_QoS_Flow_Information != NULL) {
+    const F1AP_GBR_QoSFlowInformation_t *gbr_ie = f1ap->gBR_QoS_Flow_Information;
+    out->gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+
+    // Bit rates: ASN.1 INTEGER_t -> uint64_t
+    asn_INTEGER2ulong(&gbr_ie->maxFlowBitRateDownlink, &out->gbr_qos_flow_information->dl.maximumFlowBitRate);
+    asn_INTEGER2ulong(&gbr_ie->maxFlowBitRateUplink, &out->gbr_qos_flow_information->ul.maximumFlowBitRate);
+    asn_INTEGER2ulong(&gbr_ie->guaranteedFlowBitRateDownlink, &out->gbr_qos_flow_information->dl.guaranteedFlowBitRate);
+    asn_INTEGER2ulong(&gbr_ie->guaranteedFlowBitRateUplink, &out->gbr_qos_flow_information->ul.guaranteedFlowBitRate);
+  }
+
   return true;
 }
 
-static f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig)
+f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig)
 {
   f1ap_qos_flow_param_t cp = {
     .qos_type = orig->qos_type,
@@ -467,6 +494,11 @@ static f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig
       _F1_MALLOC(cpdyn->delay_critical, *odyn->delay_critical);
     if (odyn->avg_win)
       _F1_MALLOC(cpdyn->avg_win, *odyn->avg_win);
+  }
+  // Copy GBR information
+  if (orig->gbr_qos_flow_information != NULL) {
+    cp.gbr_qos_flow_information = calloc_or_fail(1, sizeof(*cp.gbr_qos_flow_information));
+    *cp.gbr_qos_flow_information = *orig->gbr_qos_flow_information;
   }
   return cp;
 }
@@ -490,6 +522,14 @@ static bool eq_qos_flow_param(const f1ap_qos_flow_param_t *a, const f1ap_qos_flo
   _EQ_CHECK_INT(a->arp.prio, b->arp.prio);
   _EQ_CHECK_INT(a->arp.preempt_cap, b->arp.preempt_cap);
   _EQ_CHECK_INT(a->arp.preempt_vuln, b->arp.preempt_vuln);
+  if (a->gbr_qos_flow_information != NULL && b->gbr_qos_flow_information != NULL) {
+    const gbr_qos_flow_information_t *agbr = a->gbr_qos_flow_information;
+    const gbr_qos_flow_information_t *bgbr = b->gbr_qos_flow_information;
+    _EQ_CHECK_LONG(agbr->dl.guaranteedFlowBitRate, bgbr->dl.guaranteedFlowBitRate);
+    _EQ_CHECK_LONG(agbr->dl.maximumFlowBitRate, bgbr->dl.maximumFlowBitRate);
+    _EQ_CHECK_LONG(agbr->ul.guaranteedFlowBitRate, bgbr->ul.guaranteedFlowBitRate);
+    _EQ_CHECK_LONG(agbr->ul.maximumFlowBitRate, bgbr->ul.maximumFlowBitRate);
+  }
   return true;
 }
 
@@ -502,6 +542,7 @@ static void free_qos_flow_param(f1ap_qos_flow_param_t *p)
     free(p->dyn.delay_critical);
     free(p->dyn.avg_win);
   }
+  free(p->gbr_qos_flow_information);
   // arp: nothing to free
 }
 
@@ -662,7 +703,7 @@ static F1AP_DRBs_ToBeSetup_List_t encode_drbs_to_setup(int n, const f1ap_drb_to_
     F1AP_QoSInformation_ExtIEs_t *qos_ext_ie = calloc_or_fail(1, sizeof(*qos_ext_ie));
     it->qoSInformation.choice.choice_extension = (struct F1AP_ProtocolIE_SingleContainer *)qos_ext_ie;
     qos_ext_ie->id = F1AP_ProtocolIE_ID_id_DRB_Information;
-    qos_ext_ie->criticality = F1AP_Criticality_reject;
+    qos_ext_ie->criticality = F1AP_Criticality_ignore;
     qos_ext_ie->value.present = F1AP_QoSInformation_ExtIEs__value_PR_DRB_Information;
     qos_ext_ie->value.choice.DRB_Information = encode_drb_info_nr(&drb->nr);
 

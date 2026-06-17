@@ -16,7 +16,7 @@
 #include "utils.h"
 #include "common/utils/threadPool/pthread_utils.h"
 
-#define CIRCULAR_BUFFER_SIZE (30720 * 14 * 20)
+#define CIRCULAR_BUFFER_SIZE (30720 * 20)
 
 typedef struct {
   int magic;
@@ -97,10 +97,17 @@ ShmTDIQChannel *shm_td_iq_channel_connect(const char *name, int timeout_in_secon
   // Create shared memory segment
   int fd = -1;
   while (timeout_in_seconds > 0 && fd == -1) {
-    fd = shm_open(name, O_RDWR, S_IRUSR | S_IWUSR);
+    for (int i = 0; i < 1000; i++) {
+      fd = shm_open(name, O_RDWR, S_IRUSR | S_IWUSR);
+      if (fd != -1) {
+        break;
+      }
+      usleep(1000);
+    }
     timeout_in_seconds--;
-    printf("Waiting for server to create shared memory segment\n");
-    sleep(1);
+    if (fd == -1) {
+      printf("Waiting for server to create shared memory segment\n");
+    }
   }
   AssertFatal(fd != -1, "shm_open() failed: errno %d, %s", errno, strerror(errno));
 

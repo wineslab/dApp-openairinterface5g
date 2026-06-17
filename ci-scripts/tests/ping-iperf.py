@@ -82,5 +82,17 @@ class TestPingIperf(unittest.TestCase):
 		success = self.ci.Iperf(self.ctx, self.node, self.html, infra_file=infra_file)
 		self.assertTrue(success)
 
+	def test_iperf_new_bindport(self):
+		self.ci.iperf_args = "-u -t 5 -b 22M -O 0 -p 10000 -B 127.0.0.3"
+		self.ci.svr_id = "test"
+		self.ci.svr_node = "localhost"
+		self.ci.iperf_packetloss_threshold = "0"
+		self.ci.iperf_bitrate_threshold = "0"
+		self.ci.iperf_profile = "balanced"
+		infra_file = "tests/config/infra_ping_iperf.yaml"
+		# TODO Should need nothing but options and UE(s) to use
+		success = self.ci.Iperf(self.ctx, self.node, self.html, infra_file=infra_file)
+		self.assertTrue(success)
+
 if __name__ == '__main__':
 	unittest.main()

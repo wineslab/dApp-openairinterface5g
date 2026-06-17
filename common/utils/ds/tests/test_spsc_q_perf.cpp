@@ -40,9 +40,9 @@ static void *consumer(void *arg)
 static void run_test(int range, int q_size)
 {
   q_args_t args = {
-    .q = spsc_q_alloc(q_size, sizeof(int)),
     .range = range,
   };
+  spsc_q_alloc(&args.q, q_size, sizeof(int));
 
   pthread_t p, c;
   int ret;

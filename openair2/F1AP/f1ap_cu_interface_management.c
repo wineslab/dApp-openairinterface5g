@@ -9,6 +9,8 @@
 #include "f1ap_default_values.h"
 #include "lib/f1ap_interface_management.h"
 
+#include "F1AP_F1AP-PDU.h"
+
 int CU_handle_RESET_ACKNOWLEDGE(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);

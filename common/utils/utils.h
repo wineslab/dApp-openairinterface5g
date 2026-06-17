@@ -62,7 +62,7 @@ extern "C" {
 #endif
 
 #ifndef malloc16
-#    define malloc16(x) memalign(32,x+32)
+#define malloc16(x) memalign(64, x + 64)
 #endif
 #define free16(y,x) free(y)
 #define openair_free(y,x) free((y))
@@ -76,7 +76,7 @@ extern "C" {
   } while (0)
 
 static inline void *malloc16_clear( size_t size ) {
-  void *ptr = memalign(32, size+32);
+  void *ptr = memalign(64, size + 64);
   DevAssert(ptr);
   memset( ptr, 0, size );
   return ptr;
@@ -110,7 +110,7 @@ static inline void *malloc_or_fail(size_t size)
 # define msg(aRGS...) LOG_D(PHY, ##aRGS)
 #endif
 #ifndef malloc16
-#    define malloc16(x) memalign(32,x)
+#define malloc16(x) memalign(64, x)
 #endif
 
 #define free16(y,x) free(y)

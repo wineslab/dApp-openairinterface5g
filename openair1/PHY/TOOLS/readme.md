@@ -69,7 +69,7 @@ Run with `--imscope` flag
 
 ## Reporting bugs and feature requests
 
-Report bugs and feature requests on [gitlab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues). There is two demo windows
+Report bugs and feature requests on [github](https://github.com/duranta-project/openairinterface5g/issues). There is two demo windows
 enabled in the scope that showcase imgui/implot, if you find something of interest it can be implemented in the scope.
 
 ## Recording scope data and reviewing recorded IQ files

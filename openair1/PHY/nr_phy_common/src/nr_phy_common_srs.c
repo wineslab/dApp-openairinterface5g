@@ -135,7 +135,7 @@ bool generate_srs_nr(const NR_DL_FRAME_PARMS *frame_parms,
   uint8_t K_TC = 2 << nr_srs_info->comb_size;
   /* Number of antenna ports (M) can't be higher than number of physical antennas (N): M <= N */
   int N_ap = nr_srs_info->n_srs_ports > nb_antennas ? nb_antennas : nr_srs_info->n_srs_ports;
-  uint8_t l0 = frame_parms->symbols_per_slot - 1 - nr_srs_info->l_offset;  // Starting symbol position in the time domain
+  uint8_t l0 = nr_srs_info->l_offset;  // Starting symbol position in the time domain (absolute symbol index)
   uint8_t n_SRS_cs_max = srs_max_number_cs[nr_srs_info->comb_size];
   int m_SRS_b = get_m_srs(nr_srs_info->C_SRS, nr_srs_info->B_SRS);   // Number of resource blocks
   uint16_t M_sc_b_SRS = m_SRS_b * NR_NB_SC_PER_RB/K_TC;       // Length of the SRS sequence
@@ -184,16 +184,18 @@ bool generate_srs_nr(const NR_DL_FRAME_PARMS *frame_parms,
     return false;
   }
 
-  if (nr_srs_info->T_SRS == 0) {
-    LOG_E(NR_PHY, "generate_srs: inconsistent parameter T_SRS %d can not be equal to zero !\n", nr_srs_info->T_SRS);
-    return false;
-  } else {
-    int index = 0;
-    while (srs_periodicity[index] != nr_srs_info->T_SRS) {
-      index++;
-      if (index == SRS_PERIODICITY) {
-        LOG_E(NR_PHY, "generate_srs: inconsistent parameter T_SRS %d not specified !\n", nr_srs_info->T_SRS);
-        return false;
+  if (nr_srs_info->resource_type != aperiodic) {
+    if (nr_srs_info->T_SRS == 0) {
+      LOG_E(NR_PHY, "generate_srs: inconsistent parameter T_SRS %d can not be equal to zero !\n", nr_srs_info->T_SRS);
+      return false;
+    } else {
+      int index = 0;
+      while (srs_periodicity[index] != nr_srs_info->T_SRS) {
+        index++;
+        if (index == SRS_PERIODICITY) {
+          LOG_E(NR_PHY, "generate_srs: inconsistent parameter T_SRS %d not specified !\n", nr_srs_info->T_SRS);
+          return false;
+        }
       }
     }
   }

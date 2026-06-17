@@ -70,7 +70,20 @@ static __attribute__((always_inline)) inline int count_bits64(uint64_t v)
 
 static __attribute__((always_inline)) inline int count_bits64_with_mask(uint64_t v, int start, int num)
 {
-  uint64_t mask = ((1LL << num) - 1) << start;
+  AssertFatal(start >= 0 && num > 0 && start + num <= 64, "Invalid range: start=%d num=%d for 64 bits mask\n", start, num);
+  uint64_t mask = (num == 64 ? ~0ULL : (1ULL << num) - 1) << start;
   return count_bits64(v & mask);
 }
+
+bool find_next_rb_block(const uint32_t *bitmap, int size, int *pos, int *start, int *end);
+typedef struct {
+  int first_rb;
+  int last_rb;
+  int num_rbs;
+  uint32_t bitmap[9];
+} freq_alloc_bitmap_t;
+bool check_rb_in_bitmap(const freq_alloc_bitmap_t *alloc, int rb);
+freq_alloc_bitmap_t set_start_end_from_bitmap(int size, int alloc_size, const uint8_t *bitmap);
+freq_alloc_bitmap_t set_bitmap_from_start_size(int start, int size);
+
 #endif /* BITS_H_ */

@@ -45,7 +45,7 @@ void test_copy(const nfapi_nr_error_indication_scf_t *msg)
   free_error_indication(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

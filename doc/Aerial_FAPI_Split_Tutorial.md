@@ -20,7 +20,7 @@ The hardware on which we have tried this tutorial:
 - These are not minimum hardware requirements. This is the configuration of our
   servers. The NIC card should support hardware PTP time stamping.
 - Starting from tag
-  [2025.w13](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tree/2025.w13?ref_type=tags)
+  [2025.w13](https://github.com/duranta-project/openairinterface5g/releases/tag/2025.w13)
   of OAI, we are only testing with the Grace Hopper server.
 
 PTP enabled switches and grandmaster clock we have tested with:
@@ -60,7 +60,7 @@ To set up the L1 and install the components manually refer to this [instructions
 
 **Note**:
 - To configure the Gigabyte server please refer to these
-  [instructions](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/2025.w13/doc/Aerial_FAPI_Split_Tutorial.md)
+  [instructions](https://github.com/duranta-project/openairinterface5g/blob/2025.w13/doc/Aerial_FAPI_Split_Tutorial.md)
 - The last release to support the Gigabyte server is **Aerial CUDA-Accelerated
   RAN 24-1**.
 
@@ -183,7 +183,7 @@ WantedBy=multi-user.target
 If it's not already cloned, the first step is to clone OAI repository
 
 ```bash
-git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git ~/openairinterface5g
+git clone https://github.com/duranta-project/openairinterface5g.git ~/openairinterface5g
 cd ~/openairinterface5g/
 ```
 
@@ -224,8 +224,7 @@ With the nvIPC sources in the project directory, the L2 docker image can be buil
 
 In order to build the target image (`oai-gnb-aerial`), first you should build a
 common shared image (`ran-base`). For more information about `docker build`
-files please refer to this
-[tutorial](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/ARC1.7_integration/docker/README.md?ref_type=heads)
+files please refer to this [tutorial](../docker/README.md)
 
 ```bash
 ~$ cd ~/openairinterface5g/
@@ -238,21 +237,19 @@ files please refer to this
 
 ### Adapt the OAI-gNB configuration file to your system/workspace
 
-Edit the [OAI gNB configuration file](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/ci-scripts/conf_files/gnb-vnf.sa.band78.273prb.aerial.conf?ref_type=heads)
+Edit the [OAI gNB configuration file](../ci-scripts/conf_files/gnb-vnf.sa.band78.273prb.aerial.conf)
 and check the following parameters:
 
 * `gNBs` section
   * The PLMN section shall match the one defined in the AMF
   * To calculate the `absoluteFrequencySSB` and `dl_absoluteFrequencyPointA`,
-    please follow these
-    [instructions](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/gNB_frequency_setup.md)
+    please follow these [instructions](./gNB_frequency_setup.md)
   * `amf_ip_address` shall be the correct AMF IP address in your system
   * `GNB_IPV4_ADDRESS_FOR_NG_AMF` shall match your DU N2 interface IP address
   * `GNB_IPV4_ADDRESS_FOR_NGU` shall match your DU N3 interface IP address
   
 The default amf_ip_address:ipv4 value is 192.168.70.132, when installing the
-CN5G following [this
-tutorial](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/NR_SA_Tutorial_OAI_CN5G.md)
+CN5G following [this tutorial](./NR_SA_Tutorial_OAI_CN5G.md)
 Both `GNB_IPV4_ADDRESS_FOR_NG_AMF` and `GNB_IPV4_ADDRESS_FOR_NGU` need to be
 set to the IP address of the NIC referenced previously.
 

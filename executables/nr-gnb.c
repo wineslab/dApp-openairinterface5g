@@ -172,17 +172,19 @@ static void rx_func(processingData_L1_t *info)
     if (gNB->phase_comp) {
       //apply the rx signal rotation here
       int soffset = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
-      for (int bb = 0; bb < gNB->common_vars.num_beams_period; bb++) {
-        for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
-          const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
-          for (int sym = 0; sym < max_symb; sym++)
-            apply_nr_rotation_symbol_RX(&gNB->frame_parms,
-                                        gNB->common_vars.rxdataF[bb][aa] + soffset + sym * gNB->frame_parms.ofdm_symbol_size,
-                                        gNB->frame_parms.symbol_rotation[1],
-                                        gNB->frame_parms.N_RB_UL,
-                                        slot_rx,
-                                        sym);
-        }
+      const NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
+      for (int aa = 0; aa < fp->nb_antennas_rx; aa++) {
+        const uint max_symb = fp->Ncp == NR_EXTENDED ? 12 : 14;
+        for (int sym = 0; sym < max_symb; sym++)
+          apply_nr_rotation_symbol_RX(fp->symbols_per_slot,
+                                      fp->slots_per_subframe,
+                                      fp->timeshift_symbol_rotation,
+                                      fp->first_carrier_offset,
+                                      gNB->common_vars.rxdataF[aa] + soffset + sym * fp->ofdm_symbol_size,
+                                      fp->symbol_rotation[1],
+                                      fp->N_RB_UL,
+                                      slot_rx,
+                                      sym);
       }
     }
     phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
@@ -360,10 +362,7 @@ void init_eNB_afterRU(void)
       AssertFatal(gNB->RU_list[ru_id]->common.rxdataF != NULL, "RU %d : common.rxdataF is NULL\n", gNB->RU_list[ru_id]->idx);
       for (int i = 0; i < gNB->RU_list[ru_id]->nb_rx; aa++, i++) {
         LOG_I(PHY, "Attaching RU %d antenna %d to gNB antenna %d\n", gNB->RU_list[ru_id]->idx, i, aa);
-        for (int b = 0; b < gNB->RU_list[ru_id]->num_beams_period; b++) {
-          int idx = i + b * gNB->RU_list[ru_id]->nb_rx;
-          gNB->common_vars.rxdataF[b][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[idx];
-        }
+        gNB->common_vars.rxdataF[aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[i];
       }
     }
     /* TODO: review this code, there is something wrong.

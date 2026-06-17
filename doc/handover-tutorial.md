@@ -8,9 +8,9 @@ This tutorial explains how to perform handovers. It covers both F1 handovers
 This document assumes familiarity with the F1 split architecture and basic
 OAI knowledge. Please refer to the prerequisite documentation listed below:
 
-- To run the [Core Network](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/NR_SA_Tutorial_OAI_CN5G.md)
-- To run [OAI full stack with COTS UE](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/NR_SA_Tutorial_COTS_UE.md)
-- [F1 split design document](https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/doc/F1AP/F1-design.md?ref_type=heads)
+- To run the [Core Network](./NR_SA_Tutorial_OAI_CN5G.md)
+- To run [OAI full stack with COTS UE](./NR_SA_Tutorial_COTS_UE.md)
+- [F1 split design document](./F1AP/F1-design.md)
 for details on the F1 architecture and the networking relationships between
 the CU and the associated DUs.
 
@@ -198,9 +198,9 @@ triggered:
   - By connecting them to a GPS or an Octoclock to provide a common time and clock
     reference.
   - By synchronizing the RU hosts.
-  - By using Openairinterface starting tag [2025.w42](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tree/2025.w42?ref_type=tags)
+  - By using Openairinterface starting tag [2025.w42](https://github.com/duranta-project/openairinterface5g/releases/tag/2025.w42)
     (A fix was added to force the USRP to "use" the time/clock provided by the
-    external source instead to its own master clock. for more info see [MR](https://gitlab.eurecom.fr/oai/openairinterface5g/-/merge_requests/3693)).
+    external source instead to its own master clock.).
 - Make sure that the UE sees both cells. For instance, you can switch to flight
   mode, go closer to the other DU, and switch off flight mode -- the UE should
   connect to that second DU.

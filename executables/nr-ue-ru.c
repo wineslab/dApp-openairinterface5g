@@ -7,6 +7,7 @@
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
 #include "common/config/config_paramdesc.h"
 #include "common/config/config_userapi.h"
+#include "openair1/PHY/phy_extern_nr_ue.h"
 
 /* NR UE RU configuration section name */
 #define CONFIG_STRING_NRUE_RU_LIST "RUs"
@@ -287,8 +288,7 @@ void nrue_init_openair0(void)
         LOG_W(PHY, "Skipping initialization of RU %d because it is not used by any UE!\n", ru_id);
         continue;
       }
-      extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
-      frame_parms = &PHY_vars_UE_g[UE_id][0]->SL_UE_PHY_PARAMS.sl_frame_params;
+      frame_parms = &nrPHY_vars_UE_g[UE_id][0]->SL_UE_PHY_PARAMS.sl_frame_params;
     }
 
     openair0_config_t *cfg = &openair0_cfg[ru_id];

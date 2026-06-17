@@ -482,7 +482,7 @@ int decode_ng_handover_command(ngap_handover_command_t *msg, NGAP_NGAP_PDU_t *pd
   }
 
   // PDU Session Resource Handover List (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_HandoverType, false);
+  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PDUSessionResourceHandoverList, false);
   if (ie != NULL) {
     msg->nb_of_pdusessions = ie->value.choice.PDUSessionResourceHandoverList.list.count;
 

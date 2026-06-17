@@ -192,7 +192,7 @@ Now, when installing the pre-requisites, especially the `UHD` driver, you can no
 
 ```bash
 export BUILD_UHD_FROM_SOURCE=True
-export UHD_VERSION=3.15.0.0
+export UHD_VERSION=4.10.0.0
 ./build_oai -I -w USRP
 ```
 
@@ -206,6 +206,7 @@ See:
 
 * `cmake_targets/tools/uhd-3.15-tdd-patch.diff`
 * `cmake_targets/tools/uhd-4.x-tdd-patch.diff`
+* `cmake_targets/tools/uhd-4.5plus-tdd-patch.diff`
 * `cmake_targets/tools/build_helper` --> function `install_usrp_uhd_driver_from_source`
 
 ### Building PHY Simulators

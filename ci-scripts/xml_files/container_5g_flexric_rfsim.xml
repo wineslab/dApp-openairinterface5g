@@ -70,7 +70,7 @@
     <class>Attach_UE</class>
     <desc>Attach OAI UE 1 and 2</desc>
     <id>rfsim5g_ue rfsim5g_ue2</id>
-    <node>carabe</node>
+    <node>localhost</node>
   </testCase>
 
   <testCase>
@@ -98,21 +98,32 @@
   </testCase>
 
   <testCase>
-    <class>Ping</class>
-    <desc>Ping ext-dn from both UEs</desc>
+    <class>Iperf</class>
+    <desc>Iperf (DL/TCP)(20 sec)</desc>
+    <iperf_args>-t 20 -R</iperf_args>
     <id>rfsim5g_ue rfsim5g_ue2</id>
-    <node>carabe</node>
+    <node>localhost</node>
     <svr_id>oai_ext_dn</svr_id>
-    <svr_node>carabe</svr_node>
-    <ping_args>-c 20</ping_args>
-    <ping_packetloss_threshold>5</ping_packetloss_threshold>
+    <svr_node>localhost</svr_node>
+    <iperf_tcp_rate_target>10</iperf_tcp_rate_target>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (UL/TCP)(20 sec)</desc>
+    <iperf_args>-t 20</iperf_args>
+    <id>rfsim5g_ue rfsim5g_ue2</id>
+    <node>localhost</node>
+    <svr_id>oai_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_tcp_rate_target>5</iperf_tcp_rate_target>
   </testCase>
 
   <testCase>
     <class>Detach_UE</class>
     <desc>Detach OAI UE 1 and 2</desc>
     <id>rfsim5g_ue rfsim5g_ue2</id>
-    <node>carabe</node>
+    <node>localhost</node>
   </testCase>
 
   <testCase>
@@ -178,7 +189,7 @@
     <yaml_path>ci-scripts/yaml_files/5g_rfsimulator_flexric</yaml_path>
     <always_exec>true</always_exec>
     <analysis>
-      <service>nearRT-RIC=LastLineContains=Removing E2 Node</service>
+      <service>nearRT-RIC=LastLineContains=The nearRT-RIC run SUCCESSFULLY</service>
       <service>xapp-rc-moni=LastLineContains=Test xApp run SUCCESSFULLY</service>
       <service>xapp-kpm-moni=LastLineContains=Test xApp run SUCCESSFULLY</service>
       <service>xapp-kpm-rc=LastLineContains=Test xApp run SUCCESSFULLY</service>

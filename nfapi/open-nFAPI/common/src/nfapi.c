@@ -381,7 +381,7 @@ uint32_t pullarrays16(uint8_t **in, int16_t out[], uint32_t max_len, uint32_t le
     return 0;
   }
 }
-uint32_t pusharray16(uint16_t in[], uint32_t max_len, uint32_t len, uint8_t **out, uint8_t *end)
+uint32_t pusharray16(const uint16_t in[], uint32_t max_len, uint32_t len, uint8_t **out, uint8_t *end)
 {
   if (len == 0)
     return 1;
@@ -1630,46 +1630,6 @@ uint8_t unpack_stop_response(uint8_t **ppReadPackedMsg, uint8_t *end, void *msg,
   nfapi_stop_response_t *pNfapiMsg = (nfapi_stop_response_t *)msg;
   return pull32(ppReadPackedMsg, &pNfapiMsg->error_code, end)
          && unpack_tlv_list(NULL, 0, ppReadPackedMsg, end, config, &(pNfapiMsg->vendor_extension));
-}
-
-uint8_t pack_measurement_request(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p4_p5_codec_config_t *config)
-{
-  nfapi_measurement_request_t *pNfapiMsg = (nfapi_measurement_request_t *)msg;
-  return pack_tlv(NFAPI_MEASUREMENT_REQUEST_DL_RS_XTX_POWER_TAG,
-                  &(pNfapiMsg->dl_rs_tx_power),
-                  ppWritePackedMsg,
-                  end,
-                  &pack_uint16_tlv_value)
-         && pack_tlv(NFAPI_MEASUREMENT_REQUEST_RECEIVED_INTERFERENCE_POWER_TAG,
-                     &(pNfapiMsg->received_interference_power),
-                     ppWritePackedMsg,
-                     end,
-                     &pack_uint16_tlv_value)
-         && pack_tlv(NFAPI_MEASUREMENT_REQUEST_THERMAL_NOISE_POWER_TAG,
-                     &(pNfapiMsg->thermal_noise_power),
-                     ppWritePackedMsg,
-                     end,
-                     &pack_uint16_tlv_value)
-         && pack_vendor_extension_tlv(pNfapiMsg->vendor_extension, ppWritePackedMsg, end, config);
-}
-
-uint8_t unpack_measurement_request(uint8_t **ppReadPackedMsg, uint8_t *end, void *msg, nfapi_p4_p5_codec_config_t *config)
-{
-  nfapi_measurement_request_t *pNfapiMsg = (nfapi_measurement_request_t *)msg;
-
-  unpack_tlv_t unpack_fns[] = {
-      {NFAPI_MEASUREMENT_REQUEST_DL_RS_XTX_POWER_TAG, &pNfapiMsg->dl_rs_tx_power, &unpack_uint16_tlv_value},
-      {NFAPI_MEASUREMENT_REQUEST_RECEIVED_INTERFERENCE_POWER_TAG,
-       &pNfapiMsg->received_interference_power,
-       &unpack_uint16_tlv_value},
-      {NFAPI_MEASUREMENT_REQUEST_THERMAL_NOISE_POWER_TAG, &pNfapiMsg->thermal_noise_power, &unpack_uint16_tlv_value},
-  };
-  return unpack_tlv_list(unpack_fns,
-                         sizeof(unpack_fns) / sizeof(unpack_tlv_t),
-                         ppReadPackedMsg,
-                         end,
-                         config,
-                         &(pNfapiMsg->vendor_extension));
 }
 
 uint8_t pack_uint32_tlv_value(void *tlv, uint8_t **ppWritePackedMsg, uint8_t *end)

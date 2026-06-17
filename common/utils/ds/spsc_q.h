@@ -25,7 +25,7 @@ typedef struct spsc_q {
   atomic_size_t read_idx;
 } spsc_q_t;
 
-spsc_q_t spsc_q_alloc(size_t cnt, size_t elsiz);
+bool spsc_q_alloc(spsc_q_t *rbn, size_t cnt, size_t elsiz);
 void spsc_q_free(spsc_q_t *rb);
 
 bool spsc_q_put(spsc_q_t *rb, const void *src, size_t elsiz);

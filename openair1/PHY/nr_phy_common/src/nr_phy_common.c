@@ -5,6 +5,8 @@
 #include "nr_phy_common.h"
 #include "bits.h"
 #include <complex.h>
+#include "PHY/sse_intrin.h"
+#include "PHY/impl_defs_top.h"
 #ifdef __aarch64__
 #define USE_128BIT
 #endif
@@ -428,79 +430,6 @@ void nr_scale_channel(int size, int ch_estimates_ext[][size], int symb, uint32_t
   }
 }
 
-freq_alloc_bitmap_t set_start_end_from_bitmap(int size, int alloc_size, const uint8_t bitmap[alloc_size])
-{
-  freq_alloc_bitmap_t alloc = {0};
-  int num_words = (size + 31) / 32;
-  AssertFatal(num_words <= sizeofArray(alloc.bitmap),
-              "freq_alloc_bitmap.bitmap %lu words < %d\n",
-              sizeofArray(alloc.bitmap),
-              num_words);
-  memcpy(alloc.bitmap, bitmap, alloc_size);
-  alloc.num_rbs = count_bits(alloc.bitmap, num_words);
-  alloc.first_rb = get_first_bit_index(alloc.bitmap, num_words);
-  alloc.last_rb = get_last_bit_index(alloc.bitmap, num_words);
-  AssertFatal(alloc.first_rb >= 0 && alloc.last_rb >=0 , "No valid RB set, no bit set in bitmap\n");
-  return alloc;
-}
-
-freq_alloc_bitmap_t set_bitmap_from_start_size(int start, int size)
-{
-  freq_alloc_bitmap_t alloc = {
-    .num_rbs = size,
-    .first_rb = start,
-    .last_rb = start + size - 1
-  };
-  memset(alloc.bitmap, 0, sizeof(alloc.bitmap));
-  for (int i = start; i < size + start; i++)
-    alloc.bitmap[i / 32] |= (1U << (i % 32));
-  return alloc;
-}
-
-bool check_rb_in_bitmap(const freq_alloc_bitmap_t *alloc, int rb)
-{
-  return (alloc->bitmap[rb / 32] >> (rb % 32)) & 0x01;
-}
-
-/**
- * Finds the next contiguous block of set bits.
- * @param bitmap The bit buffer
- * @param size   Total bits in the buffer
- * @param pos    Pointer to current bit index (updated by function)
- * @param start  Output: Start index of the found block
- * @param end    Output: End index of the found block
- * @return true if a block was found, false if no more bits are set
- */
-bool find_next_rb_block(const uint32_t *bitmap, int size, int *pos, int *start, int *end)
-{
-  AssertFatal(*pos >= 0 && *pos <= size, "Invalid combination of bit index %d and size %d\n", *pos, size);
-  const int words = (size + 31) / 32;
-
-  // Find start of next block
-  int idx = get_first_bit_index_mask(bitmap, words, *pos, size - *pos);
-  if (idx < 0)
-    return false;
-  *start = idx;
-
-  // Find end of block: first zero bit after idx
-  // Reuse get_first_bit_index_from on the inverted bitmap
-  idx++;
-  int word_idx = idx / 32;
-  int n = words - word_idx;
-  uint32_t inv[n];
-  for (int i = 0; i < n; i++)
-    inv[i] = ~bitmap[word_idx + i];
-  if (size % 32 != 0)
-    inv[n - 1] &= (1u << (size % 32)) - 1;
-
-  int end_off = get_first_bit_index_mask(inv, n, idx - word_idx * 32, size - idx);
-  idx = (end_off < 0) ? size : word_idx * 32 + end_off;
-
-  *end = (idx > size) ? size - 1 : idx - 1;
-  *pos = idx; // Update position for the next call
-  return true;
-}
-
 void nr_fo_compensation(double fo_Hz, int samples_per_ms, int sample_offset, const c16_t *rxdata_in, c16_t *rxdata_out, int size)
 {
   const double phase_inc = -fo_Hz / (samples_per_ms * 1000);
@@ -521,7 +450,7 @@ void nr_fo_compensation(double fo_Hz, int samples_per_ms, int sample_offset, con
   const c16_t rot_vec = get_sin_cos(CHUNK * phase_inc);
   while (size > CHUNK) {
     mult_complex_vectors(rxdata_in, rot, rxdata_out, CHUNK, 14);
-    rotate_cpx_vector(rot, &rot_vec, rot, CHUNK, 14);
+    rotate_cpx_vector(rot, rot_vec, rot, CHUNK, 14);
     rxdata_in += CHUNK;
     rxdata_out += CHUNK;
     size -= CHUNK;
@@ -559,5 +488,4 @@ int nr_get_ssb_start_sc(int scs, int ssb_offset_point_a, int ssb_sco, frequency_
                         prb_offset, ssb_sco, scs, freq_range, ssb_start_subcarrier);
 
   return ssb_start_subcarrier;
-
 }

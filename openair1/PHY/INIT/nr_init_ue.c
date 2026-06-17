@@ -255,7 +255,7 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
 
   ue->init_averaging = 1;
   init_symbol_rotation(fp);
-  init_timeshift_rotation(fp);
+  init_timeshift_rotation(fp->ofdm_symbol_size, fp->nb_prefix_samples, fp->ofdm_offset_divisor, fp->timeshift_symbol_rotation);
 
   // initialize to false only for SA since in do-ra and phy-test it is already set to true before getting here
   if (IS_SA_MODE(get_softmodem_params()))
@@ -321,7 +321,7 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue)
 
 void free_nr_ue_dl_harq(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSES], int number_of_processes, int num_rb)
 {
-  uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER*NR_MAX_NB_LAYERS;
+  uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS;
   if (num_rb != 273) {
     a_segments = a_segments*num_rb;
     a_segments = (a_segments/273)+1;
@@ -329,11 +329,6 @@ void free_nr_ue_dl_harq(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSES], int
 
   for (int j=0; j < 2; j++) {
     for (int i=0; i<number_of_processes; i++) {
-
-      for (int r=0; r<a_segments; r++) {
-        free_and_zero(harq_list[j][i].c[r]);
-        free_and_zero(harq_list[j][i].d[r]);
-      }
       free_and_zero(harq_list[j][i].b);
       free_and_zero(harq_list[j][i].c);
       free_and_zero(harq_list[j][i].d);
@@ -343,7 +338,7 @@ void free_nr_ue_dl_harq(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSES], int
 
 void free_nr_ue_ul_harq(NR_UL_UE_HARQ_t harq_list[NR_MAX_HARQ_PROCESSES], int number_of_processes, int num_rb, int num_ant_tx)
 {
-  int max_layers = (num_ant_tx < NR_MAX_NB_LAYERS) ? num_ant_tx : NR_MAX_NB_LAYERS;
+  int max_layers = min(num_ant_tx, NR_MAX_NB_LAYERS);
   uint16_t a_segments = MAX_NUM_NR_ULSCH_SEGMENTS_PER_LAYER*max_layers;  //number of segments to be allocated
 
   if (num_rb != 273) {
@@ -374,7 +369,7 @@ void term_nr_ue_transport(PHY_VARS_NR_UE *ue)
 
 void nr_init_dl_harq_processes(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSES], int number_of_processes, int num_rb)
 {
-  int a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER*NR_MAX_NB_LAYERS;  //number of segments to be allocated
+  int a_segments = MAX_NUM_NR_DLSCH_SEGMENTS; // number of segments to be allocated
   if (num_rb != 273) {
     a_segments = a_segments*num_rb;
     a_segments = (a_segments/273)+1;
@@ -386,14 +381,9 @@ void nr_init_dl_harq_processes(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSE
       init_downlink_harq_status(harq_list[j] + i);
 
       harq_list[j][i].b = malloc16_clear(a_segments * 1056);
-      harq_list[j][i].c = malloc16(a_segments*sizeof(uint8_t *));
-      harq_list[j][i].d = malloc16(a_segments*sizeof(int16_t *));
-      const int sz=5*8448*sizeof(int16_t);
+      harq_list[j][i].c = malloc16(a_segments * sizeof(*harq_list[j][i].c) * 1056);
+      harq_list[j][i].d = malloc16(a_segments * sizeof(*harq_list[j][i].d) * 3 * 8448);
       init_abort(&harq_list[j][i].abort_decode);
-      for (int r=0; r<a_segments; r++) {
-        harq_list[j][i].c[r] = malloc16_clear(1056);
-        harq_list[j][i].d[r] = malloc16_clear(sz);
-      }
       harq_list[j][i].status  = 0;
       harq_list[j][i].DLround = 0;
     }
@@ -402,7 +392,7 @@ void nr_init_dl_harq_processes(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_HARQ_PROCESSE
 
 void nr_init_ul_harq_processes(NR_UL_UE_HARQ_t harq_list[NR_MAX_HARQ_PROCESSES], int number_of_processes, int num_rb, int num_ant_tx)
 {
-  int max_layers = (num_ant_tx < NR_MAX_NB_LAYERS) ? num_ant_tx : NR_MAX_NB_LAYERS;
+  int max_layers = min(num_ant_tx, NR_MAX_NB_LAYERS);
   uint16_t a_segments = MAX_NUM_NR_ULSCH_SEGMENTS_PER_LAYER*max_layers;  //number of segments to be allocated
 
   if (num_rb != 273) {
@@ -470,7 +460,6 @@ void phy_init_nr_top(PHY_VARS_NR_UE *ue) {
   crcTableInit();
   init_byte2m128i();
   load_dftslib();
-  init_context_synchro_nr(frame_parms);
   generate_ul_reference_signal_sequences(SHRT_MAX);
 }
 

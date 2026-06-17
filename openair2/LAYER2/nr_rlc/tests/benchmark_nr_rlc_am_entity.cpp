@@ -3,6 +3,7 @@
  */
 #include "benchmark/benchmark.h"
 extern "C" {
+#include "common/platform_types.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_entity_am.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_entity.h"
 #include "common/utils/LOG/log.h"
@@ -13,12 +14,21 @@ extern configmodule_interface_t *uniqCfg;
 
 void deliver_sdu(void *deliver_sdu_data, nr_rlc_entity_t *entity, char *buf, int size)
 {
+  UNUSED(deliver_sdu_data);
+  UNUSED(entity);
+  UNUSED(buf);
+  UNUSED(size);
 }
 void sdu_successful_delivery(void *sdu_successful_delivery_data, nr_rlc_entity_t *entity, int sdu_id)
 {
+  UNUSED(sdu_successful_delivery_data);
+  UNUSED(entity);
+  UNUSED(sdu_id);
 }
 void max_retx_reached(void *max_retx_reached_data, nr_rlc_entity_t *entity)
 {
+  UNUSED(max_retx_reached_data);
+  UNUSED(entity);
 }
 
 static void BM_nr_rlc_am_entity(benchmark::State &state)

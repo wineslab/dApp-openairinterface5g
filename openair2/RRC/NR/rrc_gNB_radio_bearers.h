@@ -45,4 +45,31 @@ nr_rrc_qos_t *find_qos(seq_arr_t *seq, int qfi);
 /// @brief Add a new QoS to the list
 nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in);
 
+/// @brief Remove a single QoS flow identified by @param qfi from the list
+bool rm_qos(seq_arr_t *qos, int qfi);
+
+/// @brief Find the first DRB for a given PDU session ID
+drb_t *find_drb_by_pdusession_id(seq_arr_t *seq, int pdusession_id);
+
+/// @brief Remove DRB with given @param drb_id from the list
+bool nr_rrc_remove_drb_by_id(seq_arr_t *drb_ptr, const int drb_id);
+
+/// @brief Add PDU Sessions and DRBs to UE context list
+void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions);
+
+/// @brief Find existing DRB that can accept a QoS flow based on resource type and multiplexing limits
+int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
+                                     const int pdusession_id,
+                                     const pdusession_level_qos_parameter_t *qos_params,
+                                     const seq_arr_t *flows);
+
+/// @brief Find or create a DRB for a QoS flow and assign it
+bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pdusession_t *session, nr_rrc_qos_t *qos);
+
+/// @brief Check if 5QI value is a standardized value (table 5.7.4-1 in 3GPP TS 23.501)
+bool is_5qi_standardized(uint16_t five_qi);
+
+/// @brief Check if a standardized 5QI corresponds to a Non-GBR resource type (from TS 23.501 Table 5.7.4-1)
+bool nr_rrc_is_non_gbr_fiveqi(uint16_t five_qi);
+
 #endif

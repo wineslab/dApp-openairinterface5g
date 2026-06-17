@@ -22,4 +22,4 @@ WORKDIR /oai-ran
 COPY . .
 
 WORKDIR /oai-ran/build
-RUN cmake -GNinja -DENABLE_TESTS=ON -DCUDA_ENABLE=ON .. && ninja tests
+RUN cmake -GNinja -DENABLE_TESTS=ON -DENABLE_CHANNEL_SIM_CUDA=ON .. && ninja tests

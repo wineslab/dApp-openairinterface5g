@@ -1,24 +1,21 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
 <h1 align="center">
-    <a href="https://openairinterface.org/"><img src="https://openairinterface.org/wp-content/uploads/2015/06/cropped-oai_final_logo.png" alt="OAI" width="550"></a>
+    <a href="https://lfnetworking.org/projects/duranta/"><img src="https://raw.githubusercontent.com/duranta-project/governance/main/logos/Duranta-OAI-Combined.png" alt="Duranta OAI" width="550"></a>
 </h1>
 
 <p align="center">
-    <a href="https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-CSSL--v1.0-blue" alt="License"></a>
+    <a href="https://github.com/duranta-project/openairinterface5g/blob/develop/LICENSE"><img src="https://img.shields.io/badge/license-CSSL--v1.0-blue" alt="License"></a>
     <a href="https://releases.ubuntu.com/22.04/"><img src="https://img.shields.io/badge/OS-Ubuntu22-Green" alt="Supported OS Ubuntu 22"></a>
     <a href="https://releases.ubuntu.com/24.04/"><img src="https://img.shields.io/badge/OS-Ubuntu24-Green" alt="Supported OS Ubuntu 24"></a>
+    <a href="https://releases.ubuntu.com/26.04/"><img src="https://img.shields.io/badge/OS-Ubuntu26-Green" alt="Supported OS Ubuntu 26"></a>
     <a href="https://www.redhat.com/en/technologies/linux-platforms/enterprise-linux"><img src="https://img.shields.io/badge/OS-RHEL9-Green" alt="Supported OS RHEL9"></a>
-    <a href="https://getfedora.org/en/workstation/"><img src="https://img.shields.io/badge/OS-Fedore41-Green" alt="Supported OS Fedora 43"></a>
+    <a href="https://getfedora.org/en/workstation/"><img src="https://img.shields.io/badge/OS-Fedora44-Green" alt="Supported OS Fedora 44"></a>
 </p>
 
 <p align="center">
-    <a href="https://gitlab.eurecom.fr/oai/openairinterface5g/-/releases"><img alt="GitLab Release (custom instance)" src="https://img.shields.io/gitlab/v/release/oai/openairinterface5g?gitlab_url=https%3A%2F%2Fgitlab.eurecom.fr&include_prereleases&sort=semver"></a>
-</p>
-
-<p align="center">
-    <a href="https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu18-Image-Builder/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FRAN-Ubuntu18-Image-Builder%2F&label=build-Ubuntu-x86%20Images"></a>
-    <a href="https://jenkins-oai.eurecom.fr/job/RAN-RHEL8-Cluster-Image-Builder/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FRAN-RHEL8-Cluster-Image-Builder%2F&label=build-UBI-x86%20Images"></a>
+    <a href="https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu-Image-Builder/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FRAN-Ubuntu-Image-Builder%2F&label=build-Ubuntu-x86%20Images"></a>
+    <a href="https://jenkins-oai.eurecom.fr/job/RAN-RHEL-Cluster-Image-Builder/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FRAN-RHEL-Cluster-Image-Builder%2F&label=build-RHEL-Cluster%20Images"></a>
     <a href="https://jenkins-oai.eurecom.fr/job/RAN-Ubuntu-ARM-Image-Builder/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FRAN-Ubuntu-ARM-Image-Builder%2F&label=build-Ubuntu-ARM%20Images"></a>
 </p>
 
@@ -30,14 +27,23 @@
   <a href="https://hub.docker.com/r/oaisoftwarealliance/oai-nr-cuup"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/oaisoftwarealliance/oai-nr-cuup?label=NR-CUUP%20docker%20pulls"></a>
 </p>
 
-# OpenAirInterface License #
+# Duranta - OpenAirInterface
+
+Duranta OpenAirInterface RAN delivers and maintains an open-source cellular
+wireless software stack for 4G, 5G and future networking technologies. It
+supports simulation, prototyping, and end-to-end deployments on
+Commercial-Off-The-Shelf (COTS) hardware. Built for research and
+experimentation, it provides standard-compliant interfaces and is released
+under the Collaborative Standards Software License (CSSL).
+
+## License
 
  *  [OAI License Model](http://www.openairinterface.org/?page_id=101)
  *  [CSSL v1.0](http://www.openairinterface.org/?page_id=698)
 
 The source code is distributed under [**CSSL v1.0**](LICENSE).
 Some files, such as for orchestration, are distributed under
-[MIT license](preferred)(MIT.txt). Documentation is distributed under
+[MIT license](./LICENSES/preferred/MIT.txt). Documentation is distributed under
 [Creative Commons Attribution 4.0 International license](LICENSES/preferred/CC-BY-4.0.txt).
 
 All the files without an explicit copyright header have an implicit "Copyright
@@ -53,7 +59,7 @@ history:
 3. OAI Public License v1.0: starting tag v.04 till v1.0
 4. GPL 3: starting tag v.0 till v.04 (only initial implementation of 4G)
 
-# Where to Start #
+## Where to Start
 
  *  [General overview of documentation](./doc/README.md)
  *  [The implemented features](./doc/FEATURE_SET.md)
@@ -69,7 +75,7 @@ To find all READMEs, this command might be handy:
 find . -iname "readme*"
 ```
 
-# RAN repository structure #
+## RAN repository structure
 
 The OpenAirInterface (OAI) software is composed of the following parts: 
 
@@ -94,9 +100,9 @@ openairinterface5g
 └── tools             : Tools for use by the developers/ci machines: code analysis and formatting
 ```
 
-# How to get support from the OAI Community # 
+## How to get support from the Community
 
-You can ask your question on the [mailing lists](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/MailingList).
+You can ask your question on the [mailing lists](https://github.com/duranta-project/openairinterface5g/wiki/MailingList).
 
 Your email should contain below information:
 
@@ -107,6 +113,6 @@ Your email should contain below information:
 - OAI gNB/DU/CU/CU-CP/CU-UP configuration file in `.conf` format only.
 - Logs of OAI gNB/DU/CU/CU-CP/CU-UP in `.log` or `.txt` format only.
 - In case your question is related to performance, include a small description of the machine (Operating System, Kernel version, CPU, RAM and networking card) and diagram of your testing environment.
-- Known/open issues are present on [GitLab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues), so keep checking.
+- Known/open issues are present on [Github](https://github.com/duranta-project/openairinterface5g/issues), so keep checking.
 
 Always remember a structured email will help us understand your issues quickly.

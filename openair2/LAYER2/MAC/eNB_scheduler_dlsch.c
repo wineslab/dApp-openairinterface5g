@@ -961,6 +961,7 @@ schedule_ue_spec(module_id_t module_idP,
           dlsch_pdu->payload[0][offset + sdu_length_total + j] = 0;
         }
         ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                          .type = cc[CC_id].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                           .pdu_buffer = (uint8_t *)dlsch_pdu->payload,
                           .pdu_buffer_size = TBS,
                           .ueid = module_idP,
@@ -1624,6 +1625,7 @@ schedule_ue_spec_br(module_id_t module_idP,
           }
 
           ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                            .type = cc[CC_id].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                             .pdu_buffer = UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0],
                             .pdu_buffer_size = TBS,
                             .ueid = module_idP,
@@ -1826,6 +1828,7 @@ schedule_ue_spec_br(module_id_t module_idP,
         T_INT (0 /* harq_pid always 0? */ ),
         T_BUFFER (&mac->UE_info.DLSCH_pdu[CC_id][0][UE_id].payload[0], TX_req->pdu_length));
       ws_trace_t tmp = {.direction = 1,
+                        .type = cc[CC_id].tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                         .pdu_buffer = mac->UE_info.DLSCH_pdu[CC_id][0][UE_id].payload[0],
                         .pdu_buffer_size = TX_req->pdu_length,
                         .ueid = UE_id,
@@ -2335,6 +2338,7 @@ schedule_PCH(module_id_t module_idP,
           continue;
         }
         ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                          .type = cc->tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                           .pdu_buffer = eNB->common_channels[CC_id].PCCH_pdu.payload,
                           .pdu_buffer_size = pcch_sdu_length,
                           .ueid = 0xffff,

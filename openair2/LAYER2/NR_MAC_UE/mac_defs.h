@@ -299,7 +299,7 @@ typedef struct {
 typedef struct {
   int sched_frame;
   int sched_slot;
-  PUCCH_sched_t pucch_sched;
+  fapi_nr_ul_config_pucch_pdu pucch_pdu;
 } RA_PUCCH_SCHED_t;
 
 typedef struct {
@@ -595,7 +595,7 @@ typedef struct NR_UE_MAC_INST_s {
 
   // Defined for abstracted mode
   nr_downlink_indication_t dl_info;
-  NR_UE_DL_HARQ_STATUS_t dl_harq_info[NR_MAX_HARQ_PROCESSES];
+  NR_UE_DL_HARQ_STATUS_t dl_harq_info[NR_MAX_HARQ_PROCESSES][2]; // one harq process for each codeword
   NR_UE_UL_HARQ_INFO_t ul_harq_info[NR_MAX_HARQ_PROCESSES];
 
   NR_TAG_Id_t tag_Id;

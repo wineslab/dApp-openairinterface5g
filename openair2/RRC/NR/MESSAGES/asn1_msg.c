@@ -1262,8 +1262,10 @@ NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
     FOR_EACH_SEQ_ARR(nr_neighbour_cell_t *, neigh_cell, neigh_seq) {
       NR_ReportConfigId_t reportConfigId = neigh_a3_id[i];
       /* check that there is a A3 configured for this neighbour */
-      if (reportConfigId == -1)
+      if (reportConfigId == -1) {
+        i++;
         continue;
+      }
       NR_MeasIdToAddMod_t *measid_A3 = get_MeasId(meas_idx + 1, reportConfigId, i + 2);
       meas_idx++;
       asn1cSeqAdd(&mc->measIdToAddModList->list, measid_A3);

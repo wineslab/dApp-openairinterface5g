@@ -411,7 +411,7 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
   srs_pdu->num_ant_ports = srs_resource->nrofSRS_Ports;
   srs_pdu->num_symbols = srs_resource->resourceMapping.nrofSymbols;
   srs_pdu->num_repetitions = srs_resource->resourceMapping.repetitionFactor;
-  srs_pdu->time_start_position = srs_resource->resourceMapping.startPosition;
+  srs_pdu->time_start_position =  NR_SYMBOLS_PER_SLOT - 1 - srs_resource->resourceMapping.startPosition;
   srs_pdu->config_index = srs_resource->freqHopping.c_SRS;
   srs_pdu->sequence_id = srs_resource->sequenceId;
   srs_pdu->bandwidth_index = srs_resource->freqHopping.b_SRS;
@@ -435,8 +435,10 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
   srs_pdu->frequency_hopping = srs_resource->freqHopping.b_hop;
   srs_pdu->group_or_sequence_hopping = srs_resource->groupOrSequenceHopping;
   srs_pdu->resource_type = srs_resource->resourceType.present - 1;
-  srs_pdu->t_srs = srs_period[srs_resource->resourceType.choice.periodic->periodicityAndOffset_p.present];
-  srs_pdu->t_offset = get_nr_srs_offset(srs_resource->resourceType.choice.periodic->periodicityAndOffset_p);
+  if (srs_resource->resourceType.present == NR_SRS_Resource__resourceType_PR_periodic) {
+    srs_pdu->t_srs = srs_period[srs_resource->resourceType.choice.periodic->periodicityAndOffset_p.present];
+    srs_pdu->t_offset = get_nr_srs_offset(srs_resource->resourceType.choice.periodic->periodicityAndOffset_p);
+  }
 
   // TODO: This should be completed
   srs_pdu->srs_parameters_v4.srs_bandwidth_size = m_SRS[srs_pdu->config_index];
@@ -457,12 +459,22 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
     srs_pdu->beamforming.prg_size = srs_pdu->srs_parameters_v4.srs_bandwidth_size;
   }
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, nrmac->beam_info.beam_mode);
-  srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
   NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, frame, slot, UE->UE_beam_index, slots_per_frame);
   AssertFatal(beam.idx >= 0, "Cannot allocate SRS in any available beam\n");
+
+  // Indexing SRS antenna ports when beamformed
+  const unsigned int srs_num_rx_ant_ports = nrmac->radio_config.pusch_AntennaPorts;
+  srs_pdu->srs_parameters_v4.num_ul_spatial_streams_ports = srs_num_rx_ant_ports;
+  srs_pdu->beamforming.dig_bf_interface = srs_num_rx_ant_ports;
+  for (int i = 0; i < srs_num_rx_ant_ports;i++){
+    srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx = fapi_beam;
+    srs_pdu->srs_parameters_v4.Ul_spatial_stream_ports[i] =
+        nrmac->radio_config.spatial_stream_index[beam.idx * srs_num_rx_ant_ports + i];
+  }
+
   uint16_t *vrb_map_UL = &nrmac->common_channels[CC_id].vrb_map_UL[beam.idx][buffer_index * MAX_BWP_SIZE];
   uint16_t num = 1 << srs_pdu->num_symbols; // 0,1,2 means 1,2,4 symbols, see 222.10.04 table 3-105
-  const uint8_t l0 = NR_SYMBOLS_PER_SLOT - 1 - srs_pdu->time_start_position;
+  const uint8_t l0 = srs_pdu->time_start_position;
   uint16_t mask = SL_to_bitmap(l0, num);
   DevAssert(mask != 0);
   for (int i = 0; i < srs_pdu->bwp_size; ++i) {
@@ -498,16 +510,16 @@ static void nr_fill_nfapi_srs(gNB_MAC_INST *nrmac,
 
 /*******************************************************************
 *
-* NAME :         nr_schedule_srs
+* NAME :         nr_schedule_periodic_srs
 *
 * PARAMETERS :   module id
-*                frame number for possible SRS reception
+*                current frame number
+*                current slot number
 *
-* DESCRIPTION :  It informs the PHY layer that has an SRS to receive.
-*                Only for periodic scheduling yet.
+* DESCRIPTION :  It schedules SRS in a future slot and calls function to prepare FAPI PDU for L1
 *
 *********************************************************************/
-void nr_schedule_srs(int module_id, frame_t frame, int slot)
+void nr_schedule_periodic_srs(int module_id, frame_t frame, int slot)
  {
   gNB_MAC_INST *nrmac = RC.nrmac[module_id];
 
@@ -568,6 +580,46 @@ void nr_schedule_srs(int module_id, frame_t frame, int slot)
         continue;
       LOG_D(NR_MAC," %d.%d Scheduling SRS reception for %d.%d\n", frame, slot, sched_frame, sched_slot);
       nr_fill_nfapi_srs(nrmac, CC_id, UE, sched_frame, sched_slot, srs_resource_set, srs_resource);
+    }
+  }
+}
+
+void nr_schedule_aperiodic_srs(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, int sched_frame, int sched_slot, int k2, int sched_srs)
+{
+  NR_UE_UL_BWP_t *current_BWP = &UE->current_UL_BWP;
+  NR_SRS_Config_t *srs_config = current_BWP->srs_Config;
+  AssertFatal(srs_config, "Attempting to schedule aperiodic SRS without SRS configuration\n");
+
+  for(int rs = 0; rs < srs_config->srs_ResourceSetToAddModList->list.count; rs++) {
+    // Find periodic resource set
+    NR_SRS_ResourceSet_t *srs_resource_set = srs_config->srs_ResourceSetToAddModList->list.array[rs];
+    if (srs_resource_set->resourceType.present != NR_SRS_ResourceSet__resourceType_PR_aperiodic)
+      continue;
+
+    // We aim to schedule SRS in the same slot as PUSCH
+    struct NR_SRS_ResourceSet__resourceType__aperiodic *aperiodic = srs_resource_set->resourceType.choice.aperiodic;
+    if (aperiodic->aperiodicSRS_ResourceTrigger != sched_srs)
+      continue;
+    int offset = aperiodic->slotOffset ? *aperiodic->slotOffset : 0;
+    if (offset != k2) {
+      LOG_E(NR_MAC, "Aperiodic SRS offset %d for trigger state %d doesn't match with K2 %d\n", offset, sched_srs, k2);
+      return;
+    }
+
+    // Find the corresponding srs resource
+    for (int r1 = 0; r1 < srs_resource_set->srs_ResourceIdList->list.count; r1++) {
+      for (int r2 = 0; r2 < srs_config->srs_ResourceToAddModList->list.count; r2++) {
+        if ((*srs_resource_set->srs_ResourceIdList->list.array[r1] ==
+             srs_config->srs_ResourceToAddModList->list.array[r2]->srs_ResourceId) &&
+            (srs_config->srs_ResourceToAddModList->list.array[r2]->resourceType.present ==
+             NR_SRS_Resource__resourceType_PR_aperiodic)) {
+          NR_SRS_Resource_t *srs_resource = srs_config->srs_ResourceToAddModList->list.array[r2];
+          LOG_D(NR_MAC,"Scheduling aperiodic SRS reception for %d.%d\n", sched_frame, sched_slot);
+          nr_fill_nfapi_srs(nrmac, 0, UE, sched_frame, sched_slot, srs_resource_set, srs_resource);
+          nr_timer_start(&UE->UE_sched_ctrl.aperiodic_srs_trigger);  // restart the timer, we are scheduling aperiodic SRS
+          return;
+        }
+      }
     }
   }
 }

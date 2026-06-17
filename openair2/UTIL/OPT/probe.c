@@ -269,7 +269,7 @@ int opt_create_listener_socket(char *ip_address, uint16_t port) {
  * 5. run ./oasim -a -P0 -n 30 | grep OPT
  */
 /* Add framing header to MAC PDU and send. */
-static void SendFrame(guint8 radioType, ws_trace_t *t)
+static void SendFrame(ws_trace_t *t)
 {
   unsigned char frameBuffer[16000];
   unsigned int frameOffset;
@@ -281,7 +281,7 @@ static void SendFrame(guint8 radioType, ws_trace_t *t)
   frameOffset += strlen(MAC_LTE_START_STRING);
   /******************************************************************************/
   /* Now write out fixed fields (the mandatory elements of struct mac_lte_info) */
-  frameBuffer[frameOffset++] = radioType;
+  frameBuffer[frameOffset++] = t->type;
   frameBuffer[frameOffset++] = t->direction;
   frameBuffer[frameOffset++] = t->rntiType;
   /*************************************/
@@ -393,7 +393,7 @@ static void SendFrame(guint8 radioType, ws_trace_t *t)
   }
 }
 
-static void SendFrameNR(guint8 radioType, ws_trace_t *t)
+static void SendFrameNR(ws_trace_t *t)
 {
   unsigned char frameBuffer[32000];
   unsigned int frameOffset;
@@ -405,7 +405,7 @@ static void SendFrameNR(guint8 radioType, ws_trace_t *t)
   frameOffset += strlen(MAC_NR_START_STRING);
   /******************************************************************************/
   /* Now write out fixed fields (the mandatory elements of struct mac_lte_info) */
-  frameBuffer[frameOffset++] = radioType;
+  frameBuffer[frameOffset++] = t->type;
   frameBuffer[frameOffset++] = t->direction;
   frameBuffer[frameOffset++] = t->rntiType;
   /*************************************/
@@ -466,14 +466,12 @@ static void SendFrameNR(guint8 radioType, ws_trace_t *t)
 }
 
 #include <common/ran_context.h>
-extern RAN_CONTEXT_t RC;
 #include <openair1/PHY/phy_extern_ue.h>
 #include "openair1/PHY/defs_eNB.h"
 /* Remote serveraddress (where Wireshark is running) */
 
 void trace_pdu_implementation(ws_trace_t *t)
 {
-  int radioType = FDD_RADIO;
   LOG_D(OPT,
         "sending packet to wireshark: direction=%s, size: %d, ueid: %d, rnti: %x, frame/sf: %d.%d\n",
         t->direction ? "DL" : "UL",
@@ -482,18 +480,6 @@ void trace_pdu_implementation(ws_trace_t *t)
         t->rnti,
         t->sysFrame,
         t->subframe);
-
-  if (t->nr) {
-    radioType = TDD_RADIO;
-  } else {
-    if (RC.eNB && RC.eNB[0][0] != NULL)
-      radioType = RC.eNB[0][0]->frame_parms.frame_type == FDD ? FDD_RADIO : TDD_RADIO;
-    else if (PHY_vars_UE_g && PHY_vars_UE_g[0][0] != NULL)
-      radioType = PHY_vars_UE_g[0][0]->frame_parms.frame_type == FDD ? FDD_RADIO : TDD_RADIO;
-    else {
-      LOG_E(OPT, "not a 4G eNB neither a 4G UE!!! \n");
-    }
-  }
 
   switch (opt_type) {
     case OPT_WIRESHARK:
@@ -515,9 +501,9 @@ void trace_pdu_implementation(ws_trace_t *t)
   }
 
   if (t->nr)
-    SendFrameNR(radioType, t);
+    SendFrameNR(t);
   else
-    SendFrame(radioType, t);
+    SendFrame(t);
 }
 
 /*---------------------------------------------------*/

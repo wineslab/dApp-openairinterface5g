@@ -15,25 +15,19 @@ This header file must be included */
 #ifndef OPT_H_
 #define OPT_H_
 
-#ifndef sys_include
-  #define sys_include
-  #include <sys/types.h>
-  #include <sys/socket.h>
-  #include <netinet/in.h>
-  #include <arpa/inet.h>
-  #include <netdb.h>
-  #include <stdio.h>
-  #include <stdlib.h>
-  #include <string.h>
-  #include <errno.h>
-  #include <unistd.h>
-  #include <time.h>
-#endif
-#ifndef project_include
-  #define project_include
-  #include "common/utils/LOG/log.h"
-  #include "PHY/defs_RU.h"
-#endif
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#include "common/utils/LOG/log.h"
+#include "PHY/defs_RU.h"
 
 #define PACKET_MAC_LTE_DEFAULT_UDP_PORT (9999)
 
@@ -97,6 +91,7 @@ typedef enum radio_type_e {
 extern int opt_enabled;
 typedef struct {
   bool nr;
+  int type;
   int direction;
   uint8_t *pdu_buffer;
   unsigned int pdu_buffer_size;

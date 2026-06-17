@@ -59,6 +59,7 @@ services:
                 - gpu
     network_mode: host
     shm_size: 4096m
+    tty: true
     volumes:
       - ../../conf_files/gnb-vnf.sa.band78.273prb.aerial.ul-heavy.conf:/opt/oai-gnb/etc/gnb.conf
     container_name: oai-gnb-aerial

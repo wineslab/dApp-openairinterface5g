@@ -18,6 +18,7 @@
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
+  UNUSED(assert);
   printf("detected error at %s:%d:%s: %s\n", file, line, function, s);
   abort();
 }
@@ -50,12 +51,83 @@ static void e1ap_msg_free(E1AP_E1AP_PDU_t *pdu)
   ASN_STRUCT_FREE(asn_DEF_E1AP_E1AP_PDU, pdu);
 }
 
-static UP_TL_information_t create_up_tl_info(void)
+static UP_TL_information_t create_up_tl_info(uint32_t te_id)
 {
   UP_TL_information_t tl_info;
   tl_info.tlAddress = htonl(0xC0A90001); // 192.169.0.1
-  tl_info.teId = 0x2345;
+  tl_info.teId = te_id;
   return tl_info;
+}
+
+/** Bearer Context Setup Request */
+static pdu_session_to_setup_t pdu_session_to_setup_req_template(long session_id, long session_type)
+{
+  pdu_session_to_setup_t p = {0};
+  p.sessionId = session_id;
+  p.sessionType = session_type;
+  p.numDRB2Setup = 1;
+  p.DRBnGRanList[0].numCellGroups = 1;
+  p.DRBnGRanList[0].cellGroupList[0] = MCG;
+  p.DRBnGRanList[0].numQosFlow2Setup = 1;
+  return p;
+}
+
+/** Bearer Context Setup Response */
+static pdu_session_setup_t pdu_session_setup_resp_template(long pdu_id)
+{
+  pdu_session_setup_t p = {0};
+  p.id = pdu_id;
+  p.numDRBSetup = 1;
+  p.numDRBFailed = 0;
+  p.DRBnGRanList[0].numUpParam = 1;
+  p.DRBnGRanList[0].numQosFlowSetup = 1;
+  p.DRBnGRanList[0].UpParamList[0].cell_group_id = MCG;
+  return p;
+}
+
+/** DRB To Modify */
+static DRB_nGRAN_to_mod_t drb_to_mod_template(long drb_id)
+{
+  DRB_nGRAN_to_mod_t d = {0};
+  d.id = drb_id;
+  d.numDlUpParam = 1;
+  d.DlUpParamList[0].cell_group_id = MCG;
+  d.DlUpParamList[0].tl_info = create_up_tl_info(0x2345);
+  d.pdcp_config = malloc_or_fail(sizeof(*d.pdcp_config));
+  d.pdcp_status = malloc_or_fail(sizeof(*d.pdcp_status));
+  d.numQosFlowsMod = 1;
+  return d;
+}
+
+/** DRB To Setup */
+static DRB_nGRAN_to_setup_t drb_to_setup_template(long drb_id)
+{
+  DRB_nGRAN_to_setup_t d = {0};
+  d.id = drb_id;
+  d.numCellGroups = 1;
+  d.cellGroupList[0] = MCG;
+  d.numQosFlow2Setup = 1;
+  d.drb_inactivity_timer = malloc_or_fail(sizeof(*d.drb_inactivity_timer));
+  return d;
+}
+
+/** PDU session to setup in Bearer Context Modification Request */
+static pdu_session_to_setup_t pdu_session_to_setup_modreq_template(long session_id)
+{
+  pdu_session_to_setup_t p = {0};
+  p.sessionId = session_id;
+  p.numDRB2Setup = 1;
+  return p;
+}
+
+/** PDU session to remove */
+static pdu_session_to_remove_t pdu_session_rem_template(long session_id)
+{
+  pdu_session_to_remove_t r = {0};
+  r.sessionId = session_id;
+  r.cause.type = E1AP_CAUSE_NOTHING;
+  r.cause.value = 0;
+  return r;
 }
 
 /**
@@ -86,6 +158,14 @@ static void test_bearer_context_setup_request(void)
     .qos_params.qos_characteristics.non_dynamic.fiveqi = 9,
   };
 
+  qos_flow_to_setup_t qos2 = {
+      .qfi = 2,
+      .qos_params.alloc_reten_priority.preemption_capability = E1AP_Pre_emptionCapability_may_trigger_pre_emption,
+      .qos_params.alloc_reten_priority.preemption_vulnerability = E1AP_Pre_emptionVulnerability_pre_emptable,
+      .qos_params.alloc_reten_priority.priority_level = E1AP_PriorityLevel_lowest,
+      .qos_params.qos_characteristics.non_dynamic.fiveqi = 8,
+  };
+
   security_indication_t security = {
     .confidentialityProtectionIndication = E1AP_ConfidentialityProtectionIndication_required,
     .integrityProtectionIndication = E1AP_IntegrityProtectionIndication_required,
@@ -98,27 +178,35 @@ static void test_bearer_context_setup_request(void)
       .secInfo.cipheringAlgorithm = 0x01,
       .secInfo.integrityProtectionAlgorithm = 0x01,
       .ueDlAggMaxBitRate = 1000000000,
+      .anl = activity_notification_level_pdu_session,
       .bearerContextStatus = 0,
       .servingPLMNid.mcc = 001,
       .servingPLMNid.mnc = 01,
       .servingPLMNid.mnc_digit_length = 0x02,
-      .numPDUSessions = 1,
-      .pduSession[0].sessionId = 1,
-      .pduSession[0].sessionType = E1AP_PDU_Session_Type_ipv4,
-      .pduSession[0].nssai.sd = 0x01,
-      .pduSession[0].nssai.sst = 0x01,
-      .pduSession[0].securityIndication = security,
-      .pduSession[0].numDRB2Setup = 1,
-      .pduSession[0].UP_TL_information = create_up_tl_info(),
-      .pduSession[0].DRBnGRanList[0].id = 1,
-      .pduSession[0].DRBnGRanList[0].sdap_config = sdap,
-      .pduSession[0].DRBnGRanList[0].pdcp_config = pdcp,
-      .pduSession[0].DRBnGRanList[0].id = 1,
-      .pduSession[0].DRBnGRanList[0].numCellGroups = 1,
-      .pduSession[0].DRBnGRanList[0].cellGroupList[0] = MCG,
-      .pduSession[0].DRBnGRanList[0].numQosFlow2Setup = 1,
-      .pduSession[0].DRBnGRanList[0].qosFlows[0] = qos,
+      .numPDUSessions = 2,
+      .pduSession = NULL,
   };
+  // Allocate and initialize pduSession array (two sessions to exercise list encode/decode)
+  orig.pduSession = calloc_or_fail(2, sizeof(*orig.pduSession));
+  orig.pduSession[0] = pdu_session_to_setup_req_template(1, E1AP_PDU_Session_Type_ipv4);
+  orig.pduSession[0].nssai.sd = 0x01;
+  orig.pduSession[0].nssai.sst = 0x01;
+  orig.pduSession[0].securityIndication = security;
+  orig.pduSession[0].UP_TL_information = create_up_tl_info(0x2345);
+  orig.pduSession[0].DRBnGRanList[0].id = 1;
+  orig.pduSession[0].DRBnGRanList[0].sdap_config = sdap;
+  orig.pduSession[0].DRBnGRanList[0].pdcp_config = pdcp;
+  orig.pduSession[0].DRBnGRanList[0].qosFlows[0] = qos;
+
+  orig.pduSession[1] = pdu_session_to_setup_req_template(2, E1AP_PDU_Session_Type_ipv6);
+  orig.pduSession[1].nssai.sd = 0x02;
+  orig.pduSession[1].nssai.sst = 0x02;
+  orig.pduSession[1].securityIndication = security;
+  orig.pduSession[1].UP_TL_information = create_up_tl_info(0x4321);
+  orig.pduSession[1].DRBnGRanList[0].id = 2;
+  orig.pduSession[1].DRBnGRanList[0].sdap_config = sdap;
+  orig.pduSession[1].DRBnGRanList[0].pdcp_config = pdcp;
+  orig.pduSession[1].DRBnGRanList[0].qosFlows[0] = qos2;
   memset(orig.secInfo.encryptionKey, 0xAB, sizeof(orig.secInfo.encryptionKey));
   memset(orig.secInfo.integrityProtectionKey, 0xCD, sizeof(orig.secInfo.integrityProtectionKey));
   // E1AP encode the original message
@@ -156,18 +244,20 @@ static void test_bearer_context_setup_response(void)
   e1ap_bearer_setup_resp_t orig = {
       .gNB_cu_cp_ue_id = 1234,
       .gNB_cu_up_ue_id = 5678,
-      .numPDUSessions = 1,
-      .pduSession[0].id = 1,
-      .pduSession[0].tl_info = create_up_tl_info(),
-      .pduSession[0].numDRBSetup = 1,
-      .pduSession[0].numDRBFailed = 0,
-      .pduSession[0].DRBnGRanList[0].id = 1,
-      .pduSession[0].DRBnGRanList[0].numUpParam = 1,
-      .pduSession[0].DRBnGRanList[0].numQosFlowSetup = 1,
-      .pduSession[0].DRBnGRanList[0].qosFlows[0].qfi = 1,
-      .pduSession[0].DRBnGRanList[0].UpParamList[0].cell_group_id = MCG,
-      .pduSession[0].DRBnGRanList[0].UpParamList[0].tl_info = create_up_tl_info(),
+      .numPDUSessions = 2,
+      .pduSession = calloc_or_fail(2, sizeof(*orig.pduSession)),
   };
+  orig.pduSession[0] = pdu_session_setup_resp_template(1);
+  orig.pduSession[0].tl_info = create_up_tl_info(0x2345);
+  orig.pduSession[0].DRBnGRanList[0].id = 1;
+  orig.pduSession[0].DRBnGRanList[0].qosFlows[0].qfi = 1;
+  orig.pduSession[0].DRBnGRanList[0].UpParamList[0].tl_info = create_up_tl_info(0x2345);
+
+  orig.pduSession[1] = pdu_session_setup_resp_template(2);
+  orig.pduSession[1].tl_info = create_up_tl_info(0x9999);
+  orig.pduSession[1].DRBnGRanList[0].id = 2;
+  orig.pduSession[1].DRBnGRanList[0].qosFlows[0].qfi = 2;
+  orig.pduSession[1].DRBnGRanList[0].UpParamList[0].tl_info = orig.pduSession[1].tl_info;
   // E1AP encode the original message
   E1AP_E1AP_PDU_t *enc = encode_E1_bearer_context_setup_response(&orig);
 
@@ -407,9 +497,7 @@ static void test_e1_cuup_setup_failure(void)
   e1ap_setup_fail_t orig = {.transac_id = 42,
                             .cause.type = E1AP_CAUSE_RADIO_NETWORK,
                             .cause.value = E1AP_RADIO_CAUSE_NORMAL_RELEASE,
-                            .time_to_wait = malloc_or_fail(sizeof(long)),
                             .crit_diag = malloc_or_fail(sizeof(criticality_diagnostics_t))};
-  *orig.time_to_wait = 5;
   orig.crit_diag->procedure_code = malloc_or_fail(sizeof(*orig.crit_diag->procedure_code));
   *orig.crit_diag->procedure_code = 99;
   orig.crit_diag->triggering_msg = malloc_or_fail(sizeof(*orig.crit_diag->triggering_msg));
@@ -477,56 +565,61 @@ static void test_bearer_context_modification_request(void)
       .ul_count.sn = 78,
   };
 
-  DRB_nGRAN_to_mod_t drb_to_mod = {
-    .numDlUpParam = 1,
-    .DlUpParamList[0].cell_group_id = MCG,
-    .DlUpParamList[0].tl_info = create_up_tl_info(),
-    .id = 1,
-    .pdcp_config = malloc_or_fail(sizeof(*drb_to_mod.pdcp_config)),
-    .pdcp_sn_status_requested = true,
-    .pdcp_status = malloc_or_fail(sizeof(*drb_to_mod.pdcp_status)),
-    .numQosFlowsMod = 1,
-    .qosFlows[0] = dummy_qos_flows,
-  };
+  DRB_nGRAN_to_mod_t drb_to_mod = drb_to_mod_template(1);
+  drb_to_mod.pdcp_sn_status_requested = true;
   *drb_to_mod.pdcp_config = dummy_pdcp_config;
   *drb_to_mod.pdcp_status = dummy_pdcp_status;
+  drb_to_mod.qosFlows[0] = dummy_qos_flows;
+
+  DRB_nGRAN_to_mod_t drb_to_mod_2 = drb_to_mod_template(2);
+  *drb_to_mod_2.pdcp_config = dummy_pdcp_config;
+  *drb_to_mod_2.pdcp_status = dummy_pdcp_status;
+  drb_to_mod_2.qosFlows[0] = dummy_qos_flows;
 
   pdu_session_to_mod_t pdusession_mod_item = {
       .sessionId = 1,
       .numDRB2Modify = 1,
       .DRBnGRanModList[0] = drb_to_mod,
       .n_drb_to_remove = 1,
-      .drbs_to_remove[0].id = 2,
+      .drbs_to_remove[0].id = 3,
   };
 
-  DRB_nGRAN_to_setup_t drb_to_setup = {
-      .id = 1,
-      .cellGroupList[0] = MCG,
-      .numCellGroups = 1,
-      .pdcp_config = dummy_pdcp_config,
-      .sdap_config = dummy_sdap_config,
-      .numQosFlow2Setup = 1,
-      .qosFlows[0] = dummy_qos_flows,
-      .drb_inactivity_timer = malloc_or_fail(sizeof(*drb_to_setup.drb_inactivity_timer)),
+  pdu_session_to_mod_t pdusession_mod_item_2 = {
+      .sessionId = 2,
+      .numDRB2Modify = 1,
+      .DRBnGRanModList[0] = drb_to_mod_2,
+      .n_drb_to_remove = 1,
+      .drbs_to_remove[0].id = 4,
   };
+
+  DRB_nGRAN_to_setup_t drb_to_setup = drb_to_setup_template(1);
+  drb_to_setup.pdcp_config = dummy_pdcp_config;
+  drb_to_setup.sdap_config = dummy_sdap_config;
+  drb_to_setup.qosFlows[0] = dummy_qos_flows;
   *drb_to_setup.drb_inactivity_timer = 500;
 
-  pdu_session_to_setup_t pdusession_setup_item = {
-      .numDRB2Setup = 1,
-      .nssai.sd = 0x01,
-      .nssai.sst = 0x01,
-      .UP_TL_information.teId = 0x12345,
-      .UP_TL_information.tlAddress = 167772161,
-      .DRBnGRanList[0] = drb_to_setup,
-  };
+  DRB_nGRAN_to_setup_t drb_to_setup_2 = drb_to_setup_template(2);
+  drb_to_setup_2.pdcp_config = dummy_pdcp_config;
+  drb_to_setup_2.sdap_config = dummy_sdap_config;
+  drb_to_setup_2.qosFlows[0] = dummy_qos_flows;
+  *drb_to_setup_2.drb_inactivity_timer = 600;
 
-  // PDU Session to Remove
-  pdu_session_to_remove_t pdu_session_to_remove = {
-      .sessionId = 2,
-      // Note: cause is optional extension IE, currently encoding/decoding only handles sessionId
-      .cause.type = 0,
-      .cause.value = 0,
-  };
+  pdu_session_to_setup_t pdusession_setup_item = pdu_session_to_setup_modreq_template(1);
+  pdusession_setup_item.nssai.sd = 0x01;
+  pdusession_setup_item.nssai.sst = 0x01;
+  pdusession_setup_item.UP_TL_information.teId = 0x12345;
+  pdusession_setup_item.UP_TL_information.tlAddress = 167772161;
+  pdusession_setup_item.DRBnGRanList[0] = drb_to_setup;
+
+  pdu_session_to_setup_t pdusession_setup_item_2 = pdu_session_to_setup_modreq_template(2);
+  pdusession_setup_item_2.nssai.sd = 0x02;
+  pdusession_setup_item_2.nssai.sst = 0x02;
+  pdusession_setup_item_2.UP_TL_information.teId = 0x22345;
+  pdusession_setup_item_2.UP_TL_information.tlAddress = 167772162;
+  pdusession_setup_item_2.DRBnGRanList[0] = drb_to_setup_2;
+
+  pdu_session_to_remove_t pdu_session_to_remove = pdu_session_rem_template(5);
+  pdu_session_to_remove_t pdu_session_to_remove_2 = pdu_session_rem_template(6);
 
   // Initialize the Bearer Context Modification Request
   e1ap_bearer_mod_req_t orig = {
@@ -534,13 +627,19 @@ static void test_bearer_context_modification_request(void)
       .gNB_cu_up_ue_id = 0x5678,
       .bearerContextStatus = malloc_or_fail(sizeof(*orig.bearerContextStatus)),
       .inactivityTimer = malloc_or_fail(sizeof(*orig.inactivityTimer)),
-      .numPDUSessions = 1,
-      .pduSession[0] = pdusession_setup_item,
-      .numPDUSessionsMod = 1,
-      .pduSessionMod[0] = pdusession_mod_item,
-      .numPDUSessionsRem = 1,
-      .pduSessionRem[0] = pdu_session_to_remove,
+      .numPDUSessions = 2,
+      .numPDUSessionsMod = 2,
+      .numPDUSessionsRem = 2,
   };
+  orig.pduSession = calloc_or_fail(2, sizeof(*orig.pduSession));
+  orig.pduSession[0] = pdusession_setup_item;
+  orig.pduSession[1] = pdusession_setup_item_2;
+  orig.pduSessionMod = calloc_or_fail(2, sizeof(*orig.pduSessionMod));
+  orig.pduSessionMod[0] = pdusession_mod_item;
+  orig.pduSessionMod[1] = pdusession_mod_item_2;
+  orig.pduSessionRem = calloc_or_fail(2, sizeof(*orig.pduSessionRem));
+  orig.pduSessionRem[0] = pdu_session_to_remove;
+  orig.pduSessionRem[1] = pdu_session_to_remove_2;
   *orig.bearerContextStatus = BEARER_SUSPEND;
   *orig.inactivityTimer = 1000;
 
@@ -588,6 +687,41 @@ const DRB_nGRAN_failed_t dummy_drb_failed = {
     .cause.type = E1AP_CAUSE_RADIO_NETWORK,
 };
 
+static DRB_nGRAN_modified_t drb_modified_template(long drb_id)
+{
+  DRB_nGRAN_modified_t d = {0};
+  d.id = drb_id;
+  d.numQosFlowSetup = 1;
+  d.pdcp_status = malloc_or_fail(sizeof(e1_pdcp_status_info_t));
+  return d;
+}
+
+static DRB_nGRAN_setup_t drb_setup_in_mod_resp_template(long drb_id)
+{
+  return (DRB_nGRAN_setup_t){
+      .id = drb_id,
+      .numUpParam = 1,
+      .UpParamList[0].cell_group_id = MCG,
+      .UpParamList[0].tl_info = create_up_tl_info(0x2345),
+      .numQosFlowSetup = 1,
+      .numQosFlowFailed = 1,
+  };
+}
+
+static pdu_session_modif_t pdu_session_modif_template(long pdu_session_id)
+{
+  pdu_session_modif_t p = {0};
+  p.id = pdu_session_id;
+  p.integrityProtectionIndication = malloc_or_fail(sizeof(e1ap_indication_t));
+  p.confidentialityProtectionIndication = malloc_or_fail(sizeof(e1ap_indication_t));
+  p.ng_DL_UP_TL_info = malloc_or_fail(sizeof(UP_TL_information_t));
+  p.numDRBModified = 1;
+  p.numDRBFailedToMod = 1;
+  p.numDRBSetup = 1;
+  p.numDRBFailed = 1;
+  return p;
+}
+
 /**
  * @brief Test E1AP Bearer Context Modification Response encoding/decoding
  */
@@ -600,54 +734,52 @@ static void test_bearer_context_modification_response(void)
       .ul_count.sn = 3,
   };
 
-  // DRB Modified List
-  DRB_nGRAN_modified_t drb_mod = {
-      .id = 1,
-      .numQosFlowSetup = 1,
-      .qosFlows[0].qfi = 1,
-      .pdcp_status = malloc_or_fail(sizeof(*drb_mod.pdcp_status)),
-  };
+  DRB_nGRAN_modified_t drb_mod = drb_modified_template(1);
+  drb_mod.qosFlows[0].qfi = 1;
   *drb_mod.pdcp_status = dummy_pdcp_status;
 
-  // DRB Setup List
-  DRB_nGRAN_setup_t setup = {
-      .id = 1,
-      .numUpParam = 1,
-      .UpParamList[0].cell_group_id = MCG,
-      .UpParamList[0].tl_info = create_up_tl_info(),
-      .numQosFlowSetup = 1,
-      .qosFlows[0].qfi = 1,
-      .numQosFlowFailed = 1,
-      .qosFlowsFailed[0].qfi = 9,
-      .qosFlowsFailed[0].cause = dummy_cause,
-  };
+  DRB_nGRAN_modified_t drb_mod_2 = drb_modified_template(2);
+  drb_mod_2.qosFlows[0].qfi = 2;
+  *drb_mod_2.pdcp_status = dummy_pdcp_status;
 
-  // PDU Session Modified
-  pdu_session_modif_t pdu_mod = {
-      .id = 1,
-      .integrityProtectionIndication = malloc_or_fail(sizeof(*pdu_mod.integrityProtectionIndication)),
-      .confidentialityProtectionIndication = malloc_or_fail(sizeof(*pdu_mod.confidentialityProtectionIndication)),
-      .ng_DL_UP_TL_info = malloc_or_fail(sizeof(*pdu_mod.ng_DL_UP_TL_info)),
-      .numDRBModified = 1,
-      .DRBnGRanModList[0] = drb_mod,
-      .numDRBFailedToMod = 1,
-      .DRBnGRanFailedModList[0] = dummy_drb_failed,
-      .numDRBSetup = 1,
-      .DRBnGRanSetupList[0] = setup,
-      .numDRBFailed = 1,
-      .DRBnGRanFailedList[0] = dummy_drb_failed,
-  };
+  DRB_nGRAN_setup_t setup = drb_setup_in_mod_resp_template(1);
+  setup.qosFlows[0].qfi = 1;
+  setup.qosFlowsFailed[0].qfi = 9;
+  setup.qosFlowsFailed[0].cause = dummy_cause;
+
+  DRB_nGRAN_setup_t setup_2 = drb_setup_in_mod_resp_template(2);
+  setup_2.qosFlows[0].qfi = 2;
+  setup_2.qosFlowsFailed[0].qfi = 8;
+  setup_2.qosFlowsFailed[0].cause = dummy_cause;
+
+  pdu_session_modif_t pdu_mod = pdu_session_modif_template(1);
+  pdu_mod.DRBnGRanModList[0] = drb_mod;
+  pdu_mod.DRBnGRanFailedModList[0] = dummy_drb_failed;
+  pdu_mod.DRBnGRanSetupList[0] = setup;
+  pdu_mod.DRBnGRanFailedList[0] = dummy_drb_failed;
+
+  pdu_session_modif_t pdu_mod_2 = pdu_session_modif_template(2);
+  pdu_mod_2.DRBnGRanModList[0] = drb_mod_2;
+  pdu_mod_2.DRBnGRanFailedModList[0] = dummy_drb_failed;
+  pdu_mod_2.DRBnGRanSetupList[0] = setup_2;
+  pdu_mod_2.DRBnGRanFailedList[0] = dummy_drb_failed;
 
   *pdu_mod.integrityProtectionIndication = SECURITY_PREFERRED;
   *pdu_mod.confidentialityProtectionIndication = SECURITY_PREFERRED;
-  *pdu_mod.ng_DL_UP_TL_info = create_up_tl_info();
+  *pdu_mod.ng_DL_UP_TL_info = create_up_tl_info(0x2345);
+
+  *pdu_mod_2.integrityProtectionIndication = SECURITY_REQUIRED;
+  *pdu_mod_2.confidentialityProtectionIndication = SECURITY_PREFERRED;
+  *pdu_mod_2.ng_DL_UP_TL_info = create_up_tl_info(0x7777);
 
   e1ap_bearer_modif_resp_t orig = {
       .gNB_cu_cp_ue_id = 0x1234,
       .gNB_cu_up_ue_id = 0x5678,
-      .numPDUSessionsMod = 1,
-      .pduSessionMod[0] = pdu_mod,
+      .numPDUSessionsMod = 2,
+      .pduSessionMod = calloc_or_fail(2, sizeof(*orig.pduSessionMod)),
   };
+  orig.pduSessionMod[0] = pdu_mod;
+  orig.pduSessionMod[1] = pdu_mod_2;
 
   // Encode the original message
   E1AP_E1AP_PDU_t *enc = encode_E1_bearer_context_mod_response(&orig);
@@ -721,8 +853,9 @@ static void test_bearer_context_modification_response_fail(void)
       .gNB_cu_cp_ue_id = 0xABCD,
       .gNB_cu_up_ue_id = 0xDCBA,
       .numPDUSessionsMod = 1,
-      .pduSessionMod[0] = pdu_mod,
+      .pduSessionMod = calloc_or_fail(1, sizeof(*orig.pduSessionMod)),
   };
+  orig.pduSessionMod[0] = pdu_mod;
 
   // Encode the original message
   E1AP_E1AP_PDU_t *enc = encode_E1_bearer_context_mod_response(&orig);

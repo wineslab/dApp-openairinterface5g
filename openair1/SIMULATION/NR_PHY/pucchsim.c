@@ -31,6 +31,7 @@
 #include "executables/nr-uesoftmodem.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "executables/softmodem-common.h"
+#include "openair1/PHY/phy_vars_nr_ue.h"
 
 THREAD_STRUCT thread_struct;
 PHY_VARS_gNB *gNB;
@@ -42,7 +43,6 @@ uint64_t downlink_frequency[MAX_NUM_CCs][4];
 double cpuf;
 uint8_t const nr_rv_round_map[4] = {0, 2, 3, 1};
 // needed for some functions
-PHY_VARS_NR_UE *PHY_vars_UE_g[1][1] = {{NULL}};
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
 {
@@ -85,6 +85,9 @@ int main(int argc, char **argv)
   stop = false;
   __attribute__((unused)) struct sigaction oldaction;
   sigaction(SIGINT, &sigint_action, &oldaction);
+  PHY_VARS_NR_UE *uedata_ptr = calloc(1, sizeof(PHY_VARS_NR_UE));
+  PHY_VARS_NR_UE **uedata_ptrr = &uedata_ptr;
+  nrPHY_vars_UE_g = &uedata_ptrr;
 
   int i;
   double SNR, snr0 = -2.0, snr1 = 2.0;
@@ -418,7 +421,7 @@ int main(int argc, char **argv)
   /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
    * so we need to allocate that memory as well. */
   for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[0][i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
+    gNB->common_vars.rxdataF[i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
 
   double fs, txbw, rxbw;
   get_samplerate_and_bw(mu, N_RB_DL, frame_parms->threequarter_fs, &fs, &txbw, &rxbw);
@@ -529,12 +532,12 @@ int main(int argc, char **argv)
 
   pucch_GroupHopping_t PUCCH_GroupHopping = pucch_tx_pdu.group_hop_flag + (pucch_tx_pdu.sequence_hop_flag << 1);
   double tx_level_fp = 100.0;
-  c16_t **rxdataF = gNB->common_vars.rxdataF[0];
+  c16_t **rxdataF = gNB->common_vars.rxdataF;
   for (SNR = snr0; SNR <= snr1 && !stop; SNR += 1) {
     ack_nack_errors = 0;
     sr_errors = 0;
     n_errors = 0;
-    c16_t **txdataF = gNB->common_vars.txdataF[0];
+    c16_t **txdataF = gNB->common_vars.txdataF;
     for (trial = 0; trial < n_trials && !stop; trial++) {
       for (int aatx = 0; aatx < 1; aatx++)
         bzero(txdataF[aatx], frame_parms->ofdm_symbol_size * sizeof(int));
@@ -666,9 +669,9 @@ int main(int argc, char **argv)
                10 * log10((double)txlev * UE->frame_parms.ofdm_symbol_size / 12),
                gNB->measurements.n0_subband_power_tot_dB[startingPRB],
                gNB->measurements.n0_subband_power_avg_dB);
+      nfapi_nr_pucch_pdu_t pucch_pdu = {.param_v4.numSpatialStreamIndices = n_rx};
       if (format == 0) {
         nfapi_nr_uci_pucch_pdu_format_0_1_t uci_pdu;
-        nfapi_nr_pucch_pdu_t pucch_pdu;
         gNB->phy_stats[0].rnti = 0x1234;
         pucch_pdu.rnti = 0x1234;
         pucch_pdu.subcarrier_spacing = 1;
@@ -712,7 +715,6 @@ int main(int argc, char **argv)
         }
       } else if (format == 1) {
         nfapi_nr_uci_pucch_pdu_format_0_1_t uci_pdu;
-        nfapi_nr_pucch_pdu_t pucch_pdu;
         gNB->phy_stats[0].rnti = 0x1234;
         pucch_pdu.rnti = 0x1234;
         pucch_pdu.subcarrier_spacing = 1;
@@ -751,7 +753,6 @@ int main(int argc, char **argv)
 
       } else if (format == 2) {
         nfapi_nr_uci_pucch_pdu_format_2_3_4_t uci_pdu = {0};
-        nfapi_nr_pucch_pdu_t pucch_pdu = {0};
         pucch_pdu.rnti = 0x1234;
         pucch_pdu.subcarrier_spacing = 1;
         pucch_pdu.group_hop_flag = PUCCH_GroupHopping & 1;
@@ -817,10 +818,8 @@ int main(int argc, char **argv)
     free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list[i].max_num_of_symbol_per_slot_list);
   free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list);
 
-  for (int j = 0; j < gNB->common_vars.num_beams_period; j++) {
-    for (i = 0; i < n_rx; i++)
-      free(gNB->common_vars.rxdataF[j][i]);
-  }
+  for (i = 0; i < n_rx; i++)
+    free(gNB->common_vars.rxdataF[i]);
   phy_free_nr_gNB(gNB);
   free(RC.gNB[0]);
   free(RC.gNB);
@@ -840,7 +839,7 @@ int main(int argc, char **argv)
   free(s_im);
   free(r_re);
   free(r_im);
-
+  free(uedata_ptr);
   if (output_fd)
     fclose(output_fd);
   if (input_fd)

@@ -111,14 +111,6 @@ uint8_t get_dl_nrOfLayers(const NR_UE_sched_ctrl_t *sched_ctrl, const nr_dci_for
     return sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.ri + 1;
 }
 
-int get_ul_nrOfLayers(const NR_UE_sched_ctrl_t *sched_ctrl, const nr_dci_format_t dci_format)
-{
-  if(dci_format == NR_UL_DCI_FORMAT_0_0)
-    return 1;
-  else
-    return sched_ctrl->srs_feedback.ul_ri + 1;
-}
-
 // Table 5.2.2.2.1-3 and Table 5.2.2.2.1-4 in 38.214
 void get_k1_k2_indices(const int layers, const int N1, const int N2, const int i13, int *k1, int *k2)
 {
@@ -702,6 +694,34 @@ bool nr_find_nb_rb(uint16_t Qm,
   return *tbs >= bytes && *nb_rb <= nb_rb_max;
 }
 
+// Find the largest contiguous block of free RBs in the VRB map.
+// Returns the block size, or 0 if no free RB is found. out_start is set to the
+// first RB of the largest block when the returned size is nonzero.
+int find_largest_free_block(const uint16_t *vrb_map, uint16_t slbitmap, int bwp_start, int bwp_size, int *out_start)
+{
+  int best_start = 0, best_len = 0;
+  int cur_start = 0, cur_len = 0;
+  for (int rb = 0; rb < bwp_size; rb++) {
+    if (!(vrb_map[rb + bwp_start] & slbitmap)) {
+      if (cur_len == 0)
+        cur_start = rb;
+      cur_len++;
+    } else {
+      if (cur_len > best_len) {
+        best_start = cur_start;
+        best_len = cur_len;
+      }
+      cur_len = 0;
+    }
+  }
+  if (cur_len > best_len) {
+    best_start = cur_start;
+    best_len = cur_len;
+  }
+  *out_start = best_start;
+  return best_len;
+}
+
 bool get_rb_alloc(int rbSize_min,
                   int rbSize_max,
                   int bwpStart,
@@ -811,47 +831,51 @@ NR_pusch_dmrs_t get_ul_dmrs_params(const NR_ServingCellConfigCommon_t *scc,
 
 #define BLER_UPDATE_FRAME 10
 #define BLER_FILTER 0.9f
-int get_mcs_from_bler(const NR_bler_options_t *bler_options,
-                      const NR_mac_dir_stats_t *stats,
-                      NR_bler_stats_t *bler_stats,
-                      int max_mcs,
-                      frame_t frame)
+int nr_adapt_mcs_from_bler(int current_mcs, int min_mcs, int max_mcs, float bler, float bler_lower, float bler_upper, int num_sched)
+{
+  int mcs = current_mcs;
+  if (bler < bler_lower && mcs < max_mcs && num_sched > 3)
+    mcs++;
+  else if (bler > bler_upper || num_sched <= 3) // above threshold or no activity
+    mcs--;
+  return max(min_mcs, min(mcs, max_mcs));
+}
+
+bool update_bler_stats(const NR_bler_options_t *bler_options,
+                       const NR_mac_dir_stats_t *stats,
+                       NR_bler_stats_t *bler_stats,
+                       frame_t frame)
 {
   int diff = frame - bler_stats->last_frame;
   if (diff < 0) // wrap around
     diff += 1024;
 
-  max_mcs = min(max_mcs, bler_options->max_mcs);
-  const uint8_t old_mcs = min(bler_stats->mcs, max_mcs);
   if (diff < BLER_UPDATE_FRAME)
-    return old_mcs; // no update
+    return false;
 
-  // last update is longer than x frames ago
   const int num_dl_sched = (int)(stats->rounds[0] - bler_stats->rounds[0]);
   const int num_dl_retx = (int)(stats->rounds[1] - bler_stats->rounds[1]);
-  const float bler_window = num_dl_sched > 0 ? (float) num_dl_retx / num_dl_sched : bler_stats->bler;
+  const float bler_window = num_dl_sched > 0 ? (float)num_dl_retx / num_dl_sched : bler_stats->bler;
   bler_stats->bler = BLER_FILTER * bler_stats->bler + (1 - BLER_FILTER) * bler_window;
 
-  int new_mcs = old_mcs;
-  if (bler_stats->bler < bler_options->lower && old_mcs < max_mcs && num_dl_sched > 3)
-    new_mcs += 1;
-  else if (bler_stats->bler > bler_options->upper || num_dl_sched <= 3) // above threshold or no activity
-    new_mcs -= 1;
-  // else we are within threshold boundaries
-
-  new_mcs = max(new_mcs, bler_options->min_mcs);
   bler_stats->last_frame = frame;
-  bler_stats->mcs = new_mcs;
+  bler_stats->last_num_sched = num_dl_sched;
   memcpy(bler_stats->rounds, stats->rounds, sizeof(stats->rounds));
-  LOG_D(MAC, "frame %4d MCS %d -> %d (num_dl_sched %d, num_dl_retx %d, BLER wnd %.3f avg %.6f)\n",
-        frame, old_mcs, new_mcs, num_dl_sched, num_dl_retx, bler_window, bler_stats->bler);
-  return new_mcs;
+  LOG_D(MAC,
+        "frame %4d BLER update (num_sched %d, num_retx %d, BLER wnd %.3f avg %.6f)\n",
+        frame,
+        num_dl_sched,
+        num_dl_retx,
+        bler_window,
+        bler_stats->bler);
+  return true;
 }
 
 nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu,
                                        const NR_ServingCellConfigCommon_t *scc,
                                        const NR_SearchSpace_t *ss,
                                        const NR_ControlResourceSet_t *coreset,
+                                       const uint16_t *spatial_stream_idx,
                                        int aggregation_level,
                                        int cce_index,
                                        int beam_index,
@@ -878,8 +902,18 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
   dci_pdu->powerControlOffsetSS = 1;
   dci_pdu->precodingAndBeamforming.num_prgs = 1;
   dci_pdu->precodingAndBeamforming.prg_size = N_rb;
-  dci_pdu->precodingAndBeamforming.dig_bf_interfaces = 1;
   dci_pdu->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
+
+  // Spatial stream indexing for MU-MIMO
+  const int num_ant_ports_per_dci = 1; // Only one stream per DCI for now
+  pdcch_pdu->param_v4.numSpatialStreams = (pdcch_pdu->numDlDci + 1 /*count this dci too*/) * num_ant_ports_per_dci;
+  for (uint_fast16_t i = 0; i < num_ant_ports_per_dci; i++) {
+    pdcch_pdu->param_v4.dci_spatialStreamIndices[pdcch_pdu->numDlDci * num_ant_ports_per_dci + i].dci_index = pdcch_pdu->numDlDci;
+    // Map the spatial stream index from the corresponding PDSCH signal
+    pdcch_pdu->param_v4.dci_spatialStreamIndices[pdcch_pdu->numDlDci * num_ant_ports_per_dci + i].spatial_stream_index =
+        spatial_stream_idx[i];
+  }
+  dci_pdu->precodingAndBeamforming.dig_bf_interfaces = num_ant_ports_per_dci;
   dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
   return dci_pdu;
 }
@@ -1348,7 +1382,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         uint16_t O_ack,
                         uint8_t O_sr,
                         int r_pucch,
-                        nr_beam_mode_t beam_mode)
+                        nr_beam_mode_t beam_mode,
+                        uint16_t ant_port_idx)
 {
   NR_PUCCH_Resource_t *pucchres;
   NR_PUCCH_FormatConfig_t *pucchfmt;
@@ -1562,6 +1597,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
   pucch_pdu->beamforming.dig_bf_interface = 1;
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
   pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+  pucch_pdu->param_v4.numSpatialStreamIndices = 1;
+  pucch_pdu->param_v4.spatialStreamIndices[0] = ant_port_idx;
 }
 
 void set_r_pucch_parms(int rsetindex,
@@ -1586,6 +1623,7 @@ static void prepare_dci_X1(const NR_UE_ServingCell_Info_t *servingCellInfo,
                            const NR_UE_DL_BWP_t *current_BWP,
                            const NR_ControlResourceSet_t *coreset,
                            dci_pdu_rel15_t *dci_pdu_rel15,
+                           int srs_request,
                            nr_dci_format_t format)
 {
   const NR_PDSCH_Config_t *pdsch_Config = current_BWP ? current_BWP->pdsch_Config : NULL;
@@ -1601,7 +1639,7 @@ static void prepare_dci_X1(const NR_UE_ServingCell_Info_t *servingCellInfo,
       if (servingCellInfo->supplementaryUplink != NULL)
         AssertFatal(1==0,"Supplementary Uplink currently not supported\n");
       // SRS request
-      dci_pdu_rel15->srs_request.val = 0;
+      dci_pdu_rel15->srs_request.val = srs_request;
       dci_pdu_rel15->ulsch_indicator = 1;
       break;
     case NR_DL_DCI_FORMAT_1_1:
@@ -1662,6 +1700,7 @@ void fill_dci_pdu_rel15(const NR_UE_ServingCell_Info_t *servingCellInfo,
                         dci_pdu_rel15_t *dci_pdu_rel15,
                         int dci_format,
                         int rnti_type,
+                        int srs_request,
                         NR_SearchSpace_t *ss,
                         NR_ControlResourceSet_t *coreset,
                         long pdsch_HARQ_ACK_Codebook,
@@ -1730,7 +1769,7 @@ void fill_dci_pdu_rel15(const NR_UE_ServingCell_Info_t *servingCellInfo,
   pdcch_dci_pdu->PayloadSizeBits = dci_size;
   AssertFatal(dci_size <= 64, "DCI sizes above 64 bits not yet supported");
   if (dci_format == NR_DL_DCI_FORMAT_1_1 || dci_format == NR_UL_DCI_FORMAT_0_1)
-    prepare_dci_X1(servingCellInfo, current_DL_BWP, coreset, dci_pdu_rel15, dci_format);
+    prepare_dci_X1(servingCellInfo, current_DL_BWP, coreset, dci_pdu_rel15, srs_request, dci_format);
 
   /// Payload generation
   switch (dci_format) {
@@ -2758,7 +2797,7 @@ void configure_UE_BWP(gNB_MAC_INST *nr_mac,
     UL_BWP->configuredGrantConfig = ubwpd->configuredGrantConfig ? ubwpd->configuredGrantConfig->choice.setup : NULL;
     UL_BWP->pusch_Config = ubwpd->pusch_Config->choice.setup;
     UL_BWP->pucch_Config = ubwpd->pucch_Config->choice.setup;
-    UL_BWP->srs_Config = ubwpd->srs_Config->choice.setup;
+    UL_BWP->srs_Config = ubwpd->srs_Config ? ubwpd->srs_Config->choice.setup : NULL;
   } else {
     DL_BWP->bwp_id = 0;
     UL_BWP->bwp_id = 0;
@@ -2989,6 +3028,8 @@ static void init_bler_stats(const NR_bler_options_t *bler_options, NR_bler_stats
 NR_UE_info_t *get_new_nr_ue_inst(uid_allocator_t *uia, rnti_t rnti, NR_CellGroupConfig_t *CellGroup, const nr_mac_config_t *config)
 {
   NR_UE_info_t *UE = calloc_or_fail(1, sizeof(NR_UE_info_t));
+  for (int i = 0; i < MAX_NUM_OF_SSB; i++)
+    UE->beam_rsrp[i] = UE->beam_sinr[i] = INT16_MIN;
   UE->uid = uid_linear_allocator_new(uia);
   UE->rnti = rnti;
   UE->CellGroup = CellGroup;
@@ -3076,6 +3117,10 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE)
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
   sched_ctrl->dl_max_mcs = 28; /* do not limit MCS for individual UEs */
   sched_ctrl->pdcch_cl_adjust = 0;
+  if (nr_mac->radio_config.do_SRS == APERIODIC_SRS) {
+    nr_timer_setup(&sched_ctrl->aperiodic_srs_trigger, 160, 1); // for now aperiodic hardcoded every 160 slots
+    nr_timer_start(&sched_ctrl->aperiodic_srs_trigger);
+  }
   reset_srs_stats(UE);
 
   // Initialize bler_stats
@@ -3239,35 +3284,62 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
 
     NR_CSI_MeasConfig_t *csi_measconfig = UE->sc_info.csi_MeasConfig;
 
-    // looking for the correct CSI-RS resource in current BWP
-    NR_NZP_CSI_RS_ResourceSetId_t *nzp = NULL;
-    for (int csi_list=0; csi_list<csi_measconfig->csi_ResourceConfigToAddModList->list.count; csi_list++) {
+    // Need all three lists in order to resolve CSI-ResourceConfig -> ResourceSet -> Resource.
+    if (csi_measconfig->nzp_CSI_RS_ResourceToAddModList == NULL || csi_measconfig->nzp_CSI_RS_ResourceSetToAddModList == NULL
+        || csi_measconfig->csi_ResourceConfigToAddModList == NULL)
+      continue;
+
+    nfapi_nr_dl_tti_request_body_t *dl_req = &DL_req->dl_tti_request_body;
+
+    for (int csi_list = 0; csi_list < csi_measconfig->csi_ResourceConfigToAddModList->list.count; csi_list++) {
       NR_CSI_ResourceConfig_t *csires = csi_measconfig->csi_ResourceConfigToAddModList->list.array[csi_list];
-      if (csires->bwp_Id > 1)
+
+      // Transmitting CSI-RS only for current BWP
+      if (csires->bwp_Id > 1) {
         LOG_E(NR_MAC, "Invalid CSI resource BWP ID %ld, we only configure BWP up to 1\n", csires->bwp_Id);
-      else if (csires->csi_RS_ResourceSetList.present == NR_CSI_ResourceConfig__csi_RS_ResourceSetList_PR_nzp_CSI_RS_SSB &&
-               csires->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList) {
-        nzp = csires->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList->list.array[0];
+        continue;
       }
-    }
+      if (csires->csi_RS_ResourceSetList.present != NR_CSI_ResourceConfig__csi_RS_ResourceSetList_PR_nzp_CSI_RS_SSB
+          || !csires->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList)
+        continue;
 
-    if (csi_measconfig->nzp_CSI_RS_ResourceToAddModList != NULL && nzp != NULL) {
+      // Iterate over every NZP-CSI-RS-ResourceSet ID referenced by this CSI-ResourceConfig
+      for (int s = 0; s < csires->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList->list.count; s++) {
+        NR_NZP_CSI_RS_ResourceSetId_t target_set_id =
+            *csires->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList->list.array[s];
 
-      NR_NZP_CSI_RS_Resource_t *nzpcsi;
-      int period, offset;
-
-      nfapi_nr_dl_tti_request_body_t *dl_req = &DL_req->dl_tti_request_body;
-
-      for (int id = 0; id < csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.count; id++){
-        nzpcsi = csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.array[id];
-        // transmitting CSI-RS only for current BWP
-        if (nzpcsi->nzp_CSI_RS_ResourceId != *nzp)
+        // Resolve the ResourceSet by its set ID
+        NR_NZP_CSI_RS_ResourceSet_t *nzp_set = NULL;
+        for (int k = 0; k < csi_measconfig->nzp_CSI_RS_ResourceSetToAddModList->list.count; k++) {
+          if (csi_measconfig->nzp_CSI_RS_ResourceSetToAddModList->list.array[k]->nzp_CSI_ResourceSetId == target_set_id) {
+            nzp_set = csi_measconfig->nzp_CSI_RS_ResourceSetToAddModList->list.array[k];
+            break;
+          }
+        }
+        if (!nzp_set)
           continue;
 
-        NR_CSI_RS_ResourceMapping_t  resourceMapping = nzpcsi->resourceMapping;
-        csi_period_offset(NULL, nzpcsi->periodicityAndOffset, &period, &offset);
+        // For each NZP-CSI-RS-Resource ID listed inside this ResourceSet, resolve the matching NZP-CSI-RS-Resource and
+        // try to schedule its transmission in this slot.
+        for (int r = 0; r < nzp_set->nzp_CSI_RS_Resources.list.count; r++) {
+          NR_NZP_CSI_RS_ResourceId_t target_res_id = *nzp_set->nzp_CSI_RS_Resources.list.array[r];
 
-        if((frame * n_slots_frame + slot - offset) % period == 0) {
+          NR_NZP_CSI_RS_Resource_t *nzpcsi = NULL;
+          for (int q = 0; q < csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.count; q++) {
+            if (csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.array[q]->nzp_CSI_RS_ResourceId == target_res_id) {
+              nzpcsi = csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.array[q];
+              break;
+            }
+          }
+          if (!nzpcsi)
+            continue;
+
+          NR_CSI_RS_ResourceMapping_t resourceMapping = nzpcsi->resourceMapping;
+          int period, offset;
+          csi_period_offset(NULL, nzpcsi->periodicityAndOffset, &period, &offset);
+
+          if ((frame * n_slots_frame + slot - offset) % period != 0)
+            continue;
 
           LOG_D(NR_MAC,"Scheduling CSI-RS in frame %d slot %d Resource ID %ld\n", frame, slot, nzpcsi->nzp_CSI_RS_ResourceId);
           NR_beam_alloc_t beam_csi = beam_allocation_procedure(&gNB_mac->beam_info, frame, slot, UE->UE_beam_index, n_slots_frame);
@@ -3286,7 +3358,16 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
           csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
           const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
+          // TODO: set correctly dig_bf_interface_list when ports of same CDM group is used and PMI if used.
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+          const nr_pdsch_AntennaPorts_t *p = &gNB_mac->radio_config.pdsch_AntennaPorts;
+          const uint16_t num_max_csi_ports = p->N1 * p->N2 * p->XP;
+          /* The L1 does not take number of spatial streams parameter into
+          consideration because the CSI-RS generation function uses information
+          in mapping params to determine number of ports and maps to contiguous
+          logical ports. Hence we set only the first port for CSI-RS here. */
+          csirs_pdu_rel15->param_v4.numSpatialStreamIndices = 1;
+          csirs_pdu_rel15->param_v4.spatialStreamIndices[0] = beam_csi.idx * num_max_csi_ports;
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
@@ -3644,6 +3725,7 @@ void nr_mac_update_timers(module_id_t module_id)
       nr_timer_stop(&sched_ctrl->tci_beam_switch);
       beam_switching_procedure(mac, UE, sched_ctrl->UE_mac_ce_ctrl.tci_state_ind.tciStateId);
     }
+    nr_timer_tick(&sched_ctrl->aperiodic_srs_trigger);
   }
 }
 

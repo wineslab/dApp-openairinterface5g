@@ -8,7 +8,6 @@
 
 #include "xnap_gNB_interface_management.h"
 #include "xnap_lib_common.h"
-#include "xnap_lib_includes.h"
 
 /**
  * @brief XnAP Setup Request encoding

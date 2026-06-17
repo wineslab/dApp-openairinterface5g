@@ -13,4 +13,5 @@ if(ENABLE_TESTS)
            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/nr-cuup-functional-test.sh ${CMAKE_CURRENT_SOURCE_DIR}/load-test.conf
            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
   )
+  set_tests_properties(nr_cuup_functional_test PROPERTIES ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}")
 endif()

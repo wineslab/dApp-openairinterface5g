@@ -25,6 +25,7 @@ typedef struct {
   int want_model_id; /* 0..4, or <0 for no preference */
   float want_ds_ns; /* nonnegative, or <0 for no preference */
   float want_speed_mps; /* nonnegative, or <0 for no preference */
+  float want_aoa_deg; /* degrees; TDL-D/E only; 0.0 = broadside default */
 } cirdb_select_opts_t;
 
 /* Initialize provider and publish snapshot 0 through channel_desc_out. */

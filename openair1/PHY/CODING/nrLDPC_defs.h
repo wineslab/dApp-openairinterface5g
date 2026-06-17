@@ -39,9 +39,11 @@ typedef struct {
   unsigned int first_seg; // optim8segmulti
   unsigned char gen_code; // orig
   time_stats_t *tinput;
+  time_stats_t *tinput_memcpy;
   time_stats_t *tprep;
   time_stats_t *tparity;
   time_stats_t *toutput;
+  time_stats_t *tconcat;
   /// Size in bits of the code segments
   uint32_t K;
   /// Number of lifting sizes to fit the payload
@@ -71,7 +73,7 @@ typedef int32_t(LDPC_shutdownfunc_t)(void);
 */
 typedef int32_t(LDPC_decoderfunc_t)(t_nrLDPC_dec_params *p_decParams,
                                     int8_t *p_llr,
-                                    int8_t *p_out,
+                                    uint8_t *p_out,
                                     t_nrLDPC_time_stats *time_stats,
                                     decode_abort_t *ab);
 typedef int32_t(LDPC_encoderfunc_t)(uint8_t **, uint8_t *, encoder_implemparams_t *);

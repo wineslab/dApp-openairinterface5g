@@ -15,9 +15,6 @@
 #include "openair2/RRC/NR/nr_rrc_defs.h"
 #include <openair3/ocp-gtpu/gtp_itf.h>
 
-//Fixme: Uniq dirty DU instance, by global var, datamodel need better management
-instance_t CUuniqInstance=0;
-
 static instance_t cu_task_create_gtpu_instance(eth_params_t *IPaddrs) {
   openAddr_t tmp= {0};
   strncpy(tmp.originHost, IPaddrs->my_addr, sizeof(tmp.originHost)-1);
@@ -101,9 +98,6 @@ void *F1AP_CU_task(void *arg)
   } else {
     LOG_I(F1AP, "In F1AP connection, don't start GTP-U, as we have also E1AP\n");
   }
-  // Fixme: fully inconsistent instances management
-  // dirty global var is a bad fix
-  CUuniqInstance=getCxt(instance)->gtpInst;
 
   while (1) {
     itti_receive_msg(TASK_CU_F1, &received_msg);

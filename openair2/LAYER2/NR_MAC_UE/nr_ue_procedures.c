@@ -435,6 +435,7 @@ int8_t nr_ue_process_dci_freq_dom_resource_assignment(nfapi_nr_ue_pusch_pdu_t *p
 static void set_harq_status(NR_UE_MAC_INST_t *mac,
                             uint8_t pucch_id,
                             uint8_t harq_id,
+                            int cw_id,
                             int8_t delta_pucch,
                             uint16_t data_toul_fb,
                             uint8_t dai,
@@ -443,7 +444,7 @@ static void set_harq_status(NR_UE_MAC_INST_t *mac,
                             frame_t frame,
                             int slot)
 {
-  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[harq_id];
+  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[harq_id][cw_id];
   current_harq->active = true;
   current_harq->ack_received = false;
   current_harq->pucch_resource_indicator = pucch_id;
@@ -469,13 +470,15 @@ static void set_harq_status(NR_UE_MAC_INST_t *mac,
     // looking for other active HARQ processes with feedback in the same frame/slot
     if (i == harq_id)
       continue;
-    NR_UE_DL_HARQ_STATUS_t *harq = &mac->dl_harq_info[i];
-    if (harq->active &&
-        harq->ul_frame == current_harq->ul_frame &&
-        harq->ul_slot == current_harq->ul_slot) {
-      // highest_dai is the largest cumulative dai in the set of HARQ allocations for a given slot
-      if (harq->dai_cumul > highest_dai)
-        highest_dai = harq->dai_cumul - 1;
+    for (int c = 0; c < 2; c++) {
+      NR_UE_DL_HARQ_STATUS_t *harq = &mac->dl_harq_info[i][c];
+      if (harq->active &&
+          harq->ul_frame == current_harq->ul_frame &&
+          harq->ul_slot == current_harq->ul_slot) {
+        // highest_dai is the largest cumulative dai in the set of HARQ allocations for a given slot
+        if (harq->dai_cumul > highest_dai)
+          highest_dai = harq->dai_cumul - 1;
+      }
     }
   }
 
@@ -667,6 +670,99 @@ static int nr_ue_process_dci_ul_01(NR_UE_MAC_INST_t *mac,
   return ret;
 }
 
+// Table 7.3.1.3-1 of 38.211
+static int get_nl_for_cw(int Nl, int cw_idx)
+{
+  AssertFatal(Nl >= 0 && Nl <= 8, "Invalid number of layers %d\n", Nl);
+  if (Nl < 5)
+    return Nl;
+  else {
+    if (cw_idx == 0)
+      return Nl / 2;
+    else
+      return Nl / 2 + Nl % 2;
+  }
+}
+
+static bool get_cw_info(NR_UE_DL_HARQ_STATUS_t *current_harq,
+                        fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_pdu,
+                        uint8_t pdu_type,
+                        fapi_nr_dl_cw_info_t *cw_info,
+                        int number_rbs,
+                        int nb_re_dmrs,
+                        int nb_rb_oh,
+                        int rv,
+                        int mcs,
+                        int ndi,
+                        int cw_idx)
+{
+  uint8_t Nl = 0;
+  for (int i = 0; i < 12; i++) { // max 12 ports
+    if ((dlsch_pdu->dmrs_ports >> i) & 0x01)
+      Nl += 1;
+  }
+
+  cw_info->mcs = mcs;
+  /* RV for transport block */
+  cw_info->rv = rv;
+  /* NDI for transport block*/
+  if (pdu_type == FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH || pdu_type == FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH || ndi != current_harq->last_ndi) {
+    // new data
+    cw_info->new_data_indicator = true;
+    current_harq->R = 0;
+    current_harq->TBS = 0;
+  } else
+    cw_info->new_data_indicator = false;
+  if (pdu_type != FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH && pdu_type != FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH) {
+    current_harq->last_ndi = ndi;
+    if (cw_info->new_data_indicator)
+      current_harq->round = 0;
+    else
+      current_harq->round++;
+  }
+  cw_info->qamModOrder = nr_get_Qm_dl(cw_info->mcs, dlsch_pdu->mcs_table);
+  if (cw_info->qamModOrder == 0) {
+    LOG_W(NR_MAC, "Invalid code rate or Mod order, likely due to unexpected DL DCI\n");
+    return false;
+  }
+
+  cw_info->Nl = get_nl_for_cw(Nl, cw_idx);
+  int R = nr_get_code_rate_dl(cw_info->mcs, dlsch_pdu->mcs_table);
+  if (R > 0) {
+    cw_info->targetCodeRate = R;
+    cw_info->TBS = nr_compute_tbs(cw_info->qamModOrder,
+                                  R,
+                                  number_rbs,
+                                  dlsch_pdu->number_symbols,
+                                  nb_re_dmrs * get_num_dmrs(dlsch_pdu->dlDmrsSymbPos),
+                                  nb_rb_oh,
+                                  0,
+                                  cw_info->Nl);
+    // storing for possible retransmissions
+    if (!cw_info->new_data_indicator && current_harq->TBS != cw_info->TBS) {
+      LOG_W(NR_MAC,
+            "NDI indicates re-transmission but computed TBS %d doesn't match with what previously stored %d\n",
+            cw_info->TBS,
+            current_harq->TBS);
+      cw_info->new_data_indicator = true; // treated as new data
+    }
+    current_harq->R = cw_info->targetCodeRate;
+    current_harq->TBS = cw_info->TBS;
+  }
+  else {
+    cw_info->targetCodeRate = current_harq->R;
+    cw_info->TBS = current_harq->TBS;
+  }
+
+  if (cw_info->TBS == 0) {
+    LOG_E(MAC, "Invalid TBS = 0. Probably caused by missed detection of DCI\n");
+    return false;
+  }
+  cw_info->ldpcBaseGraph = get_BG(cw_info->TBS, cw_info->targetCodeRate);
+
+  return true;
+}
+
 static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
                                    frame_t frame,
                                    int slot,
@@ -789,7 +885,7 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
                                                      0,
                                                      dci->frequency_domain_assignment)
       < 0) {
-    LOG_W(MAC, "[%d.%d] Invalid frequency_domain_assignment. Possibly due to false DCI. Ignoring DCI!\n", frame, slot);
+    LOG_W(NR_MAC, "[%d.%d] Invalid frequency_domain_assignment. Possibly due to false DCI. Ignoring DCI!\n", frame, slot);
     return -1;
   }
 
@@ -873,76 +969,28 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
                                              NULL, // SPS not implemented,
                                              false, // as above
                                              NULL); // MCS-C-RNTI not implemented
-  /* MCS */
-  dlsch_pdu->mcs = dci->mcs;
 
-  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[dci->harq_pid.val];
-  /* NDI (only if CRC scrambled by C-RNTI or CS-RNTI or new-RNTI or TC-RNTI)*/
-  if (dl_conf_req->pdu_type == FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH ||
-      dl_conf_req->pdu_type == FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH ||
-      dci->ndi != current_harq->last_ndi) {
-    // new data
-    dlsch_pdu->new_data_indicator = true;
-    current_harq->R = 0;
-    current_harq->TBS = 0;
-  } else {
-    dlsch_pdu->new_data_indicator = false;
-  }
-
-  if (dl_conf_req->pdu_type != FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH &&
-      dl_conf_req->pdu_type != FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH) {
-    current_harq->last_ndi = dci->ndi;
-  }
-
-  dlsch_pdu->qamModOrder = nr_get_Qm_dl(dlsch_pdu->mcs, dlsch_pdu->mcs_table);
-  if (dlsch_pdu->qamModOrder == 0) {
-    LOG_W(MAC, "Invalid code rate or Mod order, likely due to unexpected DL DCI.\n");
+  int nb_re_dmrs = ((dlsch_pdu->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
+  int nb_rb_oh = mac->sc_info.xOverhead_PDSCH ? nb_rb_oh = 6 * (1 + *mac->sc_info.xOverhead_PDSCH) : 0;
+  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[dci->harq_pid.val][0];
+  if (!get_cw_info(current_harq,
+                   dlsch_pdu,
+                   dl_conf_req->pdu_type,
+                   &dlsch_pdu->cw_info[0],
+                   dlsch_pdu->number_rbs,
+                   nb_re_dmrs,
+                   nb_rb_oh,
+                   dci->rv,
+                   dci->mcs,
+                   dci->ndi,
+                   0))
     return -1;
-  }
 
-  int R = nr_get_code_rate_dl(dlsch_pdu->mcs, dlsch_pdu->mcs_table);
-  if (R > 0) {
-    dlsch_pdu->targetCodeRate = R;
-    int nb_rb_oh;
-    if (mac->sc_info.xOverhead_PDSCH)
-      nb_rb_oh = 6 * (1 + *mac->sc_info.xOverhead_PDSCH);
-    else
-      nb_rb_oh = 0;
-    int nb_re_dmrs = ((dlsch_pdu->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
-    dlsch_pdu->TBS = nr_compute_tbs(dlsch_pdu->qamModOrder,
-                                    R,
-                                    dlsch_pdu->number_rbs,
-                                    dlsch_pdu->number_symbols,
-                                    nb_re_dmrs * get_num_dmrs(dlsch_pdu->dlDmrsSymbPos),
-                                    nb_rb_oh,
-                                    0,
-                                    1);
-    // storing for possible retransmissions
-    current_harq->R = dlsch_pdu->targetCodeRate;
-    if (!dlsch_pdu->new_data_indicator && current_harq->TBS != dlsch_pdu->TBS) {
-      LOG_W(NR_MAC, "NDI indicates re-transmission but computed TBS %d doesn't match with what previously stored %d\n",
-            dlsch_pdu->TBS, current_harq->TBS);
-      dlsch_pdu->new_data_indicator = true; // treated as new data
-    }
-    current_harq->TBS = dlsch_pdu->TBS;
-  }
-  else {
-    dlsch_pdu->targetCodeRate = current_harq->R;
-    dlsch_pdu->TBS = current_harq->TBS;
-  }
-
-  dlsch_pdu->ldpcBaseGraph = get_BG(dlsch_pdu->TBS, dlsch_pdu->targetCodeRate);
-
-  if (dlsch_pdu->TBS == 0) {
-    LOG_E(MAC, "Invalid TBS = 0. Probably caused by missed detection of DCI\n");
-    return -1;
-  }
+  dlsch_pdu->n_codewords = 1;
 
   int bw_tbslbrm = current_DL_BWP ? mac->sc_info.dl_bw_tbslbrm : dlsch_pdu->BWPSize;
   dlsch_pdu->tbslbrm = nr_compute_tbslbrm(dlsch_pdu->mcs_table, bw_tbslbrm, 1);
 
-  /* RV (only if CRC scrambled by C-RNTI or CS-RNTI or new-RNTI or TC-RNTI)*/
-  dlsch_pdu->rv = dci->rv;
   /* HARQ_PROCESS_NUMBER (only if CRC scrambled by C-RNTI or CS-RNTI or new-RNTI or TC-RNTI)*/
   dlsch_pdu->harq_process_nbr = dci->harq_pid.val;
   /* TB_SCALING (only if CRC scrambled by P-RNTI or RA-RNTI) */
@@ -1009,6 +1057,7 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
       set_harq_status(mac,
                       dci->pucch_resource_indicator,
                       dci->harq_pid.val,
+                      0,
                       tpc[dci->tpc],
                       feedback_ti,
                       dci->dai[0].val,
@@ -1017,10 +1066,6 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
                       frame,
                       slot);
     }
-    if (dlsch_pdu->new_data_indicator)
-      current_harq->round = 0;
-    else
-      current_harq->round++;
     if (current_harq->round < sizeofArray(mac->stats.dl.rounds))
       mac->stats.dl.rounds[current_harq->round]++;
   }
@@ -1043,9 +1088,9 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
         "(nr_ue_procedures.c) vrb_to_prb_mapping=%d \n>>> mcs=%d\n>>> ndi=%d\n>>> rv=%d\n>>> harq_process_nbr=%d\n>>> dai=%d\n>>> "
         "scaling_factor_S=%f\n>>> tpc_pucch=%d\n>>> pucch_res_ind=%d\n>>> pdsch_to_harq_feedback_time_ind=%d\n",
         dlsch_pdu->vrb_to_prb_mapping,
-        dlsch_pdu->mcs,
-        dlsch_pdu->new_data_indicator,
-        dlsch_pdu->rv,
+        dlsch_pdu->cw_info[0].mcs,
+        dlsch_pdu->cw_info[0].new_data_indicator,
+        dlsch_pdu->cw_info[0].rv,
         dlsch_pdu->harq_process_nbr,
         dci->dai[0].val,
         dlsch_pdu->scaling_factor_S,
@@ -1055,7 +1100,7 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
 
   dlsch_pdu->k1_feedback = feedback_ti;
 
-  LOG_D(MAC, "(nr_ue_procedures.c) pdu_type=%d\n\n", dl_conf_req->pdu_type);
+  LOG_D(MAC, "(nr_ue_procedures.c) pdu_type=%d\n", dl_conf_req->pdu_type);
 
   // the prepared dci is valid, we add it in the list
   dl_config->number_pdus++;
@@ -1213,9 +1258,6 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
 
   dlsch_pdu->dmrsConfigType = dl_dmrs_config->dmrs_Type == NULL ? NFAPI_NR_DMRS_TYPE1 : NFAPI_NR_DMRS_TYPE2;
 
-  /* TODO: fix number of DM-RS CDM groups without data according to subclause 5.1.6.2 of 3GPP TS 38.214,
-           using tables 7.3.1.2.2-1, 7.3.1.2.2-2, 7.3.1.2.2-3, 7.3.1.2.2-4 of 3GPP TS 38.212 */
-  dlsch_pdu->n_dmrs_cdm_groups = 1;
   /* VRB_TO_PRB_MAPPING */
   if ((pdsch_Config->resourceAllocation == 1) && (pdsch_Config->vrb_ToPRB_Interleaver != NULL))
     dlsch_pdu->vrb_to_prb_mapping =
@@ -1226,28 +1268,7 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   dlsch_pdu->rate_matching_ind = dci->rate_matching_indicator.val;
   /* ZP_CSI_RS_TRIGGER */
   dlsch_pdu->zp_csi_rs_trigger = dci->zp_csi_rs_trigger.val;
-  /* MCS (for transport block 1)*/
-  dlsch_pdu->mcs = dci->mcs;
-  /* NDI (for transport block 1)*/
-  NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[dci->harq_pid.val];
-  if (dci->ndi != current_harq->last_ndi) {
-    // new data
-    dlsch_pdu->new_data_indicator = true;
-    current_harq->R = 0;
-    current_harq->TBS = 0;
-  }
-  else {
-    dlsch_pdu->new_data_indicator = false;
-  }
-  current_harq->last_ndi = dci->ndi;
-  /* RV (for transport block 1)*/
-  dlsch_pdu->rv = dci->rv;
-  /* MCS (for transport block 2)*/
-  dlsch_pdu->tb2_mcs = dci->mcs2.val;
-  /* NDI (for transport block 2)*/
-  dlsch_pdu->tb2_new_data_indicator = dci->ndi2.val;
-  /* RV (for transport block 2)*/
-  dlsch_pdu->tb2_rv = dci->rv2.val;
+
   /* HARQ_PROCESS_NUMBER */
   dlsch_pdu->harq_process_nbr = dci->harq_pid.val;
   /* TPC_PUCCH */
@@ -1276,13 +1297,32 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
     return -1;
   }
 
+  NR_UE_ServingCell_Info_t *sc_info = &mac->sc_info;
+  int nb_rb_oh;
+  if (sc_info->xOverhead_PDSCH)
+    nb_rb_oh = 6 * (1 + *sc_info->xOverhead_PDSCH);
+  else
+    nb_rb_oh = 0;
+
   /* ANTENNA_PORTS */
-  uint8_t n_codewords = 1; // FIXME!!!
   long *max_length = dl_dmrs_config->maxLength;
   long *dmrs_type = dl_dmrs_config->dmrs_Type;
 
+  // In case the higher layer parameter maxNrofCodeWordsScheduledByDCI indicates that two codeword transmission is enabled,
+  // then one of the two transport blocks is disabled by DCI format 1_1
+  // if IMCS = 26 and if rvid = 1 for the corresponding transport block
+  bool cw0 = true;
+  bool cw1 = true;
+  if (pdsch_Config->maxNrofCodeWordsScheduledByDCI
+      && *pdsch_Config->maxNrofCodeWordsScheduledByDCI == NR_PDSCH_Config__maxNrofCodeWordsScheduledByDCI_n2) {
+    cw0 = dci->rv != 1 || dci->mcs != 26;
+    cw1 = dci->rv2.val != 1 || dci->mcs2.val != 26;
+  } else
+    cw1 = false;
+
   dlsch_pdu->n_front_load_symb = 1; // default value
-  set_antenna_port_parameters(dlsch_pdu, n_codewords, max_length, dmrs_type, dci->antenna_ports.val);
+  set_antenna_port_parameters(dlsch_pdu, cw0 + cw1, max_length, dmrs_type, dci->antenna_ports.val);
+  int nb_re_dmrs = ((dmrs_type == NULL) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
 
   /* dmrs symbol positions*/
   dlsch_pdu->dlDmrsSymbPos = fill_dmrs_mask(pdsch_Config,
@@ -1293,6 +1333,105 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
                                             tda_info.mapping_type,
                                             dlsch_pdu->n_front_load_symb);
 
+  dlsch_pdu->mcs_table = get_dlsch_mcs_table(NR_DL_DCI_FORMAT_1_1,
+                                             rnti_type,
+                                             dci_ind->ss_type,
+                                             pdsch_Config ? pdsch_Config->mcs_Table : NULL,
+                                             NULL, // SPS not implemented,
+                                             false, // as above
+                                             NULL); // MCS-C-RNTI not implemented
+
+  /* PDSCH_TO_HARQ_FEEDBACK_TIME_IND */
+  // according to TS 38.213 Table 9.2.3-1
+  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing);
+  uint16_t feedback_ti = 0;
+  const int tpc[] = {-1, 0, 1, 3};
+  if (!get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, dci->harq_pid.val)) {
+    feedback_ti = pucch_Config->dl_DataToUL_ACK->list.array[dci->pdsch_to_harq_feedback_timing_indicator.val][0] + ntn_ue_koffset;
+    AssertFatal(feedback_ti >= GET_DURATION_RX_TO_TX(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing),
+                "PDSCH to HARQ feedback time (%d) needs to be higher than DURATION_RX_TO_TX (%ld). Min feedback time set in config "
+                "file (min_rxtxtime).\n",
+                feedback_ti,
+                GET_DURATION_RX_TO_TX(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing));
+  }
+
+
+  int number_rbs;
+  if (dlsch_pdu->resource_alloc == 1) {
+    number_rbs = dlsch_pdu->number_rbs;
+  } else {
+    uint32_t temp_bitmap[9];
+    memcpy(temp_bitmap, dlsch_pdu->rb_bitmap, 36);
+    number_rbs = count_bits(temp_bitmap, 9);
+  }
+
+  int cw_idx = 0;
+  NR_UE_DL_HARQ_STATUS_t *current_harq = NULL;
+  if (cw0) {
+    current_harq = &mac->dl_harq_info[dci->harq_pid.val][0];
+    if (get_cw_info(current_harq,
+                    dlsch_pdu,
+                    dl_conf_req->pdu_type,
+                    &dlsch_pdu->cw_info[0],
+                    number_rbs,
+                    nb_re_dmrs,
+                    nb_rb_oh,
+                    dci->rv,
+                    dci->mcs,
+                    dci->ndi,
+                    cw_idx)) {
+      if (current_harq->round < sizeofArray(mac->stats.dl.rounds))
+        mac->stats.dl.rounds[current_harq->round]++;
+      // set the harq status at MAC for feedback
+      set_harq_status(mac,
+                      dci->pucch_resource_indicator,
+                      dci->harq_pid.val,
+                      0,
+                      tpc[dci->tpc],
+                      feedback_ti,
+                      dci->dai[0].val,
+                      dci_ind->n_CCE,
+                      dci_ind->N_CCE,
+                      frame,
+                      slot);
+      cw_idx++;
+    } else
+      return -1;
+  }
+
+  if (cw1) {
+    current_harq = &mac->dl_harq_info[dci->harq_pid.val][cw_idx];
+    if (get_cw_info(current_harq,
+                    dlsch_pdu,
+                    dl_conf_req->pdu_type,
+                    &dlsch_pdu->cw_info[1],
+                    number_rbs,
+                    nb_re_dmrs,
+                    nb_rb_oh,
+                    dci->rv2.val,
+                    dci->mcs2.val,
+                    dci->ndi2.val,
+                    cw_idx)) {
+      if (current_harq->round < sizeofArray(mac->stats.dl.rounds))
+        mac->stats.dl.rounds[current_harq->round]++;
+      // set the harq status at MAC for feedback
+      set_harq_status(mac,
+                      dci->pucch_resource_indicator,
+                      dci->harq_pid.val,
+                      1,
+                      tpc[dci->tpc],
+                      feedback_ti,
+                      dci->dai[0].val,
+                      dci_ind->n_CCE,
+                      dci_ind->N_CCE,
+                      frame,
+                      slot);
+      cw_idx++;
+    } else
+      return -1;
+  }
+
+  dlsch_pdu->n_codewords = cw_idx;
   /* TCI */
   if (dl_conf_req->dci_config_pdu.dci_config_rel15.coreset.tci_present_in_dci == 1) {
     // 0 bit if higher layer parameter tci-PresentInDCI is not enabled
@@ -1311,106 +1450,8 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   /* DMRS_SEQ_INI */
   // FIXME!!!
 
-  /* PDSCH_TO_HARQ_FEEDBACK_TIME_IND */
-  // according to TS 38.213 Table 9.2.3-1
-  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing);
-  uint16_t feedback_ti = 0;
-
-  if (!get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, dci->harq_pid.val)) {
-    feedback_ti = pucch_Config->dl_DataToUL_ACK->list.array[dci->pdsch_to_harq_feedback_timing_indicator.val][0] + ntn_ue_koffset;
-    AssertFatal(feedback_ti >= GET_DURATION_RX_TO_TX(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing),
-                "PDSCH to HARQ feedback time (%d) needs to be higher than DURATION_RX_TO_TX (%ld). Min feedback time set in config "
-                "file (min_rxtxtime).\n",
-                feedback_ti,
-                GET_DURATION_RX_TO_TX(&mac->phy_config.config_req.ntn_config, dlsch_pdu->SubcarrierSpacing));
-
-    // set the harq status at MAC for feedback
-    const int tpc[] = {-1, 0, 1, 3};
-    set_harq_status(mac,
-                    dci->pucch_resource_indicator,
-                    dci->harq_pid.val,
-                    tpc[dci->tpc],
-                    feedback_ti,
-                    dci->dai[0].val,
-                    dci_ind->n_CCE,
-                    dci_ind->N_CCE,
-                    frame,
-                    slot);
-  }
-  if (dlsch_pdu->new_data_indicator)
-    current_harq->round = 0;
-  else
-    current_harq->round++;
-  if (current_harq->round < sizeofArray(mac->stats.dl.rounds))
-    mac->stats.dl.rounds[current_harq->round]++;
   // send the ack/nack slot number to phy to indicate tx thread to wait for DLSCH decoding
   dlsch_pdu->k1_feedback = feedback_ti;
-
-  dlsch_pdu->mcs_table = get_dlsch_mcs_table(NR_DL_DCI_FORMAT_1_1,
-                                             rnti_type,
-                                             dci_ind->ss_type,
-                                             pdsch_Config ? pdsch_Config->mcs_Table : NULL,
-                                             NULL, // SPS not implemented,
-                                             false, // as above
-                                             NULL); // MCS-C-RNTI not implemented
-  dlsch_pdu->qamModOrder = nr_get_Qm_dl(dlsch_pdu->mcs, dlsch_pdu->mcs_table);
-  if (dlsch_pdu->qamModOrder == 0) {
-    LOG_W(MAC, "Invalid code rate or Mod order, likely due to unexpected DL DCI.\n");
-    return -1;
-  }
-  uint8_t Nl = 0;
-  for (int i = 0; i < 12; i++) { // max 12 ports
-    if ((dlsch_pdu->dmrs_ports >> i) & 0x01)
-      Nl += 1;
-  }
-
-  NR_UE_ServingCell_Info_t *sc_info = &mac->sc_info;
-  int nb_rb_oh;
-  if (sc_info->xOverhead_PDSCH)
-    nb_rb_oh = 6 * (1 + *sc_info->xOverhead_PDSCH);
-  else
-    nb_rb_oh = 0;
-  int nb_re_dmrs = ((dmrs_type == NULL) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
-
-  int number_rbs;
-  if (dlsch_pdu->resource_alloc == 1) {
-    number_rbs = dlsch_pdu->number_rbs;
-  } else {
-    uint32_t temp_bitmap[9];
-    memcpy(temp_bitmap, dlsch_pdu->rb_bitmap, 36);
-    number_rbs = count_bits(temp_bitmap, 9);
-  }
-  int R = nr_get_code_rate_dl(dlsch_pdu->mcs, dlsch_pdu->mcs_table);
-  if (R > 0) {
-    dlsch_pdu->targetCodeRate = R;
-    dlsch_pdu->TBS = nr_compute_tbs(dlsch_pdu->qamModOrder,
-                                    R,
-                                    number_rbs,
-                                    dlsch_pdu->number_symbols,
-                                    nb_re_dmrs * get_num_dmrs(dlsch_pdu->dlDmrsSymbPos),
-                                    nb_rb_oh,
-                                    0,
-                                    Nl);
-    // storing for possible retransmissions
-    if (!dlsch_pdu->new_data_indicator && current_harq->TBS != dlsch_pdu->TBS) {
-      LOG_W(NR_MAC, "NDI indicates re-transmission but computed TBS %d doesn't match with what previously stored %d\n",
-            dlsch_pdu->TBS, current_harq->TBS);
-      dlsch_pdu->new_data_indicator = true; // treated as new data
-    }
-    current_harq->R = dlsch_pdu->targetCodeRate;
-    current_harq->TBS = dlsch_pdu->TBS;
-  }
-  else {
-    dlsch_pdu->targetCodeRate = current_harq->R;
-    dlsch_pdu->TBS = current_harq->TBS;
-  }
-
-  dlsch_pdu->ldpcBaseGraph = get_BG(dlsch_pdu->TBS, dlsch_pdu->targetCodeRate);
-
-  if (dlsch_pdu->TBS == 0) {
-    LOG_E(MAC, "Invalid TBS = 0. Probably caused by missed detection of DCI\n");
-    return -1;
-  }
 
   // TBS_LBRM according to section 5.4.2.1 of 38.212
   int max_mimo_layers = 0;
@@ -1424,10 +1465,11 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   /*PTRS configuration */
   dlsch_pdu->pduBitmap = 0;
   if (dl_dmrs_config->phaseTrackingRS != NULL) {
+    AssertFatal(cw_idx == 1, "Cannot handle PTRS with 2 codewords\n");
     bool valid_ptrs_setup =
         set_dl_ptrs_values(dl_dmrs_config->phaseTrackingRS->choice.setup,
                            number_rbs,
-                           dlsch_pdu->mcs,
+                           dlsch_pdu->cw_info[0].mcs,
                            dlsch_pdu->mcs_table,
                            &dlsch_pdu->PTRSFreqDensity,
                            &dlsch_pdu->PTRSTimeDensity,
@@ -1577,8 +1619,7 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
     pucch_pdu->mcs = get_pucch0_mcs(pucch->n_harq, 0, pucch->ack_payload, 0);
     pucch_pdu->payload = pucch->ack_payload;
     pucch_pdu->n_bit = 1;
-  }
-  else if (pucch->pucch_resource != NULL) {
+  } else if (pucch->pucch_resource != NULL) {
 
     NR_PUCCH_Resource_t *pucchres = pucch->pucch_resource;
 
@@ -2339,11 +2380,8 @@ bool get_downlink_ack(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, PUCCH_sche
 
   /* look for dl acknowledgment which should be done on current uplink slot */
   for (int code_word = 0; code_word < number_of_code_word; code_word++) {
-
     for (int dl_harq_pid = 0; dl_harq_pid < num_dl_harq; dl_harq_pid++) {
-
-      NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[dl_harq_pid];
-
+      NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[dl_harq_pid][code_word];
       if (current_harq->active) {
         LOG_D(PHY, "HARQ pid %d is active for %d.%d\n",
               dl_harq_pid, current_harq->ul_frame, current_harq->ul_slot);

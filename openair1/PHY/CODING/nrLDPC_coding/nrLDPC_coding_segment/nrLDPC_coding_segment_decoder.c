@@ -66,6 +66,7 @@
 typedef struct nrLDPC_decoding_parameters_s {
   t_nrLDPC_dec_params decoderParms;
 
+  int r;
   uint8_t Qm;
 
   uint8_t Kc;
@@ -83,15 +84,16 @@ typedef struct nrLDPC_decoding_parameters_s {
   int E;
   short *llr;
   int16_t *d;
-  bool *d_to_be_cleared;
+  bool d_to_be_cleared;
   uint8_t *c;
   bool *decodeSuccess;
 
   task_ans_t *ans;
 
-  time_stats_t *p_ts_deinterleave;
-  time_stats_t *p_ts_rate_unmatch;
-  time_stats_t *p_ts_ldpc_decode;
+  time_stats_t ts_deinterleave;
+  time_stats_t ts_rate_unmatch;
+  time_stats_t ts_seg_prep;
+  time_stats_t ts_ldpc_decode;
 } nrLDPC_decoding_parameters_t;
 
 static void nr_process_decode_segment(void *arg)
@@ -117,7 +119,7 @@ static void nr_process_decode_segment(void *arg)
 
   //////////////////////////// ulsch_llr =====> ulsch_harq->e //////////////////////////////
 
-  start_meas(rdata->p_ts_deinterleave);
+  start_meas(&rdata->ts_deinterleave);
 
   /// code blocks after bit selection in rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
   int16_t harq_e[E];
@@ -126,9 +128,9 @@ static void nr_process_decode_segment(void *arg)
 
   //////////////////////////////////////////////////////////////////////////////////////////
 
-  stop_meas(rdata->p_ts_deinterleave);
+  stop_meas(&rdata->ts_deinterleave);
 
-  start_meas(rdata->p_ts_rate_unmatch);
+  start_meas(&rdata->ts_rate_unmatch);
 
   //////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////// nr_rate_matching_ldpc_rx ////////////////////////////////
@@ -143,21 +145,28 @@ static void nr_process_decode_segment(void *arg)
                                harq_e,
                                rdata->C,
                                rv_index,
-                               *rdata->d_to_be_cleared,
+                               rdata->d_to_be_cleared,
                                E,
                                rdata->F,
                                K - rdata->F - 2 * (p_decoderParms->Z))
       == -1) {
-    stop_meas(rdata->p_ts_rate_unmatch);
-    LOG_E(PHY, "nrLDPC_coding_segment_decoder.c: Problem in rate_matching\n");
+    stop_meas(&rdata->ts_rate_unmatch);
+    LOG_E(PHY,
+          "nrLDPC_coding_segment_decoder.c: Problem in rate_matching BG %d, Z %d, C %d, rv_index %d, E %d, F %d, K%d, K-F-2*Z %d\n",
+          p_decoderParms->BG,
+          p_decoderParms->Z,
+          rdata->C,
+          rv_index,
+          E,
+          rdata->F,
+          K,
+          K - rdata->F - 2 * (p_decoderParms->Z));
 
     // Task completed
     completed_task_ans(rdata->ans);
     return;
   }
-  stop_meas(rdata->p_ts_rate_unmatch);
-
-  *rdata->d_to_be_cleared = false;
+  stop_meas(&rdata->ts_rate_unmatch);
 
   p_decoderParms->crc_type = crcType(rdata->C, A);
   p_decoderParms->Kprime = lenWithCrc(rdata->C, A);
@@ -166,8 +175,8 @@ static void nr_process_decode_segment(void *arg)
 
   int16_t z[68 * 384 + 16] __attribute__((aligned(16)));
 
-  start_meas(rdata->p_ts_ldpc_decode);
 
+  start_meas(&rdata->ts_seg_prep);
   memset(z, 0, 2 * rdata->Z * sizeof(*z));
   // set Filler bits
   memset(z + Kprime, 127, rdata->F * sizeof(*z));
@@ -182,6 +191,7 @@ static void nr_process_decode_segment(void *arg)
   for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
     pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
   }
+  stop_meas(&rdata->ts_seg_prep);
   //////////////////////////////////////////////////////////////////////////////////////////
 
   //////////////////////////////////////////////////////////////////////////////////////////
@@ -189,16 +199,18 @@ static void nr_process_decode_segment(void *arg)
   //////////////////////////////////////////////////////////////////////////////////////////
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
-  int decodeIterations = LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
-
+  start_meas(&rdata->ts_ldpc_decode);
+  int decodeIterations = LDPCdecoder(p_decoderParms, l, (uint8_t *)llrProcBuf, p_procTime, rdata->abort_decode);
+  AssertFatal(rdata->c, "rdata->c is null, A %d, K %d\n", rdata->A, rdata->K);
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
   } else {
+    LOG_D(PHY, "Decoding failed: K %d, Z %d, rv_index %d\n", K, rdata->Z, rdata->rv_index);
     memset(rdata->c, 0, K >> 3);
     *rdata->decodeSuccess = false;
   }
-  stop_meas(rdata->p_ts_ldpc_decode);
+  stop_meas(&rdata->ts_ldpc_decode);
 
   // Task completed
   completed_task_ans(rdata->ans);
@@ -215,20 +227,28 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   decParams.BG = nrLDPC_TB_decoding_parameters->BG;
   decParams.Z = nrLDPC_TB_decoding_parameters->Z;
   decParams.numMaxIter = nrLDPC_TB_decoding_parameters->max_ldpc_iterations;
-  decParams.outMode = 0;
+  decParams.outMode = nrLDPC_outMode_BIT;
 
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
     nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info->buf)[t_info->len];
     DevAssert(t_info->len < t_info->cap);
     rdata->ans = t_info->ans;
     t_info->len += 1;
-
-    decParams.R = nrLDPC_TB_decoding_parameters->segments[r].R;
+    int llr_offset;
+    if (r < nrLDPC_TB_decoding_parameters->first_rE2) {
+      decParams.R = nrLDPC_TB_decoding_parameters->R;
+      rdata->E = nrLDPC_TB_decoding_parameters->E;
+      llr_offset = r * rdata->E;
+    } else {
+      decParams.R = nrLDPC_TB_decoding_parameters->R2;
+      rdata->E = nrLDPC_TB_decoding_parameters->E2;
+      llr_offset = nrLDPC_TB_decoding_parameters->first_rE2 * nrLDPC_TB_decoding_parameters->E
+                   + (r - nrLDPC_TB_decoding_parameters->first_rE2) * rdata->E;
+    }
+    rdata->r = r;
     rdata->decoderParms = decParams;
-    rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
     rdata->Kc = decParams.BG == 2 ? 52 : 68;
     rdata->C = nrLDPC_TB_decoding_parameters->C;
-    rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
     rdata->A = nrLDPC_TB_decoding_parameters->A;
     rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;
     rdata->K = nrLDPC_TB_decoding_parameters->K;
@@ -237,18 +257,30 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
     rdata->rv_index = nrLDPC_TB_decoding_parameters->rv_index;
     rdata->tbslbrm = nrLDPC_TB_decoding_parameters->tbslbrm;
     rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
-    rdata->d = nrLDPC_TB_decoding_parameters->segments[r].d;
-    rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->segments[r].d_to_be_cleared;
-    rdata->c = nrLDPC_TB_decoding_parameters->segments[r].c;
-    rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
-    rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
-    rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
-    rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
-
+    rdata->d = nrLDPC_TB_decoding_parameters->d + r * rdata->Kc * rdata->Z;
+    rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->d_to_be_cleared;
+    rdata->c = nrLDPC_TB_decoding_parameters->c + r * (rdata->K >> 3);
+    AssertFatal(rdata->c != NULL,
+                "rdata->c is null, r %d, K %d, A %d, rv_index %d, TB_decoding_parameters->c %p\n",
+                r,
+                rdata->K,
+                rdata->A,
+                rdata->rv_index,
+                nrLDPC_TB_decoding_parameters->c);
+    rdata->llr = nrLDPC_TB_decoding_parameters->llr + llr_offset; // rdata->Kc*rdata->Z;
+    rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->decodeSuccess[r];
+    memset(&rdata->ts_deinterleave, 0, sizeof(rdata->ts_deinterleave));
+    memset(&rdata->ts_rate_unmatch, 0, sizeof(rdata->ts_rate_unmatch));
+    memset(&rdata->ts_seg_prep, 0, sizeof(rdata->ts_seg_prep));
+    memset(&rdata->ts_ldpc_decode, 0, sizeof(rdata->ts_ldpc_decode));
+    reset_meas(&rdata->ts_deinterleave);
+    reset_meas(&rdata->ts_rate_unmatch);
+    reset_meas(&rdata->ts_seg_prep);
+    reset_meas(&rdata->ts_ldpc_decode);
     task_t t = {.func = &nr_process_decode_segment, .args = rdata};
     pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
 
-    LOG_D(PHY, "Added a block to decode, in pipe: %d\n", r);
+    LOG_D(PHY, "Added a block to decode, in pipe: %d, rdata->c %p\n", r, rdata->c);
   }
   return nrLDPC_TB_decoding_parameters->C;
 }
@@ -282,12 +314,20 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   // Execute thread pool tasks
   join_task_ans(t_info.ans);
 
+  size_t r_t_info = 0;
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
+    *nrLDPC_TB_decoding_parameters->processedSegments = 0;
     for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
-      if (nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess) {
+      if (nrLDPC_TB_decoding_parameters->decodeSuccess[r])
         *nrLDPC_TB_decoding_parameters->processedSegments = *nrLDPC_TB_decoding_parameters->processedSegments + 1;
-      }
+
+      nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info.buf)[r_t_info];
+      r_t_info += 1;
+      merge_meas(&nrLDPC_TB_decoding_parameters->ts_deinterleave, &rdata->ts_deinterleave);
+      merge_meas(&nrLDPC_TB_decoding_parameters->ts_rate_unmatch, &rdata->ts_rate_unmatch);
+      merge_meas(&nrLDPC_TB_decoding_parameters->ts_seg_prep, &rdata->ts_seg_prep);
+      merge_meas(&nrLDPC_TB_decoding_parameters->ts_ldpc_decode, &rdata->ts_ldpc_decode);
     }
   }
   return 0;

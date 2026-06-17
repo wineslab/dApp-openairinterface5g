@@ -247,6 +247,242 @@ RRCReestablishmentRequest), the CU updates `du_assoc_id` and sets
 `f1_ue_context_active` is false, the CU triggers UE Context Setup on the new
 DU per TS 38.401 §8.7.
 
+### PDU Session Management
+
+#### PDU Session Modification
+
+```mermaid
+sequenceDiagram
+    participant UE
+    participant DU
+    participant CUCP as CU-CP
+    participant CUUP as CU-UP
+    participant AMF
+
+    AMF->>CUCP: PDUSessionResourceModifyRequest
+    Note over CUCP: ngap_gNB_handle_pdusession_modify_request
+    CUCP->>CUCP: decodePDUSessionResourceModify
+    CUCP->>CUCP: NGAP_PDUSESSION_MODIFY_REQ
+    CUCP->>CUCP: rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ
+    opt UE not found or AMF_UE_ID mismatch
+        CUCP->>AMF: NGAP_PDUSESSION_MODIFY_RESP (Failed PDU Session)
+        Note over CUCP: stop further processing
+    end
+
+    loop nb_pdusessions_tomodify
+        CUCP->>CUCP: Update PDU session DRB/QoS configuration<br/>(add/modify/release)
+    end
+
+    alt !all_failed
+        Note over CUCP: Pre-RRC step: E1/F1 updates
+        Note over CUCP: Build E1AP DRB-To-Remove/To-Modify/To-Setup lists<br/>(populated during nr_rrc_update_pdusession)
+        CUCP->>CUUP: E1 BEARER CONTEXT MOD REQUEST (DRB-To-Remove/To-Modify/To-Setup)
+        Note over CUUP: e1_bearer_context_modif()<br/>Process DRB modifications, removals, and setups<br/>Update PDCP/SDAP entities, GTP tunnels
+        CUUP->>CUCP: E1 BEARER CONTEXT MOD RESPONSE
+        Note over CUCP: rrc_gNB_process_e1_bearer_context_modif_resp<br/>Save F1-U tunnel info for new DRBs<br/>Mark PDU sessions with new DRBs as PDU_SESSION_STATUS_NEW
+        Note over CUCP, DU: F1-U tunnel changes (new DRBs or DRB releases)
+        CUCP->>DU: F1 UE Context Modification Request
+        Note over DU: handle_ue_context_drbs_setup/release
+        DU->>CUCP: F1 UE Context Modification Response
+        Note over CUCP: rrc_CU_process_ue_context_modification_response
+        CUCP->>CUCP: rrc_gNB_generate_dedicatedRRCReconfiguration
+
+        Note over CUCP: <br/>Attach DRB_ToReleaseList (if any)<br/>Set transaction ID to RRC_PDUSESSION_MODIFY
+        CUCP->>DU: rrc_deliver_dl_rrc_message
+        DU->>UE: RRCReconfiguration (DCCH)
+        UE->>DU: RRCReconfigurationComplete
+        DU->>CUCP: F1AP_UL_RRC_MESSAGE
+        Note over CUCP: rrc_gNB_decode_dcch
+        Note over CUCP: handle_rrcReconfigurationComplete<br/>Calls rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP<br/>(DRBs already removed earlier in nr_rrc_update_pdusession)
+
+        CUCP->>CUCP: rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP
+        loop UE->pduSessions (matching transaction ID)
+            alt ESTABLISHED
+                Note over CUCP: Update status to ESTABLISHED<br/>Fill NGAP message (modified)<br/>Include QoS flow list
+            else PDU_SESSION_STATUS_FAILED
+                Note over CUCP: Fill NGAP message (failed to modify)<br/>Include cause
+            end
+        end
+        CUCP->>AMF: NGAP_PDUSESSION_MODIFY_RESP
+    else msg->nb_of_pdusessions_failed > 0
+        Note over CUCP: PDU Session failed to modify
+        CUCP->>AMF: NGAP_PDUSESSION_MODIFY_RESP
+end
+```
+
+#### PDU Session Release
+
+```mermaid
+sequenceDiagram
+    participant AMF
+    participant CUCP
+    participant CUUP
+    participant DU
+    participant UE
+    AMF->>CUCP: NG PDU SESSION RESOURCE RELEASE COMMAND
+    Note over CUCP: ngap_gNB_handle_pdusession_release_command
+    CUCP->>CUCP: rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND
+    Note over CUCP: set status PDU_SESSION_STATUS_TORELEASE
+    CUCP->>CUUP: E1 Bearer Context Modification Request
+    Note over CUUP: release_gtpu_tunnel (GTP tunnel, PDCP, SDAP)
+    CUUP->>CUCP: E1 Bearer Context Modification Response
+    Note over CUCP: rrc_send_f1_ue_context_modification_request
+    CUCP->>DU: F1 UE Context Modification Request
+    Note over DU: handle_ue_context_drbs_release (release in MAC/RLC)
+    DU->>CUCP: F1 UE Context Modification Response
+    Note over CUCP: rrc_CU_process_ue_context_modification_response
+    Note over CUCP: replace existing CellGroupConfig
+    Note over CUCP: rrc_gNB_generate_dedicatedRRCReconfiguration
+    CUCP->>UE: RRCReconfiguration (DRB release list, NAS PDU)
+    UE->>CUCP: RRCReconfigurationComplete
+    Note over CUCP: handle_rrcReconfigurationComplete
+    Note over CUCP: rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE
+    CUCP->>AMF: NG PDU SESSION RESOURCE RELEASE RESPONSE
+    Note over CUCP: rm_drbs_by_pdusession (from stored RRC list)
+    Note over CUCP: rm_pduSession (from stored RRC list)
+```
+
+### QoS Flows Handling
+
+This section describes the end-to-end handling of QoS flows in the OAI 5G SA implementation. QoS flows are
+the finest granularity of QoS differentiation in 5G systems. According to 3GPP specs, each PDU session can
+contain multiple QoS flows (maximum 64). Each QoS flow is mapped to exactly one Data Radio Bearer (DRB)
+within the gNB, but multiple QoS flows can be mapped to the same DRB. The mapping is determined by the
+CU-CP and configured in the CU-UP via E1AP, and in the UE via RRC signaling. Each PDU session is mapped
+to a SDAP entity and can contain multiple DRBs, each of which may carry multiple QoS flows.
+
+Key Standards:
+- 3GPP TS 23.501: 5G System Architecture (6.2.5, Quality of service)
+- 3GPP TS 37.324: SDAP Protocol (QoS flow to DRB mapping, 5.3)
+- 3GPP TS 38.463: E1AP (Bearer Context Management with QoS flows)
+- 3GPP TS 29.281: GTP-U (QFI marking)
+- 3GPP TS 38.331: RRC (Radio Bearer Configuration)
+
+Trigger: PDU Session Establishment or Modification from 5G Core (AMF/SMF)
+
+The PDU session setup flow in OAI begins when the gNB receives an NGAP PDU Session Resource Setup Request
+from the AMF, containing session parameters and QoS flow information. These flows are stored in the UE
+context and passed to the RRC layer, which maps each QoS flow to a DRB and prepares the E1AP Bearer
+Context Setup Request for the CU-UP. The CU-UP then creates the corresponding PDCP and SDAP bearers,
+establishes F1-U and N3 GTP-U tunnels, and returns a Bearer Context Setup Response. The GTP-U layer stores
+QFI-to-DRB mappings for tunnel management, while the SDAP layer maintains QFI-to-DRB tables for both
+uplink and downlink packet routing.
+
+During data transfer, uplink packets are demultiplexed using the QFI from the GTP-U header, and downlink
+packets are marked with their QFI before being sent to the UPF, ensuring consistent QoS-based traffic
+handling end-to-end.
+
+#### CU-CP QoS-flow to DRB mapping
+
+The QoS-flow-to-DRB algorithm runs in the CU-CP (RRC) when flows are added or updated (for example
+`nr_rrc_add_bearers`, `nr_rrc_assign_drb_to_qos_flow`, and `nr_rrc_find_suitable_drb_for_qos` in
+`openair2/RRC/NR/rrc_gNB_radio_bearers.c`). E1AP does not implement this policy: Bearer Context
+Setup/Modification simply carries the resulting PDU sessions, DRB lists, and QoS flows per DRB that RRC
+already chose.
+
+The mapping is OAI-specific (3GPP defines that the gNB may map multiple QoS flows to one DRB but does
+not mandate these numeric caps).
+
+DRB assignment uses a QoS-aware multiplexing strategy from standardized 5QI where available:
+
+- Dedicated DRBs (one QoS flow per DRB in practice for these classes):
+  - Delay-critical GBR (5QI 82–90): each such flow triggers a new DRB, existing DRBs that already carry
+    DC-GBR are not reused for other flows.
+  - Other flows treated as isolated: 5QI 4, 6, 7, 8, 9, 10, 70, 80, and 71-73.
+
+- Multiplexed DRBs (when the new flow is not in the dedicated set, and reuse is allowed on a PDU session):
+  - Non-delay-critical GBR flows: up to 2 QoS flows per DRB.
+  - Non-GBR flows: up to 5 QoS flows per DRB.
+  - Aggregate cap: at most 5 QoS flows per DRB in total (mixed GBR/non-GBR counts).
+
+Per-DRB counting uses resource-type buckets (DC-GBR, GBR, non-GBR) derived from 3GPP TS 23.501
+table 5.7.4-1 (standardized 5QI).
+
+Dynamic 5QI without a numeric 5QI: OAI uses a conservative heuristic (packet delay budget, packet
+error rate, and QoS priority thresholds) to decide whether the flow must use a new dedicated DRB or
+may share an existing DRB. That path is independent of the static 5QI lists above.
+
+#### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant UE
+    participant DU
+    participant CUCP as CU-CP
+    participant CUUP as CU-UP
+    participant AMF
+    participant UPF
+
+    AMF->>CUCP: NGAP PDU Session Resource Setup Request
+    Note over CUCP: QoS flows, QoS profile (e.g. 5QI, ARP, GFBR/MFBR)<br/>and N3 UP tunnel info
+    Note over CUCP: ngap_gNB_handle_pdusession_setup_request<br/>ITTI to RRC
+    CUCP->>CUCP: rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ
+    CUCP->>CUCP: nr_rrc_add_bearers
+    Note over CUCP: QoS-flow-to-DRB mapping
+    CUCP->>CUCP: trigger_bearer_setup
+    Note over CUCP: fill_e1_pdusession_to_setup / fill_e1_drb_to_setup<br/>per DRB (QoS flows, SDAP/PDCP)
+
+    Note over CUCP,CUUP: BEARER CONTEXT SETUP
+    CUCP->>CUUP: E1AP Bearer Context Setup Request
+
+      Note over CUUP: e1_bearer_context_setup()
+      loop Per PDU session
+          loop Each DRB to setup
+              CUUP->>CUUP: fill_e1_drb_setup
+              CUUP->>CUUP: fill_e1_qos_flows_setup
+              Note over CUUP: Copy QFIs from E1 request into E1 setup response
+              Note over CUUP: f1_drb_gtpu_create<br/>gtpv1u_create_ngu_tunnel<br/>no QFI in F1-U GTP, one tunnel per DRB
+          end
+          CUUP->>CUUP: e1_add_bearers
+          Note over CUUP: nr_sdap_addmod_entity, nr_pdcp_add_drb<br/>SDAP qfi2drb mapping
+          CUUP->>CUUP: n3_gtpu_create
+          Note over CUUP: gtpv1u_create_ngu_tunnel<br/>newGtpuCreateTunnel<br/>one N3 tunnel per PDU session
+      end
+    CUUP->>CUCP: E1AP Bearer Context Setup Response
+    Note over CUCP,CUUP: F1-U TEID/addr per DRB
+    Note over CUUP: N3 TEID (CU-UP) per PDU session
+
+    CUCP->>CUCP: rrc_gNB_process_e1_bearer_context_setup_resp
+    alt First F1 UE context (!f1_ue_context_active)
+        CUCP->>DU: F1 UE Context Setup Request
+        Note over CUCP: rrc_f1_ue_context_setup_from_e1_response
+    else F1 context already active
+        CUCP->>DU: F1 UE Context Modification Request
+        Note over CUCP: rrc_send_f1_ue_context_modification_request
+    end
+    Note over DU: handle_ue_context_drbs_setup<br/>QoS from F1 flows -> MAC logical channel config
+    DU->>CUCP: F1 UE Context Setup or Modification Response
+
+    CUCP->>CUCP: rrc_gNB_generate_dedicatedRRCReconfiguration
+    Note over CUCP: DRB-ToAddModList, SDAP-Config (QFI mapping)
+    CUCP->>DU: rrc_deliver_dl_rrc_message / DL RRC Message Transfer
+    DU->>UE: RRCReconfiguration (DCCH)
+
+    UE->>DU: RRCReconfigurationComplete
+    DU->>CUCP: UL RRC Message Transfer (F1AP)
+    Note over CUCP: rrc_gNB_decode_dcch, handle_rrcReconfigurationComplete
+
+    CUCP->>AMF: NGAP PDU Session Resource Setup Response
+
+    Note over UPF,UE: ===== Data Plane Active ===== (N3/F1-U)
+
+    Note over UPF,UE: DOWNLINK (N3 -> CU-UP)
+    UPF->>CUUP: GTP-U with PDU Session Container (QFI)
+    Note over CUUP: Gtpv1uHandleGpdu<br/>parse ext hdr -> QFI
+    Note over CUUP: sdap_data_req<br/>SDAP qfi2drb_table -> DRB
+    Note over CUUP: nr_pdcp_data_req_drb
+    CUUP->>DU: F1-U GTP-U (no PDU Session Container / QFI marking)
+    DU->>UE: DRB
+
+    Note over UE,UPF: UPLINK (CU-UP -> N3 UPF)
+    UE->>DU: DRB
+    DU->>CUUP: F1-U GTP-U (no QFI marking)
+    Note over CUUP: PDCP -> SDAP UL RX
+    Note over CUUP: QFI from SDAP UL header if configured<br/>else gtpv1uSendDirect (no QFI in GTP ext hdr)
+    Note over CUUP: nr_sdap / gtpv1uSendDirectWithQFI<br/>bearer_id = PDU session id (N3 tunnel key)
+    CUUP->>UPF: GTP-U PDU Session Container (UL PDU Session Info, QFI)
+```
+
 ### Inter-DU Handover (F1)
 
 The basic handover (HO) structure is as follows. In order to support various

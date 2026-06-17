@@ -585,7 +585,7 @@ bool eq_crc_indication_CRC(const nfapi_nr_crc_t *a, const nfapi_nr_crc_t *b)
   EQ(a->tb_crc_status, b->tb_crc_status);
   EQ(a->num_cb, b->num_cb);
   if (a->num_cb > 0) {
-    for (int cb = 0; cb < (a->num_cb / 8) + 1; ++cb) {
+    for (int cb = 0; cb < nr_bits_to_bytes(a->num_cb); ++cb) {
       EQ(a->cb_crc_status[cb], b->cb_crc_status[cb]);
     }
   }
@@ -618,7 +618,7 @@ bool eq_uci_indication_sr_pdu_0_1(const nfapi_nr_sr_pdu_0_1_t *a, const nfapi_nr
 bool eq_uci_indication_sr_pdu_2_3_4(const nfapi_nr_sr_pdu_2_3_4_t *a, const nfapi_nr_sr_pdu_2_3_4_t *b)
 {
   EQ(a->sr_bit_len, b->sr_bit_len);
-  for (int i = 0; i < (a->sr_bit_len / 8) + 1; ++i) {
+  for (int i = 0; i < nr_bits_to_bytes(a->sr_bit_len); ++i) {
     EQ(a->sr_payload[i], b->sr_payload[i]);
   }
   return true;
@@ -638,7 +638,7 @@ bool eq_uci_indication_harq_pdu_2_3_4(const nfapi_nr_harq_pdu_2_3_4_t *a, const 
 {
   EQ(a->harq_crc, b->harq_crc);
   EQ(a->harq_bit_len, b->harq_bit_len);
-  for (int i = 0; i < (a->harq_bit_len / 8) + 1; ++i) {
+  for (int i = 0; i < nr_bits_to_bytes(a->harq_bit_len); ++i) {
     EQ(a->harq_payload[i], b->harq_payload[i]);
   }
   return true;
@@ -648,7 +648,7 @@ bool eq_uci_indication_csi_part1(const nfapi_nr_csi_part1_pdu_t *a, const nfapi_
 {
   EQ(a->csi_part1_crc, b->csi_part1_crc);
   EQ(a->csi_part1_bit_len, b->csi_part1_bit_len);
-  for (int i = 0; i < (a->csi_part1_bit_len / 8) + 1; ++i) {
+  for (int i = 0; i < nr_bits_to_bytes(a->csi_part1_bit_len); ++i) {
     EQ(a->csi_part1_payload[i], b->csi_part1_payload[i]);
   }
   return true;
@@ -658,7 +658,7 @@ bool eq_uci_indication_csi_part2(const nfapi_nr_csi_part2_pdu_t *a, const nfapi_
 {
   EQ(a->csi_part2_crc, b->csi_part2_crc);
   EQ(a->csi_part2_bit_len, b->csi_part2_bit_len);
-  for (int i = 0; i < (a->csi_part2_bit_len / 8) + 1; ++i) {
+  for (int i = 0; i < nr_bits_to_bytes(a->csi_part2_bit_len); ++i) {
     EQ(a->csi_part2_payload[i], b->csi_part2_payload[i]);
   }
   return true;
@@ -983,126 +983,76 @@ static void copy_dl_tti_beamforming(const nfapi_nr_tx_precoding_and_beamforming_
   }
 }
 
+// Macro to get size from start to a member (exclusive)
+#define SIZE_UPTO(type, member) offsetof(type, member)
+
+// Macro to get size from start to a member (inclusive)
+#define SIZE_INCLUDING(type, member) (offsetof(type, member) + sizeof(((type *)0)->member))
+
+// Macro to copy partial struct
+#define PARTIAL_COPY(dst, src, type, last_member) memcpy((dst), (src), SIZE_INCLUDING(type, last_member))
+
+// Macro to copy partial struct
+#define PARTIAL_COPY_RANGE(dst, src, type, first_member, last_member) \
+  memcpy(((uint8_t *)(dst)) + SIZE_UPTO(type, first_member),          \
+         ((uint8_t *)(src)) + SIZE_UPTO(type, first_member),          \
+         SIZE_INCLUDING(type, last_member) - SIZE_UPTO(type, first_member))
+
+// Macro to copy array
+#define COPY_STRUCT_ARRAY(dst, src, data_member, count_member)         \
+  do {                                                                 \
+    size_t _len = (src)->count_member * sizeof((src)->data_member[0]); \
+    if (_len > sizeof((dst)->data_member))                             \
+      _len = sizeof((dst)->data_member);                               \
+    (dst)->count_member = (src)->count_member;                         \
+    memcpy((dst)->data_member, (src)->data_member, _len);              \
+  } while (0)
+
 static void copy_dl_tti_request_pdcch_pdu(const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *src, nfapi_nr_dl_tti_pdcch_pdu_rel15_t *dst)
 {
-  dst->BWPSize = src->BWPSize;
-  dst->BWPStart = src->BWPStart;
-  dst->SubcarrierSpacing = src->SubcarrierSpacing;
-  dst->CyclicPrefix = src->CyclicPrefix;
-  dst->StartSymbolIndex = src->StartSymbolIndex;
-  dst->DurationSymbols = src->DurationSymbols;
-  for (int fdr_idx = 0; fdr_idx < 6; ++fdr_idx) {
-    dst->FreqDomainResource[fdr_idx] = src->FreqDomainResource[fdr_idx];
-  }
-  dst->CceRegMappingType = src->CceRegMappingType;
-  dst->RegBundleSize = src->RegBundleSize;
-  dst->InterleaverSize = src->InterleaverSize;
-  dst->CoreSetType = src->CoreSetType;
-  dst->ShiftIndex = src->ShiftIndex;
-  dst->precoderGranularity = src->precoderGranularity;
-  dst->numDlDci = src->numDlDci;
+  PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_pdcch_pdu_rel15_t, numDlDci);
+  size_t partial_size = offsetof(nfapi_nr_dl_tti_pdcch_pdu_rel15_t, dci_pdu);
+  memcpy(dst, src, partial_size);
   for (int dl_dci = 0; dl_dci < dst->numDlDci; ++dl_dci) {
     nfapi_nr_dl_dci_pdu_t *dst_dci_pdu = &dst->dci_pdu[dl_dci];
     const nfapi_nr_dl_dci_pdu_t *src_dci_pdu = &src->dci_pdu[dl_dci];
-    dst_dci_pdu->RNTI = src_dci_pdu->RNTI;
-    dst_dci_pdu->ScramblingId = src_dci_pdu->ScramblingId;
-    dst_dci_pdu->ScramblingRNTI = src_dci_pdu->ScramblingRNTI;
-    dst_dci_pdu->CceIndex = src_dci_pdu->CceIndex;
-    dst_dci_pdu->AggregationLevel = src_dci_pdu->AggregationLevel;
+    PARTIAL_COPY(dst_dci_pdu, src_dci_pdu, nfapi_nr_dl_dci_pdu_t, AggregationLevel);
     copy_dl_tti_beamforming(&src_dci_pdu->precodingAndBeamforming, &dst_dci_pdu->precodingAndBeamforming);
-    dst_dci_pdu->beta_PDCCH_1_0 = src_dci_pdu->beta_PDCCH_1_0;
-    dst_dci_pdu->powerControlOffsetSS = src_dci_pdu->powerControlOffsetSS;
-    dst_dci_pdu->PayloadSizeBits = src_dci_pdu->PayloadSizeBits;
-    for (int i = 0; i < 8; ++i) {
-      dst_dci_pdu->Payload[i] = src_dci_pdu->Payload[i];
-    }
+    PARTIAL_COPY_RANGE(dst_dci_pdu, src_dci_pdu, nfapi_nr_dl_dci_pdu_t, beta_PDCCH_1_0, Payload);
+  }
+  dst->param_v4.numSpatialStreams = src->param_v4.numSpatialStreams;
+  for (uint_fast16_t i = 0; i < dst->param_v4.numSpatialStreams; i++) {
+    dst->param_v4.dci_spatialStreamIndices[i] = src->param_v4.dci_spatialStreamIndices[i];
   }
 }
 
 static void copy_dl_tti_request_pdsch_pdu(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t *dst)
 {
-  dst->pduBitmap = src->pduBitmap;
-  dst->rnti = src->rnti;
-  dst->pduIndex = src->pduIndex;
-  dst->BWPSize = src->BWPSize;
-  dst->BWPStart = src->BWPStart;
-  dst->SubcarrierSpacing = src->SubcarrierSpacing;
-  dst->CyclicPrefix = src->CyclicPrefix;
-  dst->NrOfCodewords = src->NrOfCodewords;
-  for (int cw = 0; cw < dst->NrOfCodewords; ++cw) {
-    dst->targetCodeRate[cw] = src->targetCodeRate[cw];
-    dst->qamModOrder[cw] = src->qamModOrder[cw];
-    dst->mcsIndex[cw] = src->mcsIndex[cw];
-    dst->mcsTable[cw] = src->mcsTable[cw];
-    dst->rvIndex[cw] = src->rvIndex[cw];
-    dst->TBSize[cw] = src->TBSize[cw];
-  }
-  dst->dataScramblingId = src->dataScramblingId;
-  dst->nrOfLayers = src->nrOfLayers;
-  dst->transmissionScheme = src->transmissionScheme;
-  dst->refPoint = src->refPoint;
-  dst->dlDmrsSymbPos = src->dlDmrsSymbPos;
-  dst->dmrsConfigType = src->dmrsConfigType;
-  dst->dlDmrsScramblingId = src->dlDmrsScramblingId;
-  dst->SCID = src->SCID;
-  dst->numDmrsCdmGrpsNoData = src->numDmrsCdmGrpsNoData;
-  dst->dmrsPorts = src->dmrsPorts;
-  dst->resourceAlloc = src->resourceAlloc;
-  for (int i = 0; i < 36; ++i) {
-    dst->rbBitmap[i] = src->rbBitmap[i];
-  }
-  dst->rbStart = src->rbStart;
-  dst->rbSize = src->rbSize;
-  dst->VRBtoPRBMapping = src->VRBtoPRBMapping;
-  dst->StartSymbolIndex = src->StartSymbolIndex;
-  dst->NrOfSymbols = src->NrOfSymbols;
-  dst->PTRSPortIndex = src->PTRSPortIndex;
-  dst->PTRSTimeDensity = src->PTRSTimeDensity;
-  dst->PTRSFreqDensity = src->PTRSFreqDensity;
-  dst->PTRSReOffset = src->PTRSReOffset;
-  dst->nEpreRatioOfPDSCHToPTRS = src->nEpreRatioOfPDSCHToPTRS;
+  PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t, nEpreRatioOfPDSCHToPTRS);
   copy_dl_tti_beamforming(&src->precodingAndBeamforming, &dst->precodingAndBeamforming);
-  dst->powerControlOffset = src->powerControlOffset;
-  dst->powerControlOffsetSS = src->powerControlOffsetSS;
-  dst->isLastCbPresent = src->isLastCbPresent;
-  dst->isInlineTbCrc = src->isInlineTbCrc;
-  dst->dlTbCrc = src->dlTbCrc;
-  dst->maintenance_parms_v3.ldpcBaseGraph = src->maintenance_parms_v3.ldpcBaseGraph;
-  dst->maintenance_parms_v3.tbSizeLbrmBytes = src->maintenance_parms_v3.tbSizeLbrmBytes;
+  PARTIAL_COPY_RANGE(dst, src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t, powerControlOffset, maintenance_parms_v3);
+  dst->param_v4.numberCodewords = src->param_v4.numberCodewords;
+  for (uint_fast8_t i = 0; i < dst->param_v4.numberCodewords; i++) {
+    const nfapi_nr_spatial_stream_index_t *s = src->param_v4.spatialStreamsCw + i;
+    nfapi_nr_spatial_stream_index_t *d = dst->param_v4.spatialStreamsCw + i;
+    COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
+  }
 }
 
 static void copy_dl_tti_request_csi_rs_pdu(const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *src, nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *dst)
 {
-  dst->bwp_size = src->bwp_size;
-  dst->bwp_start = src->bwp_start;
-  dst->subcarrier_spacing = src->subcarrier_spacing;
-  dst->cyclic_prefix = src->cyclic_prefix;
-  dst->start_rb = src->start_rb;
-  dst->nr_of_rbs = src->nr_of_rbs;
-  dst->csi_type = src->csi_type;
-  dst->row = src->row;
-  dst->freq_domain = src->freq_domain;
-  dst->symb_l0 = src->symb_l0;
-  dst->symb_l1 = src->symb_l1;
-  dst->cdm_type = src->cdm_type;
-  dst->freq_density = src->freq_density;
-  dst->scramb_id = src->scramb_id;
-  dst->power_control_offset = src->power_control_offset;
-  dst->power_control_offset_ss = src->power_control_offset_ss;
+  PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_csi_rs_pdu_rel15_t, power_control_offset_ss);
   copy_dl_tti_beamforming(&src->precodingAndBeamforming, &dst->precodingAndBeamforming);
+  const struct nfapi_nr_csi_spatial_stream_index *s = &src->param_v4;
+  struct nfapi_nr_csi_spatial_stream_index *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_dl_tti_request_ssb_pdu(const nfapi_nr_dl_tti_ssb_pdu_rel15_t *src, nfapi_nr_dl_tti_ssb_pdu_rel15_t *dst)
 {
-  dst->PhysCellId = src->PhysCellId;
-  dst->BetaPss = src->BetaPss;
-  dst->SsbBlockIndex = src->SsbBlockIndex;
-  dst->SsbSubcarrierOffset = src->SsbSubcarrierOffset;
-  dst->ssbOffsetPointA = src->ssbOffsetPointA;
-  dst->bchPayloadFlag = src->bchPayloadFlag;
-  dst->bchPayload = src->bchPayload;
-  dst->ssbRsrp = src->ssbRsrp;
+  PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_ssb_pdu_rel15_t, ssbRsrp);
   copy_dl_tti_beamforming(&src->precoding_and_beamforming, &dst->precoding_and_beamforming);
+  dst->param_v4 = src->param_v4;
 }
 
 static void copy_dl_tti_request_pdu(const nfapi_nr_dl_tti_request_pdu_t *src, nfapi_nr_dl_tti_request_pdu_t *dst)
@@ -1175,73 +1125,25 @@ static void copy_ul_tti_beamforming(const nfapi_nr_ul_beamforming_t *src, nfapi_
 
 static void copy_ul_tti_request_prach_pdu(const nfapi_nr_prach_pdu_t *src, nfapi_nr_prach_pdu_t *dst)
 {
-  dst->phys_cell_id = src->phys_cell_id;
-  dst->num_prach_ocas = src->num_prach_ocas;
-  dst->prach_format = src->prach_format;
-  dst->num_ra = src->num_ra;
-  dst->prach_start_symbol = src->prach_start_symbol;
-  dst->num_cs = src->num_cs;
+  PARTIAL_COPY(dst, src, nfapi_nr_prach_pdu_t, num_cs);
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_pusch_pdu(const nfapi_nr_pusch_pdu_t *src, nfapi_nr_pusch_pdu_t *dst)
 {
-  dst->pdu_bit_map = src->pdu_bit_map;
-  dst->rnti = src->rnti;
-  dst->handle = src->handle;
-  dst->bwp_size = src->bwp_size;
-  dst->bwp_start = src->bwp_start;
-  dst->subcarrier_spacing = src->subcarrier_spacing;
-  dst->cyclic_prefix = src->cyclic_prefix;
-  dst->target_code_rate = src->target_code_rate;
-  dst->qam_mod_order = src->qam_mod_order;
-  dst->mcs_index = src->mcs_index;
-  dst->mcs_table = src->mcs_table;
-  dst->transform_precoding = src->transform_precoding;
-  dst->data_scrambling_id = src->data_scrambling_id;
-  dst->nrOfLayers = src->nrOfLayers;
-  dst->ul_dmrs_symb_pos = src->ul_dmrs_symb_pos;
-  dst->dmrs_config_type = src->dmrs_config_type;
-  dst->ul_dmrs_scrambling_id = src->ul_dmrs_scrambling_id;
-  dst->pusch_identity = src->pusch_identity;
-  dst->scid = src->scid;
-  dst->num_dmrs_cdm_grps_no_data = src->num_dmrs_cdm_grps_no_data;
-  dst->dmrs_ports = src->dmrs_ports;
-  dst->resource_alloc = src->resource_alloc;
-  for (int i = 0; i < 36; ++i) {
-    dst->rb_bitmap[i] = src->rb_bitmap[i];
-  }
-  dst->rb_start = src->rb_start;
-  dst->rb_size = src->rb_size;
-  dst->vrb_to_prb_mapping = src->vrb_to_prb_mapping;
-  dst->frequency_hopping = src->frequency_hopping;
-  dst->tx_direct_current_location = src->tx_direct_current_location;
-  dst->uplink_frequency_shift_7p5khz = src->uplink_frequency_shift_7p5khz;
-  dst->start_symbol_index = src->start_symbol_index;
-  dst->nr_of_symbols = src->nr_of_symbols;
-
+  PARTIAL_COPY(dst, src, nfapi_nr_pusch_pdu_t, nr_of_symbols);
   if (dst->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_DATA) {
     const nfapi_nr_pusch_data_t *src_pusch_data = &src->pusch_data;
     nfapi_nr_pusch_data_t *dst_pusch_data = &dst->pusch_data;
-    dst_pusch_data->rv_index = src_pusch_data->rv_index;
-    dst_pusch_data->harq_process_id = src_pusch_data->harq_process_id;
-    dst_pusch_data->new_data_indicator = src_pusch_data->new_data_indicator;
-    dst_pusch_data->tb_size = src_pusch_data->tb_size;
-    dst_pusch_data->num_cb = src_pusch_data->num_cb;
-    for (int i = 0; i < (src_pusch_data->num_cb + 7) / 8; ++i) {
-      dst_pusch_data->cb_present_and_position[i] = src_pusch_data->cb_present_and_position[i];
-    }
+    *dst_pusch_data = *src_pusch_data;
   }
   if (src->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_UCI) {
     const nfapi_nr_pusch_uci_t *src_pusch_uci = &src->pusch_uci;
     nfapi_nr_pusch_uci_t *dst_pusch_uci = &dst->pusch_uci;
-    dst_pusch_uci->harq_ack_bit_length = src_pusch_uci->harq_ack_bit_length;
-    dst_pusch_uci->csi_part1_bit_length = src_pusch_uci->csi_part1_bit_length;
-    dst_pusch_uci->csi_part2_bit_length = src_pusch_uci->csi_part2_bit_length;
-    dst_pusch_uci->alpha_scaling = src_pusch_uci->alpha_scaling;
-    dst_pusch_uci->beta_offset_harq_ack = src_pusch_uci->beta_offset_harq_ack;
-    dst_pusch_uci->beta_offset_csi1 = src_pusch_uci->beta_offset_csi1;
-    dst_pusch_uci->beta_offset_csi2 = src_pusch_uci->beta_offset_csi2;
+    *dst_pusch_uci = *src_pusch_uci;
   }
   if (src->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) {
     const nfapi_nr_pusch_ptrs_t *src_pusch_ptrs = &src->pusch_ptrs;
@@ -1252,10 +1154,7 @@ static void copy_ul_tti_request_pusch_pdu(const nfapi_nr_pusch_pdu_t *src, nfapi
     for (int i = 0; i < src_pusch_ptrs->num_ptrs_ports; ++i) {
       const nfapi_nr_ptrs_ports_t *src_ptrs_port = &src_pusch_ptrs->ptrs_ports_list[i];
       nfapi_nr_ptrs_ports_t *dst_ptrs_port = &dst_pusch_ptrs->ptrs_ports_list[i];
-
-      dst_ptrs_port->ptrs_port_index = src_ptrs_port->ptrs_port_index;
-      dst_ptrs_port->ptrs_dmrs_port = src_ptrs_port->ptrs_dmrs_port;
-      dst_ptrs_port->ptrs_re_offset = src_ptrs_port->ptrs_re_offset;
+      *dst_ptrs_port = *src_ptrs_port;
     }
 
     dst_pusch_ptrs->ptrs_time_density = src_pusch_ptrs->ptrs_time_density;
@@ -1265,50 +1164,23 @@ static void copy_ul_tti_request_pusch_pdu(const nfapi_nr_pusch_pdu_t *src, nfapi
   if (src->pdu_bit_map & PUSCH_PDU_BITMAP_DFTS_OFDM) {
     const nfapi_nr_dfts_ofdm_t *src_dfts_ofdm = &src->dfts_ofdm;
     nfapi_nr_dfts_ofdm_t *dst_dfts_ofdm = &dst->dfts_ofdm;
-
-    dst_dfts_ofdm->low_papr_group_number = src_dfts_ofdm->low_papr_group_number;
-    dst_dfts_ofdm->low_papr_sequence_number = src_dfts_ofdm->low_papr_sequence_number;
-    dst_dfts_ofdm->ul_ptrs_sample_density = src_dfts_ofdm->ul_ptrs_sample_density;
-    dst_dfts_ofdm->ul_ptrs_time_density_transform_precoding = src_dfts_ofdm->ul_ptrs_time_density_transform_precoding;
+    *dst_dfts_ofdm = *src_dfts_ofdm;
   }
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
   dst->maintenance_parms_v3.ldpcBaseGraph = src->maintenance_parms_v3.ldpcBaseGraph;
   dst->maintenance_parms_v3.tbSizeLbrmBytes = src->maintenance_parms_v3.tbSizeLbrmBytes;
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_pucch_pdu(const nfapi_nr_pucch_pdu_t *src, nfapi_nr_pucch_pdu_t *dst)
 {
-  dst->rnti = src->rnti;
-  dst->handle = src->handle;
-  dst->bwp_size = src->bwp_size;
-  dst->bwp_start = src->bwp_start;
-  dst->subcarrier_spacing = src->subcarrier_spacing;
-  dst->cyclic_prefix = src->cyclic_prefix;
-  dst->format_type = src->format_type;
-  dst->multi_slot_tx_indicator = src->multi_slot_tx_indicator;
-  dst->pi_2bpsk = src->pi_2bpsk;
-  dst->prb_start = src->prb_start;
-  dst->prb_size = src->prb_size;
-  dst->start_symbol_index = src->start_symbol_index;
-  dst->nr_of_symbols = src->nr_of_symbols;
-  dst->freq_hop_flag = src->freq_hop_flag;
-  dst->second_hop_prb = src->second_hop_prb;
-  dst->group_hop_flag = src->group_hop_flag;
-  dst->sequence_hop_flag = src->sequence_hop_flag;
-  dst->hopping_id = src->hopping_id;
-  dst->initial_cyclic_shift = src->initial_cyclic_shift;
-  dst->data_scrambling_id = src->data_scrambling_id;
-  dst->time_domain_occ_idx = src->time_domain_occ_idx;
-  dst->pre_dft_occ_idx = src->pre_dft_occ_idx;
-  dst->pre_dft_occ_len = src->pre_dft_occ_len;
-  dst->add_dmrs_flag = src->add_dmrs_flag;
-  dst->dmrs_scrambling_id = src->dmrs_scrambling_id;
-  dst->dmrs_cyclic_shift = src->dmrs_cyclic_shift;
-  dst->sr_flag = src->sr_flag;
-  dst->bit_len_harq = src->bit_len_harq;
-  dst->bit_len_csi_part1 = src->bit_len_csi_part1;
-  dst->bit_len_csi_part2 = src->bit_len_csi_part2;
+  PARTIAL_COPY(dst, src, nfapi_nr_pucch_pdu_t, bit_len_csi_part2);
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_srs_parameters(const nfapi_v4_srs_parameters_t *src,
@@ -1316,24 +1188,20 @@ static void copy_ul_tti_request_srs_parameters(const nfapi_v4_srs_parameters_t *
                                                nfapi_v4_srs_parameters_t *dst)
 {
   dst->srs_bandwidth_size = src->srs_bandwidth_size;
-  for (int symbol_idx = 0; symbol_idx < num_symbols; ++symbol_idx) {
-    nfapi_v4_srs_parameters_symbols_t *dst_symbol = &dst->symbol_list[symbol_idx];
-    const nfapi_v4_srs_parameters_symbols_t *src_symbol = &src->symbol_list[symbol_idx];
-    dst_symbol->srs_bandwidth_start = src_symbol->srs_bandwidth_start;
-    dst_symbol->sequence_group = src_symbol->sequence_group;
-    dst_symbol->sequence_number = src_symbol->sequence_number;
-  }
-
 #ifdef ENABLE_AERIAL
   // For Aerial, we always process the 4 reported symbols, not only the ones indicated by num_symbols
-  for (int symbol_idx = num_symbols; symbol_idx < 4; ++symbol_idx) {
+  const uint8_t symbols_to_fill = 4;
+  (void)num_symbols; // To supress unused warning
+#else
+  const uint8_t symbols_to_fill = num_symbols;
+#endif // ENABLE_AERIAL
+  for (uint_fast8_t symbol_idx = 0; symbol_idx < symbols_to_fill; ++symbol_idx) {
     nfapi_v4_srs_parameters_symbols_t *dst_symbol = &dst->symbol_list[symbol_idx];
     const nfapi_v4_srs_parameters_symbols_t *src_symbol = &src->symbol_list[symbol_idx];
     dst_symbol->srs_bandwidth_start = src_symbol->srs_bandwidth_start;
     dst_symbol->sequence_group = src_symbol->sequence_group;
     dst_symbol->sequence_number = src_symbol->sequence_number;
   }
-#endif // ENABLE_AERIAL
   dst->usage = src->usage;
   const uint8_t nUsage = __builtin_popcount(dst->usage);
   for (int idx = 0; idx < nUsage; ++idx) {
@@ -1346,37 +1214,12 @@ static void copy_ul_tti_request_srs_parameters(const nfapi_v4_srs_parameters_t *
   dst->ue_antennas_in_this_srs_resource_set = src->ue_antennas_in_this_srs_resource_set;
   dst->sampled_ue_antennas = src->sampled_ue_antennas;
   dst->report_scope = src->report_scope;
-  dst->num_ul_spatial_streams_ports = src->num_ul_spatial_streams_ports;
-  for (int idx = 0; idx < dst->num_ul_spatial_streams_ports; ++idx) {
-    dst->Ul_spatial_stream_ports[idx] = src->Ul_spatial_stream_ports[idx];
-  }
+  COPY_STRUCT_ARRAY(dst, src, Ul_spatial_stream_ports, num_ul_spatial_streams_ports);
 }
 
 static void copy_ul_tti_request_srs_pdu(const nfapi_nr_srs_pdu_t *src, nfapi_nr_srs_pdu_t *dst)
 {
-  dst->rnti = src->rnti;
-  dst->handle = src->handle;
-  dst->bwp_size = src->bwp_size;
-  dst->bwp_start = src->bwp_start;
-  dst->subcarrier_spacing = src->subcarrier_spacing;
-  dst->cyclic_prefix = src->cyclic_prefix;
-  dst->num_ant_ports = src->num_ant_ports;
-  dst->num_symbols = src->num_symbols;
-  dst->num_repetitions = src->num_repetitions;
-  dst->time_start_position = src->time_start_position;
-  dst->config_index = src->config_index;
-  dst->sequence_id = src->sequence_id;
-  dst->bandwidth_index = src->bandwidth_index;
-  dst->comb_size = src->comb_size;
-  dst->comb_offset = src->comb_offset;
-  dst->cyclic_shift = src->cyclic_shift;
-  dst->frequency_position = src->frequency_position;
-  dst->frequency_shift = src->frequency_shift;
-  dst->frequency_hopping = src->frequency_hopping;
-  dst->group_or_sequence_hopping = src->group_or_sequence_hopping;
-  dst->resource_type = src->resource_type;
-  dst->t_srs = src->t_srs;
-  dst->t_offset = src->t_offset;
+  PARTIAL_COPY(dst, src, nfapi_nr_srs_pdu_t, t_offset);
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
   copy_ul_tti_request_srs_parameters(&src->srs_parameters_v4, 1 << src->num_symbols, &dst->srs_parameters_v4);
 }
@@ -1583,7 +1426,7 @@ void copy_crc_indication_CRC(const nfapi_nr_crc_t *src, nfapi_nr_crc_t *dst)
   dst->tb_crc_status = src->tb_crc_status;
   dst->num_cb = src->num_cb;
   if (dst->num_cb > 0) {
-    const uint16_t cb_len = (dst->num_cb / 8) + 1;
+    const uint16_t cb_len = nr_bits_to_bytes(dst->num_cb);
     dst->cb_crc_status = calloc(cb_len, sizeof(uint8_t));
     for (int cb = 0; cb < cb_len; ++cb) {
       dst->cb_crc_status[cb] = src->cb_crc_status[cb];
@@ -1641,7 +1484,7 @@ void copy_uci_indication_sr_pdu_0_1(const nfapi_nr_sr_pdu_0_1_t *src, nfapi_nr_s
 void copy_uci_indication_sr_pdu_2_3_4(const nfapi_nr_sr_pdu_2_3_4_t *src, nfapi_nr_sr_pdu_2_3_4_t *dst)
 {
   dst->sr_bit_len = src->sr_bit_len;
-  const uint16_t sr_len = (dst->sr_bit_len / 8) + 1;
+  const uint16_t sr_len = nr_bits_to_bytes(dst->sr_bit_len);
   dst->sr_payload = calloc(sr_len, sizeof(*dst->sr_payload));
   for (int i = 0; i < sr_len; ++i) {
     dst->sr_payload[i] = src->sr_payload[i];
@@ -1661,7 +1504,7 @@ void copy_uci_indication_harq_pdu_2_3_4(const nfapi_nr_harq_pdu_2_3_4_t *src, nf
 {
   dst->harq_crc = src->harq_crc;
   dst->harq_bit_len = src->harq_bit_len;
-  const uint16_t harq_length = (dst->harq_bit_len / 8) + 1;
+  const uint16_t harq_length = nr_bits_to_bytes(dst->harq_bit_len);
   dst->harq_payload = calloc(harq_length, sizeof(*dst->harq_payload));
   for (int i = 0; i < harq_length; ++i) {
     dst->harq_payload[i] = src->harq_payload[i];
@@ -1672,7 +1515,7 @@ void copy_uci_indication_csi_part1(const nfapi_nr_csi_part1_pdu_t *src, nfapi_nr
 {
   dst->csi_part1_crc = src->csi_part1_crc;
   dst->csi_part1_bit_len = src->csi_part1_bit_len;
-  const uint16_t payload_length = (dst->csi_part1_bit_len / 8) + 1;
+  const uint16_t payload_length = nr_bits_to_bytes(dst->csi_part1_bit_len);
   dst->csi_part1_payload = calloc(payload_length, sizeof(*dst->csi_part1_payload));
   for (int i = 0; i < payload_length; ++i) {
     dst->csi_part1_payload[i] = src->csi_part1_payload[i];
@@ -1683,7 +1526,7 @@ void copy_uci_indication_csi_part2(const nfapi_nr_csi_part2_pdu_t *src, nfapi_nr
 {
   dst->csi_part2_crc = src->csi_part2_crc;
   dst->csi_part2_bit_len = src->csi_part2_bit_len;
-  const uint16_t payload_length = (dst->csi_part2_bit_len / 8) + 1;
+  const uint16_t payload_length = nr_bits_to_bytes(dst->csi_part2_bit_len);
   dst->csi_part2_payload = calloc(payload_length, sizeof(*dst->csi_part2_payload));
   for (int i = 0; i < payload_length; ++i) {
     dst->csi_part2_payload[i] = src->csi_part2_payload[i];
@@ -1818,13 +1661,13 @@ size_t get_uci_indication_size(const nfapi_nr_uci_indication_t *msg)
 
         // HARQ payload, CSI Part 1 and 2 are conditionally allocated
         if ((uci_pdu->pusch_pdu.pduBitmap >> 1) & 0x01) {
-          total_size += uci_pdu->pusch_pdu.harq.harq_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pusch_pdu.harq.harq_bit_len);
         }
         if ((uci_pdu->pusch_pdu.pduBitmap >> 2) & 0x01) {
-          total_size += uci_pdu->pusch_pdu.csi_part1.csi_part1_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pusch_pdu.csi_part1.csi_part1_bit_len);
         }
         if ((uci_pdu->pusch_pdu.pduBitmap >> 3) & 0x01) {
-          total_size += uci_pdu->pusch_pdu.csi_part2.csi_part2_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pusch_pdu.csi_part2.csi_part2_bit_len);
         }
         break;
 
@@ -1838,16 +1681,16 @@ size_t get_uci_indication_size(const nfapi_nr_uci_indication_t *msg)
 
         // SR, HARQ, CSI Part 1, and CSI Part 2 are conditionally allocated
         if (uci_pdu->pucch_pdu_format_2_3_4.pduBitmap & 0x01) {
-          total_size += uci_pdu->pucch_pdu_format_2_3_4.sr.sr_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pucch_pdu_format_2_3_4.sr.sr_bit_len);
         }
         if ((uci_pdu->pucch_pdu_format_2_3_4.pduBitmap >> 1) & 0x01) {
-          total_size += uci_pdu->pucch_pdu_format_2_3_4.harq.harq_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pucch_pdu_format_2_3_4.harq.harq_bit_len);
         }
         if ((uci_pdu->pucch_pdu_format_2_3_4.pduBitmap >> 2) & 0x01) {
-          total_size += uci_pdu->pucch_pdu_format_2_3_4.csi_part1.csi_part1_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pucch_pdu_format_2_3_4.csi_part1.csi_part1_bit_len);
         }
         if ((uci_pdu->pucch_pdu_format_2_3_4.pduBitmap >> 3) & 0x01) {
-          total_size += uci_pdu->pucch_pdu_format_2_3_4.csi_part2.csi_part2_bit_len / 8 + 1;
+          total_size += nr_bits_to_bytes(uci_pdu->pucch_pdu_format_2_3_4.csi_part2.csi_part2_bit_len);
         }
         break;
 
@@ -1993,7 +1836,7 @@ static void dump_dl_dci_pdu(const nfapi_nr_dl_dci_pdu_t *pdu, int depth)
   INDENTED_PRINTF("powerControlOffsetSS = %d\n", pdu->powerControlOffsetSS);
   INDENTED_PRINTF("PayloadSizeBits = %d\n", pdu->PayloadSizeBits);
   INDENTED_PRINTF("Payload = ");
-  for (int i = 0; i < (pdu->PayloadSizeBits + 7) / 8; ++i) {
+  for (int i = 0; i < nr_bits_to_bytes(pdu->PayloadSizeBits); ++i) {
     printf("0x%02x ", pdu->Payload[i]);
   }
   printf("\n");
@@ -2632,7 +2475,7 @@ void dump_crc_indication(const nfapi_nr_crc_indication_t *msg)
     INDENTED_PRINTF("HarqID = 0x%02x\n", crc->harq_id);
     INDENTED_PRINTF("TbCrcStatus = 0x%02x\n", crc->tb_crc_status);
     INDENTED_PRINTF("NumCb = 0x%02x\n", crc->num_cb);
-    const uint16_t cb_len = (crc->num_cb / 8) + 1; // length is ceil(NumCb/8)
+    const uint16_t cb_len = nr_bits_to_bytes(crc->num_cb); // length is ceil(NumCb/8)
     INDENTED_PRINTF("CbCrcStatus =\n");
     for (int j = 0; j < cb_len; j++) {
       printf("%02x ", crc->cb_crc_status[j]);
@@ -2650,7 +2493,7 @@ static void dump_harq_2_3_4(const nfapi_nr_harq_pdu_2_3_4_t *harq, int depth)
   INDENTED_PRINTF("HARQ CRC = %01x\n", harq->harq_crc);
   INDENTED_PRINTF("HARQ Bit Length = %d\n", harq->harq_bit_len);
   INDENTED_PRINTF("HARQ Payload = ");
-  for (int i = 0; i < harq->harq_bit_len / 8 + 1; i++) {
+  for (int i = 0; i < nr_bits_to_bytes(harq->harq_bit_len); i++) {
     printf("%x ", harq->harq_payload[i]);
   }
   printf("\n");
@@ -2661,7 +2504,7 @@ static void dump_csi_part_1(const nfapi_nr_csi_part1_pdu_t *csi, int depth)
   INDENTED_PRINTF("CSI Part 1 CRC = %01x\n", csi->csi_part1_crc);
   INDENTED_PRINTF("CSI Part 1 Bit Length = %d\n", csi->csi_part1_bit_len);
   INDENTED_PRINTF("CSI Part 1 Payload = ");
-  for (int i = 0; i < csi->csi_part1_bit_len / 8 + 1; i++) {
+  for (int i = 0; i < nr_bits_to_bytes(csi->csi_part1_bit_len); i++) {
     printf("%x ", csi->csi_part1_payload[i]);
   }
   printf("\n");
@@ -2672,7 +2515,7 @@ static void dump_csi_part_2(const nfapi_nr_csi_part2_pdu_t *csi, int depth)
   INDENTED_PRINTF("CSI Part 1 CRC = %01x\n", csi->csi_part2_crc);
   INDENTED_PRINTF("CSI Part 1 Bit Length = %d\n", csi->csi_part2_bit_len);
   INDENTED_PRINTF("CSI Part 1 Payload = ");
-  for (int i = 0; i < csi->csi_part2_bit_len / 8 + 1; i++) {
+  for (int i = 0; i < nr_bits_to_bytes(csi->csi_part2_bit_len); i++) {
     printf("%x ", csi->csi_part2_payload[i]);
   }
   printf("\n");
@@ -2740,7 +2583,7 @@ static void dump_sr_2_3_4(const nfapi_nr_sr_pdu_2_3_4_t *sr, int depth)
 {
   INDENTED_PRINTF("SR Bit Length = %d\n", sr->sr_bit_len);
   INDENTED_PRINTF("SR Payload ");
-  for (int i = 0; i < sr->sr_bit_len / 8 + 1; i++) {
+  for (int i = 0; i < nr_bits_to_bytes(sr->sr_bit_len); i++) {
     printf("%x ", sr->sr_payload[i]);
   }
   printf("\n");

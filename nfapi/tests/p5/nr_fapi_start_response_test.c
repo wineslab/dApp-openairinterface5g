@@ -46,7 +46,7 @@ void test_copy(const nfapi_nr_start_response_scf_t *msg)
   free_start_response(&copy);
 }
 
-int main(int n, char *v[])
+int main()
 {
   fapi_test_init();
 

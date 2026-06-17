@@ -558,7 +558,7 @@ static int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
                                     int32_t *precoded_sinr_dB)
 {
   const NR_DL_FRAME_PARMS *frame_parms = &ue->frame_parms;
-
+  const uint32_t ipn = interference_plus_noise_power == 0 ? 1 : interference_plus_noise_power;
   // i1 is a three-element vector in the form of [i11 i12 i13], when CodebookType is specified as 'Type1SinglePanel'.
   // Note that i13 is not applicable when the number of transmission layers is one of {1, 5, 6, 7, 8}.
   // i2, for 'Type1SinglePanel' codebook type, it is a scalar when PMIMode is specified as 'wideband', and when PMIMode
@@ -587,7 +587,7 @@ static int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
     if (count > 0) {
       const int64_t avg_signal_power = signal_power / count;
       // Non RF devices like ZMQ has virtually zero noise. So here we make noise as 1 to return maximum sinr.
-      const uint32_t sinr = avg_signal_power / ((interference_plus_noise_power == 0) ? 1 : interference_plus_noise_power);
+      const uint32_t sinr = avg_signal_power / ipn;
       *precoded_sinr_dB = dB_fixed(sinr);
     }
 
@@ -640,7 +640,7 @@ static int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
     for(int p = 0; p<4; p++) {
       int64_t power_re = sum2[p].r - (sum[p].r >> log2_re) * (sum[p].r >> log2_re);
       int64_t power_im = sum2[p].i - (sum[p].i >> log2_re) * (sum[p].i >> log2_re);
-      tested_precoded_sinr[p] = (power_re + power_im) / interference_plus_noise_power;
+      tested_precoded_sinr[p] = (power_re + power_im) / ipn;
     }
 
     if(rank_indicator == 0) {
@@ -961,6 +961,6 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
   nr_downlink_indication_t dl_indication;
   fapi_nr_rx_indication_t rx_ind = {0};
   nr_fill_dl_indication(&dl_indication, NULL, &rx_ind, proc, ue, NULL);
-  nr_fill_rx_indication(&rx_ind, FAPI_NR_MEAS_IND, ue, NULL, NULL, 1, proc, (void *)&l1_measurements, NULL);
+  nr_fill_rx_indication(&rx_ind, FAPI_NR_MEAS_IND, ue, 0, 0, NULL, 1, proc, (void *)&l1_measurements, NULL);
   ue->if_inst->dl_indication(&dl_indication);
 }

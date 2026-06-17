@@ -2,7 +2,7 @@
 
 # RELEASE NOTES: #
 
-## [v2.4.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v2.4.0) -> December 2025. ##
+## [v2.4.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v2.4.0) -> December 2025. ##
 
 General new features and improvements (both RAN and UE):
 - Rework LDPC BBdev/AAL interface and support both AMD T2/Intel vRAN Boost
@@ -68,7 +68,7 @@ Configuration file changes:
   should be removed
 - `MACRLCs.[0].stats_max_ue` has been added
 
-## [v2.3.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v2.3.0) -> July 2025. ##
+## [v2.3.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v2.3.0) -> July 2025. ##
 
 General new features and improvements (both RAN and UE):
 - Preliminary support for RedCap UEs
@@ -114,7 +114,7 @@ nrUE changes:
 Regression:
 - Multiple BWPs do not work reliably on gNB; use tag 2025.w17
 
-## [v2.2.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v2.2.0) -> November 2024. ##
+## [v2.2.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v2.2.0) -> November 2024. ##
 
 General 5G improvements (both gNB and UE):
 - Make standalone mode (SA) the default (see [`RUNMODEM.md`](doc/RUNMODEM.md))
@@ -170,7 +170,7 @@ General 5G improvements (both gNB and UE):
 This release also includes many fixes and documentation updates. See
 `doc/README.md` in the repository for an overview of documentation.
 
-## [v2.1.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v2.1.0) -> February 2024. ##
+## [v2.1.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v2.1.0) -> February 2024. ##
 
 This release improves existing 5G support and adds various new features.
 
@@ -197,7 +197,7 @@ interoperability is under testing.
 
 This release also includes many fixes and documentation updates.
 
-## [v2.0.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v2.0.0) -> August 2023. ##
+## [v2.0.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v2.0.0) -> August 2023. ##
 
 This release adds support for 5G and maintains previous features:
 * 5G SA in gNB
@@ -226,11 +226,11 @@ This release adds support for 5G and maintains previous features:
 
 For more information on supported features, please refer to the [feature set](doc/FEATURE_SET.md).
 
-## [v1.2.1](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.2.1) -> February 2020. ##
+## [v1.2.1](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.2.1) -> February 2020. ##
 
 * Bug fix for mutex lock for wake-up signal
 
-## [v1.2.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.2.0) -> January 2020. ##
+## [v1.2.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.2.0) -> January 2020. ##
 
 This version adds the following implemented features:
 
@@ -246,11 +246,11 @@ This version also has an improved code quality:
 * Better Test Coverage in Continuous Integration:
   - Initial framework to do long-run testing at R2LAB
 
-## [v1.1.1](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.1.1) -> November 2019. ##
+## [v1.1.1](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.1.1) -> November 2019. ##
 
 - Bug fix in the TDD Fair Round-Robin scheduler
 
-## [v1.1.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.1.0) -> July 2019. ##
+## [v1.1.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.1.0) -> July 2019. ##
 
 This version adds the following implemented features:
 
@@ -282,19 +282,19 @@ This version has an improved code quality:
   - Multi-RRU TDD mode
   - X2 Handover in FDD mode
 
-## [v1.0.3](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.0.3) -> June 2019. ##
+## [v1.0.3](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.0.3) -> June 2019. ##
 
 - Bug fix for LimeSuite v19.04.0 API
 
-## [v1.0.2](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.0.2) -> February 2019. ##
+## [v1.0.2](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.0.2) -> February 2019. ##
 
 - Full OAI support for 3.13.1 UHD
 
-## [v1.0.1](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.0.1) -> February 2019. ##
+## [v1.0.1](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.0.1) -> February 2019. ##
 
 - Bug fix for the UE L1 simulator.
 
-## [v1.0.0](https://gitlab.eurecom.fr/oai/openairinterface5g/-/tags/v1.0.0) -> January 2019. ##
+## [v1.0.0](https://github.com/duranta-project/openairinterface5g/releases/tag/v1.0.0) -> January 2019. ##
 
 This version first implements the architectural split described in the following picture.
 

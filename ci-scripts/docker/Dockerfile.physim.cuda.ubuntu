@@ -26,7 +26,7 @@ RUN cmake -GNinja -DENABLE_PHYSIM_TESTS=ON -DENABLE_TESTS=ON \
         -DSANITIZE_UNDEFINED=OFF -DSANITIZE_ADDRESS=OFF \
         -DCMAKE_C_FLAGS=-Werror -DCMAKE_CXX_FLAGS=-Werror \
         -DPHYSIM_CHECK_FILES="ThresholdsCuda.cmake" \
-        -DCUDA_ENABLE=ON \
+        -DENABLE_CHANNEL_SIM_CUDA=ON \
         -DUSE_UNIFIED_MEMORY=ON \
         -DUSE_ATS_MEMORY=OFF \
         -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/oai-ran/cmake_targets/ran_build/build \

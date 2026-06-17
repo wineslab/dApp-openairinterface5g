@@ -21,7 +21,6 @@ THREAD_STRUCT thread_struct;
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
 int64_t uplink_frequency_offset[MAX_NUM_CCs][4];
 int oai_exit = 0;
-instance_t CUuniqInstance = 0;
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/flexric/src/agent/e2_agent_api.h"

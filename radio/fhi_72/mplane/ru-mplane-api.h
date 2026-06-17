@@ -102,7 +102,8 @@ typedef struct {
 typedef struct {
   char *ru_mac_addr;
   uint32_t mtu;
-  int16_t iq_width;
+  uint8_t comp_hdr_type;
+  uint8_t iq_width;
   uint8_t prach_offset;
 
   // DU sends to RU and xran

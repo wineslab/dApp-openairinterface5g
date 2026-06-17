@@ -36,7 +36,7 @@
 #include "common/utils/LOG/log.h"
 #define ASN_DEBUG(x...) do{ LOG_I(ASN1,x);LOG_I(ASN1,"\n"); } while(false)
 #else
-#define ASN_DEBUG(x...)
+#define ASN_DEBUG(x...) do{}while(0)
 #endif
 
 #endif /* UTILS_CONFIG_H_ASN1 */

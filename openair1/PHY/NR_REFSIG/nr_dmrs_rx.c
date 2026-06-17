@@ -69,7 +69,7 @@ int nr_pusch_dmrs_rx(nr_prefix_type_t Ncp,
 #ifdef DEBUG_PUSCH
           printf("nr_pusch_dmrs_rx dmrs config type %d port %d nb_pusch_rb %d\n", dmrs_type, p, nb_pusch_rb);
           printf("wf[%d] = %d wt[%d]= %d\n", i&1, wf[p-1000][i&1], lp, wt[p-1000][lp]);
-          printf("i %d idx %d pusch mod_dmrs %d %d\n", i, idx, output[k].r, output[k].i);
+          printf("i %d k %d pusch mod_dmrs %d %d\n", i, k, output[k].r, output[k].i);
 #endif
         }
       } else {

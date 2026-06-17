@@ -20,7 +20,7 @@ gNBs:
     nr_cellid: 12345678
     # Physical parameters:
     do_CSIRS: 1
-    do_SRS: 1
+    do_SRS: periodic
     first_active_bwp: 1
     bwp_list:
       -

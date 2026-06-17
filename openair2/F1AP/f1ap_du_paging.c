@@ -9,6 +9,8 @@
 #include "oai_asn1.h"
 #include "openair2/RRC/LTE/rrc_proto.h"
 
+#include "F1AP_F1AP-PDU.h"
+
 /* @brief Handle F1AP Paging message at DU */
 int DU_handle_Paging(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {

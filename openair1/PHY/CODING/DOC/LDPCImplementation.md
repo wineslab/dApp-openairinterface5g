@@ -48,30 +48,6 @@ Please refer to the dedicated documentation at [LDPC_OFFLOAD_SETUP.md](file://..
 
 `libldpc_aal.so` has its decoder and its encoder implemented in [nrLDPC_coding_aal.c](file://../nrLDPC_coding/nrLDPC_coding_aal/nrLDPC_coding_aal.c).
 
-loading `libldpc_xdma.so` instead of `libldpc.so`:
-
-`make ldpc_xdma` or `ninja ldpc_xdma`
-
-This command creates the `libldpc_xdma.so` shared library.
-
-```
-ninja ldpc_xdma
-[2/2] Linking C shared module libldpc_xdma.so
-```
-
-At runtime, to successfully use the xdma, you need to install vendor specific drivers and tools.\
-Please refer to the dedicated documentation at [LDPC_XDMA_OFFLOAD_SETUP.md](file://../../../../doc/LDPC_XDMA_OFFLOAD_SETUP.md).
-
-```
-./nr-softmodem -O libconfig:gnb.band78.sa.fr1.106PRB.usrpb210.conf:dbgl5 --rfsim --rfsimulator.[0].serveraddr server --log_config.gtpu_log_level info --loader.ldpc.shlibversion _xdma --nrLDPC_coding_xdma.num_threads_prepare 2
-```
-
-`libldpc_xdma.so` has its decoder implemented in [nrLDPC_coding_xdma.c](file://../nrLDPC_coding/nrLDPC_coding_xdma/nrLDPC_coding_xdma.c).\
-Its encoder is implemented in [nrLDPC_coding_segment_encoder.c](file://../nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c).
-
-*Note: `libldpc_xdma.so` relies on a segment coding library for encoding.*
-*The segment coding library is `libldpc.so` by default but it can be chosen with option `--nrLDPC_coding_xdma.encoder_shlibversion` followed by the library version - like with `--loder.ldpc.shlibversion` in the segment coding case above -*
-
 #### Examples of ldpc shared lib selection when running ldpctest:
 
 Slot coding libraries cannot be used yet within ldpctest.
@@ -85,8 +61,6 @@ Libraries implementing the slotwise LDPC coding must be named `libldpc<_version>
 `libldpc.so` is completed.
 
 `libldpc_aal.so` is completed.
-
-`libldpc_xdma.so` is completed.
 
 ## LDPC segment coding
 The interface of the library is defined in [nrLDPC_defs.h](file://../nrLDPC_defs.h) as typedefs of the functions of the interface.
@@ -125,5 +99,3 @@ Libraries implementing the LDPC algorithms must be named `libldpc<_version>.so`,
 * `LDPCshutdown` implementing type `LDPC_shutdownfunc_t *`
 * `LDPCdecoder` implementing type `LDPC_decoderfunc_t *`
 * `LDPCencoder` implementing type `LDPC_encoderfunc_t *`
-
-[oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

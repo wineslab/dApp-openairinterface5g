@@ -41,10 +41,9 @@ class TestDeploymentMethods(unittest.TestCase):
 		self.ci = cls_oaicitest.OaiCiTest()
 		self.cont = cls_containerize.Containerize()
 		self.cont.yamlPath = ''
-		self.cont.ranAllowMerge = True
-		self.cont.ranBranch = ''
-		self.cont.ranCommitID = ''
-		self.cont.eNBSourceCodePath = os.getcwd()
+		self.cont.merge = True
+		self.cont.branch = ''
+		self.cont.workspace = os.getcwd()
 		self.cont.num_attempts = 3
 		self.node = 'localhost'
 		self.ctx = TestCaseCtx.Default(tempfile.mkdtemp())
@@ -136,13 +135,12 @@ class TestDeploymentMethods(unittest.TestCase):
 		self.assertTrue(undeploy)
 
 	def test_create_workspace(self):
-		self.cont.eNBSourceCodePath = tempfile.mkdtemp()
-		self.cont.ranRepository = "https://gitlab.eurecom.fr/oai/openairinterface5g.git"
-		self.cont.ranCommitID = "05f9c975eeecbca1bdff5940affad44465f1301f"
-		self.cont.ranBranch = "develop"
+		self.cont.workspace = tempfile.mkdtemp()
+		self.cont.repository = "https://github.com/duranta-project/openairinterface5g.git"
+		self.cont.branch = "develop"
 		ws = self.cont.Create_Workspace(self.node, self.html)
 		with cls_cmd.LocalCmd() as cmd:
-			cmd.run(f"rm -rf {self.cont.eNBSourceCodePath}")
+			cmd.run(f"rm -rf {self.cont.workspace}")
 		self.assertTrue(ws)
 
 	def test_undeploy_loganalysis(self):

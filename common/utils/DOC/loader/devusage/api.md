@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
- Loader API is defined in the [common/utils/load_module_shlib.h](https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/common/utils/load_module_shlib.h) include file.
+ Loader API is defined in the [common/utils/load_module_shlib.h](../../load_module_shlib.h) include file.
 ```c
 int load_module_shlib(char *modname,loader_shlibfunc_t *farray, int numf)
 ```

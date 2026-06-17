@@ -15,7 +15,7 @@ set -x
 ./nr-cuup -O ${CONFIG} &
 CUUP_PID=$!
 
-timeout 5s ./tests/nr-cuup/nr-cuup-load-test -t 3 -d 10 -u 10
+timeout 7s ./tests/nr-cuup/nr-cuup-load-test -t 3 -d 10 -u 10
 RET=$?
 
 kill ${CUUP_PID}

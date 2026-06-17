@@ -45,9 +45,26 @@ services:
             - ../5g_rfsimulator/mini_nonrf_config.yaml:/openair-smf/etc/config.yaml
         depends_on:
             - oai-amf
+            - oai-pcf
         networks:
             public_net:
                 ipv4_address: 192.168.71.133
+    oai-pcf:
+        container_name: "rfsim5g-oai-pcf"
+        image: oaisoftwarealliance/oai-pcf:v2.2.1
+        environment:
+            - TZ=Europe/Paris
+        volumes:
+            - ../5g_rfsimulator/mini_nonrf_config.yaml:/openair-pcf/etc/config.yaml
+            - ./policies/policy_decisions:/openair-pcf/policies/policy_decisions
+            - ./policies/pcc_rules:/openair-pcf/policies/pcc_rules
+            - ./policies/traffic_rules:/openair-pcf/policies/traffic_rules
+            - ./policies/qos_data:/openair-pcf/policies/qos_data
+        depends_on:
+            - oai-amf
+        networks:
+            public_net:
+                ipv4_address: 192.168.71.142
     oai-upf:
         container_name: "rfsim5g-oai-upf"
         image: oaisoftwarealliance/oai-upf:v2.2.1
@@ -78,7 +95,8 @@ services:
         init: true
         entrypoint: /bin/bash -c \
               "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE;"\
-              "ip route add 12.1.1.0/24 via 192.168.72.134 dev eth0; sleep infinity"
+              "ip route add 12.1.1.0/24 via 192.168.72.134 dev eth0;"\
+              "ip route add 12.1.2.0/24 via 192.168.72.134 dev eth0; sleep infinity"
         depends_on:
             - oai-upf
         networks:

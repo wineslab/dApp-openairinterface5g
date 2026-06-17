@@ -1033,6 +1033,7 @@ schedule_MBMS_NFAPI(module_id_t module_idP, uint8_t CC_id, frame_t frameP,
 	/* Tracing of PDU is done on UE side */
 	//if (opt_enabled == 1) {
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = cc->tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = (uint8_t *)cc->MCH_pdu.payload,
                     .pdu_buffer_size = TBS,
                     .ueid = module_idP,
@@ -1814,6 +1815,7 @@ schedule_MBMS(module_id_t module_idP, uint8_t CC_id, frame_t frameP,
 	/* Tracing of PDU is done on UE side */
 	//if (opt_enabled == 1) {
   ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                    .type = cc->tdd_Config == NULL ? FDD_RADIO : TDD_RADIO,
                     .pdu_buffer = (uint8_t *)cc->MCH_pdu.payload,
                     .pdu_buffer_size = TBS,
                     .ueid = module_idP,

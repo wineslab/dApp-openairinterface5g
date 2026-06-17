@@ -10,11 +10,11 @@ This document explains the implementation of analog beamforming in OAI codebase.
 
 Beamforming is a technique applied to antenna arrays to create a directional radiation pattern. This often consists in providing a different phase shift to each element of the array such that signals with a different angle of arrival/departure experience a change in radiation pattern because of constructive or destructive interference.
 
-There are three main beamforming techinques: analog, digital and hybrid. The names refer to the phase shift application before or after the digital to analog conversion (or analog to digital in reception). When we speak about analog beamforming we generally refer to a techinique where the phase shifts that produce the beam stearing are applied by the radio unit (RU) choosing from a finite set of steering directions. The advantage of analog beamforming is a simplified analog circuitry and therefore reduced costs.
+There are three main beamforming techniques: analog, digital and hybrid. The names refer to the phase shift application before or after the digital to analog conversion (or analog to digital in reception). When we speak about analog beamforming we generally refer to a technique where the phase shifts that produce the beam steering are applied by the radio unit (RU) choosing from a finite set of steering directions. The advantage of analog beamforming is a simplified analog circuitry and therefore reduced costs.
 
 The presence of a limited number of predefined beams at RU poses constraints to the scheduler at gNB. As a matter of fact, the scheduler can serve only a limited number of beams, depending on the RU characteristics (possibly only 1), in a given time scale, that also depends on the RU characteristics (e.g. 1 slot or 1 symbol). This limitation doesn't exist for digital beamforming.
 
-Analog beamforming implementation also allows to enable distributed antenna systems (DAS), where each beam corrisponds to one antenna (or a set of antennas) of the system. In this scenario, the scheduler constaint is alleviated because normally the number of concurrent beams allowed equals the total number of beams.
+Analog beamforming implementation also allows to enable distributed antenna systems (DAS), where each beam corresponds to one antenna (or a set of antennas) of the system. In this scenario, the scheduler constraint is alleviated because normally the number of concurrent beams allowed equals the total number of beams.
 
 ## Configuration file fields for analog beamforming
 
@@ -55,19 +55,17 @@ This definition of beam-ID is present only in the most recent versions of SCF PH
 
 In addition to that, a `config_request` structure defined as vendor extension (`nfapi_nr_analog_beamforming_ve_t`) configures the lower layers at initialization with the following information:
 - `analog_bf_vendor_ext` which can assume values 1 or 0 for enabling or disabling analog beamforming
-- `num_beams_period_vendor_ext` which corresponds to the configuration parameter `beams_per_period`
 
 Therefore, in case of analog beamforming, L2 provides in each channel FAPI message information about the beam index via the beam-ID parameter with MSB set to 1.
 
 ## L1 implementation
 
-To handle multiple concurrent beams, the buffers containing Tx and Rx data in frequency domain (`txdataF` and `rxdataF`) have been extended by one dimension to contain multiple concurrent beams to be transmitted/received.
-The function `beam_index_allocation`, called by every L1 channel, is responsible to match the FAPI analog beam index to the RU beam index and to store the latter `beam_id` structure, which allocates the beams per symbol, despite L2 only supporting beam change at slot level. At the same time, the function returns the concurrent beam index, to be used to store data in frequency domain buffers. While doing so, the function also checks if there is room for current beam in the list of concurrent beams, which should always be the case, if L2 properly allocated the channels.
-
+The total number of logical antenna ports available at L1 is same as `pusch_AntennaPorts * beams_per_period` in UL and `pdsch_AntennaPorts_N1 * pdsch_AntennaPorts_N2 * pdsch_AntennaPorts_XP * beams_per_period` in DL.
+To handle multiple concurrent beams, L2 uses spatial stream indices specified by FAPI to signal L1 on which logical ports to use for a DL or UL signal. The config file parameter `spatial_stream_index` can be used to specify an array of logical port indices to be used. If this parameter is not provided then the indices defaults to `[0 ... pusch_AntennaPorts - 1]`. This parameter is particularly useful when a specific subset of eAxCID has to be used.
 In case of DAS, since each beam corresponds to a specific antenna port, the `beam_index_allocation` function is simplified in the sense that the beam index corresponds to the antenna port index of the frequency domain buffers.
 
 ## RU implementation
 
 The implementation is still work in progress.
 
-The first dimension of the Tx and Rx buffers that used to contain the number of Tx/Rx antennas, it is now extended to contain the number of parallel streams which is the number of antennas multiplied by the number of concurrent beams.
+The first dimension of the Tx and Rx buffers contains the number of Tx/Rx antennas which is at least the number of logical antenna ports.

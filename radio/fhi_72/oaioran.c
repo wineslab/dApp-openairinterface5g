@@ -72,6 +72,17 @@ void print_fhi_counters(ru_info_t *ru, const int frame, const int slot)
             x_counters[o_xu_id].tx_counter - old_tx_counter[o_xu_id],
             x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L,
             x_counters[o_xu_id].Total_msgs_rcvd);
+#if defined K_RELEASE
+      LOG_I(HW,
+            "[%s%d][RX Timing][on time: %7lu, early %7lu late %7lu corrupt %7lu, duplicated %7lu]\n",
+            "o_du",
+            o_xu_id,
+            x_counters[o_xu_id].Rx_on_time,
+            x_counters[o_xu_id].Rx_early,
+            x_counters[o_xu_id].Rx_late,
+            x_counters[o_xu_id].Rx_corrupt,
+            x_counters[o_xu_id].Rx_pkt_dupl);
+#endif
       for (int rxant = 0; rxant < ru->nb_rx / fh_init->xran_ports; rxant++)
         LOG_I(HW,
               "[%s%d][pusch%d %7ld prach%d %7ld]\n",
@@ -345,7 +356,6 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   *slot = info->sl;
   *frame = info->f;
   uint8_t mu = info->mu;
-  delNotifiedFIFO_elt(res);
 #endif
 
   prach_item_t p;
@@ -369,10 +379,15 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
                                                                                                              ); // `p.slot` = slot in which PRACH is scheduled
     if (is_prach_slot) {
       ru->prach_buf = p.prach_buf;
+      ru->nb_prach_rx = p.nb_rx;
+      ru->start_prach_rx = p.ant_start;
     } else {
       LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, p.slot);
     }
   } else {
+#if defined K_RELEASE
+    delNotifiedFIFO_elt(res);
+#endif
     return (0);
   }
 
@@ -408,13 +423,13 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
-    for (int aa = 0; aa < ru->nb_rx; aa++) {
+    for (int aa = ru->start_prach_rx; aa < ru->start_prach_rx + ru->nb_prach_rx; aa++) {
       for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
         oran_buf_list_t *bufs = get_xran_buffers(aa / nb_rx_per_ru);
         // hardcoded to use only first prach occasion
-        dst = (int16_t *)ru->prach_buf[aa][0];
+        dst = (int16_t *)ru->prach_buf[aa - ru->start_prach_rx][0];
 #if defined K_RELEASE
         struct xran_prb_map * pPrbMap = (struct xran_prb_map *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_rx_packet_ctl *p_rx_packet_ctl = &pPrbMap->sFrontHaulRxPacketCtrl[sym_idx];
@@ -490,7 +505,9 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   // constant pace, but prach_l1rx_queue emptied as fast as possible,
   // see rx_func()
   DevAssert(success);
-
+#if defined K_RELEASE
+  delNotifiedFIFO_elt(res);
+#endif
   return (0);
 }
 
@@ -587,7 +604,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
 #if defined K_RELEASE
   uint8_t mu = info->mu;
 #endif
-  delNotifiedFIFO_elt(res);
   // return(0);
 
   struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
@@ -739,6 +755,9 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
       } // sym_ind
     } // ant_ind
   } // vv_inf
+#if defined K_RELEASE
+  delNotifiedFIFO_elt(res);
+#endif
   return (0);
 }
 
@@ -799,22 +818,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 #endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
-          if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-            if (sym_idx >= pRbElm->nStartSymb && sym_idx < pRbElm->nStartSymb + pRbElm->numSymb) {
-              if (!p_sec_desc->pCtrl)
-                continue;
-              // ant_id / no of antenna per beam gives the beam_nb
-              pRbElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (pRbElm->nBeamIndex == -1)
-                pRbElm->nBeamIndex = 0;
-            }
-          } else {
-            // ant_id / no of antenna per beam gives the beam_nb
-            int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-            if (beam_id != -1)
-              pRbElm->nBeamIndex = beam_id;
-          }
+          if (fh_cfg->RunSlotPrbMapBySymbolEnable && (sym_idx < pRbElm->nStartSymb || sym_idx >= pRbElm->nStartSymb + pRbElm->numSymb) && !p_sec_desc->pCtrl)
+            continue;
+
+          pRbElm->nBeamIndex = ru->beam_id[slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx][ant_id];
         }
       }
     }
@@ -829,31 +836,22 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         continue;
       }
 
-      // For Liteon FR2 with RunSlotPrbMapBySymbolEnable. Set nPrbElm if beam_id = -1 for all downlink symbols
+      /* TODO: Remove this hack to set nPrbElm for mixed slot. This can be set statically during init based on TDD pattern. */
       if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-        bool beam_used = false;
         uint8_t *pPrbMapData = bufs->srccp[ant_id % nb_tx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
         struct xran_prb_map *pRbMap = pPrbMap;
         int32_t dl_sym_end = 0;
         for (int32_t sym_idx = 0; sym_idx < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_idx++) {
-          if (is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
-            if (ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx] != -1)
-              beam_used |= true;
-          }
-          else {
-              dl_sym_end = sym_idx;
-              break;
+          if (!is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
+            dl_sym_end = sym_idx;
+            break;
           }
         }
         if (is_tdd_guard_slot(frame_conf, slot))
           pRbMap->nPrbElm = dl_sym_end;
         else
           pRbMap->nPrbElm = XRAN_NUM_OF_SYMBOL_PER_SLOT;
-        if (!beam_used) {
-          pRbMap->nPrbElm = 0;
-          continue;
-        }
       }
 
       // This loop would better be more inner to avoid confusion and maybe also errors.
@@ -911,17 +909,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                   p_sec_desc->iq_buffer_len    = 0;
                   continue;
               }
-              // ant_id / no of antenna per beam gives the beam_nb
-              p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (p_prbMapElm->nBeamIndex == -1)
-                p_prbMapElm->nBeamIndex = 0;
-            } else {
-              // ant_id / no of antenna per beam gives the beam_nb
-              int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              if ( beam_id != -1)
-                p_prbMapElm->nBeamIndex = beam_id;
             }
+            p_prbMapElm->nBeamIndex = ru->beam_id[slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx][ant_id];
 
             dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
 

@@ -23,7 +23,7 @@
     <desc>Deploy OAI 5G CoreNetwork</desc>
     <node>localhost</node>
     <yaml_path>ci-scripts/yaml_files/5g_rfsimulator_u0_25prb</yaml_path>
-    <services>mysql oai-amf oai-smf oai-upf oai-ext-dn</services>
+    <services>mysql oai-amf oai-smf oai-pcf oai-upf oai-ext-dn</services>
   </testCase>
 
   <testCase>
@@ -42,28 +42,6 @@
   </testCase>
 
   <testCase>
-    <class>Ping</class>
-    <desc>Ping ext-dn from NR-UE</desc>
-    <id>rfsim5g_ue</id>
-    <node>localhost</node>
-    <svr_id>rfsim5g_ext_dn</svr_id>
-    <svr_node>localhost</svr_node>
-    <ping_args>-c 20 -i 0.25</ping_args>
-    <ping_packetloss_threshold>5</ping_packetloss_threshold>
-  </testCase>
-
-  <testCase>
-    <class>Ping</class>
-    <desc>Ping NR-UE from ext-dn</desc>
-    <id>rfsim5g_ext_dn</id>
-    <node>localhost</node>
-    <svr_id>rfsim5g_ue</svr_id>
-    <svr_node>localhost</svr_node>
-    <ping_args>-c 20 -i 0.25</ping_args>
-    <ping_packetloss_threshold>5</ping_packetloss_threshold>
-  </testCase>
-
-  <testCase>
     <class>Attach_UE</class>
     <desc>Verify 2nd PDU session is up</desc>
     <id>rfsim5g_ue_pdu_2</id>
@@ -71,14 +49,109 @@
   </testCase>
 
   <testCase>
-    <class>Ping</class>
-    <desc>Ping ext-dn from NR-UE on PDU session ID 2</desc>
+    <class>Custom_Command</class>
+    <desc>Configure policy routing for PDU2 source IP</desc>
+    <may_fail>true</may_fail>
+    <node>localhost</node>
+    <command>docker exec rfsim5g-oai-nr-ue sh -c "ip rule add from 12.1.2.2/32 table 1002 prio 1002; ip route replace default dev oaitun_ue1p2 src 12.1.2.2 table 1002"</command>
+  </testCase>
+
+  <testCase>
+    <class>Custom_Command</class>
+    <desc>Ping ext-dn from UE PDU session 1 interface</desc>
+    <node>localhost</node>
+    <command>docker exec rfsim5g-oai-nr-ue ping -I oaitun_ue1 -c 10 192.168.72.135</command>
+  </testCase>
+
+  <testCase>
+    <class>Custom_Command</class>
+    <desc>Ping ext-dn from UE PDU session 2 interface</desc>
+    <node>localhost</node>
+    <command>docker exec rfsim5g-oai-nr-ue ping -I oaitun_ue1p2 -c 10 192.168.72.135</command>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (UL/1Mbps/UDP)(6 sec) QFI 1 (default) flow on PDU session 1 (port 5201)</desc>
+    <iperf_args>-u -b 1M -t 6 -B 12.1.1.2 -p 5201</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (UL/1Mbps/UDP)(6 sec) QFI 2 flow on PDU session 1 (port 52080)</desc>
+    <iperf_args>-u -b 1M -t 6 -B 12.1.1.2 -p 52080</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (UL/1Mbps/UDP)(6 sec) QFI 3 flow on PDU session 1 (port 52081)</desc>
+    <iperf_args>-u -b 1M -t 6 -B 12.1.1.2 -p 52081</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (UL/1Mbps/UDP)(6 sec) default flow on PDU session 2 (port 5201)</desc>
+    <iperf_args>-u -b 1M -t 6 -B 12.1.2.2 -p 5201</iperf_args>
     <id>rfsim5g_ue_pdu_2</id>
     <node>localhost</node>
     <svr_id>rfsim5g_ext_dn</svr_id>
     <svr_node>localhost</svr_node>
-    <ping_args>-c 20 -i 0.25</ping_args>
-    <ping_packetloss_threshold>5</ping_packetloss_threshold>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (DL/1Mbps/UDP)(6 sec) QFI 1 (default) flow on PDU session 1 (port 5201)</desc>
+    <iperf_args>-u -b 1M -t 6 -R -B 12.1.1.2 -p 5201</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (DL/1Mbps/UDP)(6 sec) QFI 2 flow on PDU session 1 (port 52080)</desc>
+    <iperf_args>-u -b 1M -t 6 -R -B 12.1.1.2 -p 52080</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
+  </testCase>
+
+  <testCase>
+    <class>Iperf</class>
+    <desc>Iperf (DL/1Mbps/UDP)(6 sec) QFI 3 flow on PDU session 1 (port 52081)</desc>
+    <iperf_args>-u -b 1M -t 6 -R -B 12.1.1.2 -p 52081</iperf_args>
+    <id>rfsim5g_ue</id>
+    <node>localhost</node>
+    <svr_id>rfsim5g_ext_dn</svr_id>
+    <svr_node>localhost</svr_node>
+    <iperf_packetloss_threshold>20</iperf_packetloss_threshold>
+    <iperf_bitrate_threshold>10</iperf_bitrate_threshold>
   </testCase>
 
   <testCase>

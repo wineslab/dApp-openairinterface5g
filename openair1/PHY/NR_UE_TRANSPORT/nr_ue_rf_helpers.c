@@ -6,11 +6,10 @@
  * \brief      Functional helpers to configure the RF boards at UE side
  */
 
-#include "PHY/defs_nr_UE.h"
+#include "openair1/PHY/defs_nr_UE.h"
+#include "openair1/PHY/phy_extern_nr_ue.h"
 #include "nr_transport_proto_ue.h"
 #include "executables/softmodem-common.h"
-
-extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
 
 void nr_get_carrier_frequencies(const PHY_VARS_NR_UE *ue, uint64_t *dl_carrier, uint64_t *ul_carrier)
 {
@@ -29,7 +28,7 @@ void nr_rf_card_config_gain(openair0_config_t *openair0_cfg)
 {
   uint8_t mod_id     = 0;
   uint8_t cc_id      = 0;
-  PHY_VARS_NR_UE *ue = PHY_vars_UE_g[mod_id][cc_id];
+  PHY_VARS_NR_UE *ue = nrPHY_vars_UE_g[mod_id][cc_id];
   int rf_chain       = ue->rf_map.chain;
   double rx_gain     = ue->rx_total_gain_dB;
   double tx_gain     = ue->tx_total_gain_dB;
@@ -61,7 +60,7 @@ void nr_rf_card_config_freq(openair0_config_t *openair0_cfg,
 
   uint8_t mod_id     = 0;
   uint8_t cc_id      = 0;
-  PHY_VARS_NR_UE *ue = PHY_vars_UE_g[mod_id][cc_id];
+  PHY_VARS_NR_UE *ue = nrPHY_vars_UE_g[mod_id][cc_id];
   int rf_chain       = ue->rf_map.chain;
   double freq_scale  = (double)(dl_carrier + freq_offset) / dl_carrier;
 

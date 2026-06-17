@@ -207,3 +207,40 @@ channelmod:
      forgetfact: 0
      offset: 0
      ds_tdl: 0
+vrtsim:
+  role: server
+  # Channel mode: exactly one of the three modes below should be active.
+  #
+  # No channel - plain passthrough, no impairments:
+  # cirdb: 0
+  # chanmod: 0
+  #
+  # Built-in channel model defined in the channelmod: section above:
+  # chanmod: 1
+  # cirdb: 0
+  #
+  # External taps emitter publishing over a nanomsg socket.
+  # Requires a running emit_from_db.py and build with -DOAI_VRTSIM_TAPS_CLIENT=ON:
+  # cirdb: 0
+  # chanmod: 0
+  # taps-socket: "tcp://127.0.0.1:5555"
+  #
+  # In-process CIR database: reads precomputed 3GPP TDL taps directly from
+  # cir_db.bin. No external emitter required. Generate the database offline
+  # with cir_generator.py. Use cirdb-path to point to the directory containing
+  # cir_db.bin and cir_db.yaml.
+  cirdb_file: /cirdb/cir_db.bin
+  cirdb_yaml: /cirdb/cir_db.yaml  
+  #
+  # Per-UE channel configuration for multi-UE operation
+  ue_config:
+    - antennas: "2x2"   # NxM where N=UE-TX, M=gNB-TX; M must equal RU nb_tx
+      model_id: 0       # 0=TDL-A 1=TDL-B 2=TDL-C 3=TDL-D 4=TDL-E
+      ds_ns: 1.0        # RMS delay spread in ns
+      speed_mps: 1.5    # UE speed in m/s
+      # aoa_deg: 0.0    # angle of arrival in degrees; TDL-D/E only
+    - antennas: "1x2"   
+      model_id: 0
+      ds_ns: 1.0
+      speed_mps: 1.5
+      # aoa_deg: 0.0    

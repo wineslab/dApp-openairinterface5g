@@ -2310,6 +2310,7 @@ if((ue->frame_parms.FeMBMS_active == 0)|| is_fembms_cas_subframe(frame_rx,subfra
       dummy[1] = ue->pbch_vars[eNB_id]->decoded_output[1];
       dummy[2] = ue->pbch_vars[eNB_id]->decoded_output[0];
       ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                        .type = ue->frame_parms.frame_type == FDD ? FDD_RADIO : TDD_RADIO,
                         .pdu_buffer = dummy,
                         .pdu_buffer_size = sizeof(dummy),
                         .ueid = ue->Mod_id,

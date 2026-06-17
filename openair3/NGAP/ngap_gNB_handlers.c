@@ -983,7 +983,10 @@ static int ngap_gNB_handle_pdusession_setup_request(sctp_assoc_t assoc_id, uint3
     // S-NSSAI
     msg->pdusession[i].nssai = decode_ngap_nssai(&item_p->s_NSSAI);
 
-    msg->pdusession[i].nas_pdu = create_byte_array(item_p->pDUSessionNAS_PDU->size, item_p->pDUSessionNAS_PDU->buf);
+    // NAS PDU (optional)
+    if (item_p->pDUSessionNAS_PDU)
+      msg->pdusession[i].nas_pdu = create_byte_array(item_p->pDUSessionNAS_PDU->size, item_p->pDUSessionNAS_PDU->buf);
+
     bool ret = decodePDUSessionResourceSetup(&msg->pdusession[i].pdusessionTransfer, item_p->pDUSessionResourceSetupRequestTransfer);
     if (!ret) {
       NGAP_ERROR("Failed to decode pDUSessionResourceSetupRequestTransfer in NG Setup Request\n");
@@ -1145,7 +1148,7 @@ static int ngap_gNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, NGAP_N
    return 0;
 }
 
-static bool decodePDUSessionResourceModify(pdusession_transfer_t *out, const OCTET_STRING_t in)
+static bool decodePDUSessionResourceModify(pdusession_mod_req_transfer_t *out, const OCTET_STRING_t in)
 {
   void *decoded = decode_pdusession_transfer(&asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, in);
   if (!decoded) {
@@ -1153,23 +1156,69 @@ static bool decodePDUSessionResourceModify(pdusession_transfer_t *out, const OCT
     return false;
   }
 
+  // Reset counters
+  out->nb_qos_to_add_modify = 0;
+  out->nb_qos_to_release = 0;
+
   NGAP_PDUSessionResourceModifyRequestTransfer_t *pdusessionTransfer = (NGAP_PDUSessionResourceModifyRequestTransfer_t *)decoded;
   for (int j = 0; j < pdusessionTransfer->protocolIEs.list.count; j++) {
     NGAP_PDUSessionResourceModifyRequestTransferIEs_t *pdusessionTransfer_ies = pdusessionTransfer->protocolIEs.list.array[j];
+    if (!pdusessionTransfer_ies) {
+      LOG_E(NGAP, "NULL protocol IE at index %d in PDUSessionResourceModifyRequestTransfer\n", j);
+      ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+      return false;
+    }
     switch (pdusessionTransfer_ies->id) {
         /* optional QosFlowAddOrModifyRequestList */
-      case NGAP_ProtocolIE_ID_id_QosFlowAddOrModifyRequestList:
-        out->nb_qos = pdusessionTransfer_ies->value.choice.QosFlowAddOrModifyRequestList.list.count;
-        for (int i = 0; i < out->nb_qos; i++) {
-          NGAP_QosFlowAddOrModifyRequestItem_t *item =
-              pdusessionTransfer_ies->value.choice.QosFlowAddOrModifyRequestList.list.array[i];
-          out->qos[i] = fill_qos(item->qosFlowIdentifier, item->qosFlowLevelQosParameters);
+      case NGAP_ProtocolIE_ID_id_QosFlowAddOrModifyRequestList: {
+        NGAP_QosFlowAddOrModifyRequestList_t *addmod = &pdusessionTransfer_ies->value.choice.QosFlowAddOrModifyRequestList;
+        out->nb_qos_to_add_modify = addmod->list.count;
+        if (out->nb_qos_to_add_modify > MAX_QOS_FLOWS) {
+          LOG_E(NGAP, "QosFlowAddOrModifyRequestList count %d exceeds MAX_QOS_FLOWS %d\n",
+                out->nb_qos_to_add_modify, MAX_QOS_FLOWS);
+          ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+          return false;
+        }
+        for (int i = 0; i < out->nb_qos_to_add_modify; i++) {
+          NGAP_QosFlowAddOrModifyRequestItem_t *item = addmod->list.array[i];
+          if (!item) {
+            LOG_E(NGAP, "NULL QosFlowAddOrModifyRequestItem at index %d\n", i);
+            ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+            return false;
+          }
+          if (!item->qosFlowLevelQosParameters) {
+            LOG_E(NGAP, "NULL qosFlowLevelQosParameters for QFI %ld\n", item->qosFlowIdentifier);
+            ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+            return false;
+          }
+          out->qos_to_add_modify[i] = fill_qos(item->qosFlowIdentifier, item->qosFlowLevelQosParameters);
         }
         break;
-
+      }
+      case NGAP_ProtocolIE_ID_id_QosFlowToReleaseList: {
+        NGAP_QosFlowListWithCause_t *list = &pdusessionTransfer_ies->value.choice.QosFlowListWithCause;
+        out->nb_qos_to_release = list->list.count;
+        if (out->nb_qos_to_release > MAX_QOS_FLOWS) {
+          LOG_E(NGAP, "QosFlowToReleaseList count %d exceeds MAX_QOS_FLOWS %d\n",
+                out->nb_qos_to_release, MAX_QOS_FLOWS);
+          ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+          return false;
+        }
+        for (int i = 0; i < out->nb_qos_to_release; i++) {
+          NGAP_QosFlowWithCauseItem_t *item = list->list.array[i];
+          if (!item) {
+            LOG_E(NGAP, "NULL QosFlowWithCauseItem at index %d\n", i);
+            ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
+            return false;
+          }
+          out->qos_to_release[i].qfi = item->qosFlowIdentifier;
+          out->qos_to_release[i].cause = decode_ngap_cause(&item->cause);
+        }
+        break;
+      }
       default:
-        LOG_E(NR_RRC, "Unhandled optional IE %ld\n", pdusessionTransfer_ies->id);
-        return false;
+        LOG_W(NGAP, "Unhandled optional IE %ld\n", pdusessionTransfer_ies->id);
+        continue;
     }
   }
   ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceModifyRequestTransfer, pdusessionTransfer);
@@ -1259,7 +1308,8 @@ static int ngap_gNB_handle_pdusession_modify_request(sctp_assoc_t assoc_id, uint
     if (item_p->nAS_PDU != NULL && item_p->nAS_PDU->size > 0) {
       msg->pdusession[i].nas_pdu = create_byte_array(item_p->nAS_PDU->size, item_p->nAS_PDU->buf);
       if (!decodePDUSessionResourceModify(&msg->pdusession[i].pdusessionTransfer, item_p->pDUSessionResourceModifyRequestTransfer)) {
-        NGAP_ERROR("Failed to decode pDUSessionResourceModifyRequestTransfer\n");
+        NGAP_ERROR("Failed to decode pDUSessionResourceModifyRequestTransfer for PDU session %lu\n", item_p->pDUSessionID);
+        itti_free(TASK_NGAP, message_p);
         return -1;
       }
     } else {

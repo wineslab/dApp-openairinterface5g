@@ -70,8 +70,7 @@ void ue_cxt_mod_direct(MessageDef *msg,
 
 void prepare_and_send_ue_context_modification_f1(rrc_gNB_ue_context_t *ue_context_p,
                                                  e1ap_bearer_setup_resp_t *e1ap_resp);
-bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions, uint64_t ueAggMaxBitRateDownlink)
-    __attribute__((warn_unused_result));
+void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMaxBitRateDownlink);
 
 int rrc_gNB_generate_pcch_msg(sctp_assoc_t assoc_id, const NR_SIB1_t *sib, uint32_t tmsi, uint8_t paging_drx);
 
@@ -83,19 +82,12 @@ void rrc_f1_ue_context_setup_from_e1_response(const gNB_RRC_INST *rrc,
                                               rrc_gNB_ue_context_t *const ue_context_pP,
                                               const e1ap_bearer_setup_resp_t *resp);
 
-void rrc_gNB_generate_UeContextModificationRequest(const gNB_RRC_INST *rrc,
-                                                   rrc_gNB_ue_context_t *const ue_context_pP,
-                                                   const e1ap_bearer_setup_resp_t *resp,
-                                                   int n_rel_drbs,
-                                                   const f1ap_drb_to_release_t *rel_drbs);
-
 void free_RRCReconfiguration_params(nr_rrc_reconfig_param_t params);
 
 byte_array_t rrc_gNB_encode_RRCReconfiguration(gNB_RRC_UE_t *UE, nr_rrc_reconfig_param_t params);
 
 nr_rrc_reconfig_param_t get_RRCReconfiguration_params(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint8_t srb_reest_bitmap, bool drb_reestablish);
 
-f1ap_qos_flow_param_t get_qos_char_from_qos_flow_param(const pdusession_level_qos_parameter_t *qos_param);
 void openair_rrc_gNB_configuration(gNB_RRC_INST *rrc, nr_rrc_config_t *configuration);
 NR_SRB_ToAddModList_t *createSRBlist(gNB_RRC_UE_t *ue, uint8_t reestablish);
 NR_DRB_ToAddModList_t *createDRBlist(gNB_RRC_UE_t *ue, bool reestablish, bool do_integrity, bool do_ciphering);
@@ -112,5 +104,5 @@ void rrc_f1_ue_context_setup_for_target_du(const gNB_RRC_INST *rrc,
                                            gNB_RRC_UE_t *ue,
                                            const nr_rrc_cell_container_t *cell,
                                            const byte_array_t *ho_prep_info);
-
+const neighbour_cell_configuration_t *get_neighbour_cell_config(const gNB_RRC_INST *rrc, int cell_id);
 #endif

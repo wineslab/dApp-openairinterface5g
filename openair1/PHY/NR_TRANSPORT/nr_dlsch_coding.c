@@ -25,7 +25,7 @@
 
 void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARMS *frame_parms)
 {
-  int max_layers = (frame_parms->nb_antennas_tx < NR_MAX_NB_LAYERS) ? frame_parms->nb_antennas_tx : NR_MAX_NB_LAYERS;
+  int max_layers = min(frame_parms->nb_antennas_tx, NR_MAX_NB_LAYERS);
   uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * max_layers;
 
   if (N_RB != 273) {
@@ -50,7 +50,7 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
 
 NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB)
 {
-  int max_layers = (frame_parms->nb_antennas_tx < NR_MAX_NB_LAYERS) ? frame_parms->nb_antennas_tx : NR_MAX_NB_LAYERS;
+  int max_layers = min(frame_parms->nb_antennas_tx, NR_MAX_NB_LAYERS);
   uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * max_layers; // number of segments to be allocated
 
   if (N_RB != 273) {
@@ -91,9 +91,11 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                       uint8_t slot,
                       unsigned char *output,
                       time_stats_t *tinput,
+                      time_stats_t *tinput_memcpy,
                       time_stats_t *tprep,
                       time_stats_t *tparity,
                       time_stats_t *toutput,
+                      time_stats_t *tconcat,
                       time_stats_t *dlsch_rate_matching_stats,
                       time_stats_t *dlsch_interleaving_stats,
                       time_stats_t *dlsch_segmentation_stats)
@@ -113,6 +115,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
     if (rel15->rnti != SI_RNTI) {
       ws_trace_t tmp = {.nr = true,
                         .direction = DIRECTION_DOWNLINK,
+                        .type = gNB->frame_parms.frame_type == FDD ? FDD_RADIO : TDD_RADIO,
                         .pdu_buffer = a,
                         .pdu_buffer_size = rel15->TBSize[0],
                         .ueid = 0,

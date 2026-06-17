@@ -14,11 +14,20 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
         libgtest-dev \
         libyaml-cpp-dev \
-        libzmq3-dev
+        libzmq3-dev \
+        flatbuffers-compiler \
+        libnanomsg-dev \
+        dpdk-dev \
+        dpdk \
+        curl
 
 RUN rm -Rf /oai-ran
 WORKDIR /oai-ran
 COPY . .
 
 WORKDIR /oai-ran/build
-RUN cmake -GNinja -DENABLE_TESTS=ON -DOAI_ZMQ=ON -DCMAKE_BUILD_TYPE=Debug -DSANITIZE_ADDRESS=True .. && ninja tests
+RUN cmake .. -GNinja \
+      -DENABLE_TESTS=ON -DOAI_ZMQ=ON -DCMAKE_BUILD_TYPE=Debug \
+      -DSANITIZE_ADDRESS=True -DOAI_VRTSIM_TAPS_CLIENT=ON -DOAI_RU_FRONTHAUL=ON \
+    && \
+    ninja

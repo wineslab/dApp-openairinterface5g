@@ -627,7 +627,8 @@ int x2ap_eNB_generate_x2_handover_request (x2ap_eNB_instance_t *instance_p, x2ap
   //@TODO: consider to update this value
   ie->value.choice.UE_ContextInformation.mME_UE_S1AP_ID = x2ap_handover_req->mme_ue_s1ap_id;
 
-  KENB_STAR_TO_BIT_STRING(x2ap_handover_req->kenb,&ie->value.choice.UE_ContextInformation.aS_SecurityInformation.key_eNodeB_star);
+  AS_KEY_STAR_TO_BIT_STRING(x2ap_handover_req->kenb,
+                            &ie->value.choice.UE_ContextInformation.aS_SecurityInformation.key_eNodeB_star);
 
   if (x2ap_handover_req->kenb_ncc >=0) { // Check this condition
     ie->value.choice.UE_ContextInformation.aS_SecurityInformation.nextHopChainingCount = x2ap_handover_req->kenb_ncc;
@@ -1608,7 +1609,7 @@ int x2ap_eNB_generate_ENDC_x2_SgNB_addition_request(
 	ie->id = X2AP_ProtocolIE_ID_id_SgNBSecurityKey;
 	ie->criticality = X2AP_Criticality_reject;
 	ie->value.present = X2AP_SgNBAdditionRequest_IEs__value_PR_SgNBSecurityKey;
-	KENB_STAR_TO_BIT_STRING(SgNBSecurityKey, &ie->value.choice.SgNBSecurityKey);
+	AS_KEY_STAR_TO_BIT_STRING(SgNBSecurityKey, &ie->value.choice.SgNBSecurityKey);
 	asn1cSeqAdd(&out->protocolIEs.list, ie);
 
 	ie = (X2AP_SgNBAdditionRequest_IEs_t *)calloc(1, sizeof(X2AP_SgNBAdditionRequest_IEs_t));

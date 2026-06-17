@@ -11,7 +11,7 @@
 
 #include "common/platform_constants.h"
 #include "defs_nr_common.h"
-#include "PHY/nr_phy_common/inc/nr_phy_common.h"
+#include "common/utils/bits.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
 #include "PHY/CODING/nrLDPC_coding/nrLDPC_coding_interface.h"
@@ -32,7 +32,6 @@ typedef struct {
   int frame;
   int slot;
   int num_slots; // prach duration in slots
-  int beams[NFAPI_MAX_NUM_BG_IF];
   nfapi_nr_prach_pdu_t pdu;
   int rootSequenceIndex;
   int numrootSequenceIndex;
@@ -42,6 +41,7 @@ typedef struct {
   int restricted_set;
   int numerology_index;
   int nb_rx;
+  int ant_start;
   c16_t (*Xu)[839];
   time_stats_t *rx_prach;
   c16_t (*prach_buf)[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L];
@@ -128,25 +128,21 @@ typedef struct {
   uint8_t round;
   bool new_rx;
   /////////////////////// ulsch decoding ///////////////////////
-  /// flag used to clear d properly (together with d_to_be_cleared below)
+  /// flag used to clear d properly
   /// set to true in nr_fill_ulsch() when new_data_indicator is received
   bool harq_to_be_cleared;
   /// Pointer to the payload (38.212 V15.4.0 section 5.1)
   uint8_t *b;
-  /// Pointers to code blocks after code block segmentation and CRC attachment (38.212 V15.4.0 section 5.2.2)
-  uint8_t **c;
+  /// Pointer to aggregated code blocks after code block segmentation and CRC attachment (38.212 V15.4.0 section 5.2.2)
+  uint8_t *c;
   /// Number of bits in each code block (38.212 V15.4.0 section 5.2.2)
   uint32_t K;
   /// Number of "Filler" bits added in the code block segmentation (38.212 V15.4.0 section 5.2.2)
   uint32_t F;
   /// Number of code blocks after code block segmentation (38.212 V15.4.0 section 5.2.2)
   uint32_t C;
-  /// Pointers to code blocks after LDPC coding (38.212 V15.4.0 section 5.3.2)
-  int16_t **d;
-  /// flag used to clear d properly (together with harq_to_be_cleared above)
-  /// set to true in nr_ulsch_decoding() when harq_to_be_cleared is true
-  /// when true, clear d in the next call to function nr_rate_matching_ldpc_rx()
-  bool *d_to_be_cleared;
+  /// Pointers to aggregated code blocks after LDPC coding (38.212 V15.4.0 section 5.3.2)
+  int16_t *d;
   /// LDPC lifting size (38.212 V15.4.0 table 5.3.2-1)
   uint32_t Z;
   /// Number of bits in each code block after rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
@@ -163,8 +159,6 @@ typedef struct {
 typedef struct {
   uint32_t frame;
   uint32_t slot;
-  // identifier for concurrent beams
-  int beam_nb;
   uint32_t unav_res;
   /// Pointers to 16 HARQ processes for the ULSCH
   NR_UL_gNB_HARQ_t *harq_process;
@@ -181,8 +175,6 @@ typedef struct {
 } NR_gNB_ULSCH_t;
 
 typedef struct {
-  // identifier for concurrent beams
-  int beam_nb;
   /// Frame where current PUSCH pdu was sent
   uint32_t frame;
   /// Slot where current PUSCH pdu was sent
@@ -192,8 +184,6 @@ typedef struct {
 } NR_gNB_PUSCH_job_t;
 
 typedef struct {
-  // identifier for concurrent beams
-  int beam_nb;
   /// Frame where current PUCCH pdu was sent
   uint32_t frame;
   /// Slot where current PUCCH pdu was sent
@@ -203,8 +193,6 @@ typedef struct {
 } NR_gNB_PUCCH_job_t;
 
 typedef struct {
-  // identifier for concurrent beams
-  int beam_nb;
   /// Frame where current SRS pdu was received
   uint32_t frame;
   /// Slot where current SRS pdu was received
@@ -215,19 +203,19 @@ typedef struct {
 
 typedef struct {
   /// \brief Pointers (dynamic) to the received data in the frequency domain.
-  /// - first index: rx antenna [0..nb_antennas_rx[
-  /// - second index: ? [0..2*ofdm_symbol_size*frame_parms->symbols_per_tti[
-  c16_t ***rxdataF;
+  /// - first index: tx antenna [0..16) where 16 is the total supported antenna ports.
+  /// - second index: [0..4*ofdm_symbol_size*symbols_per_slot)
+  c16_t **rxdataF;
   /// \brief holds the transmit data in the frequency domain.
   /// For IFFT_FPGA this points to the same memory as PHY_vars->rx_vars[a].RX_DMA_BUFFER. //?
-  /// - first index: beam (for concurrent beams)
-  /// - second index: tx antenna [0..14[ where 14 is the total supported antenna ports.
-  /// - third index: sample [0..samples_per_frame_woCP]
-  c16_t ***txdataF;
+  /// - first index: tx antenna [0..16) where 16 is the total supported antenna ports.
+  /// - second index: sample [0..ofdm_symbol_size*symbols_per_frame)
+  c16_t **txdataF;
   /// \brief Anaglogue beam ID for each OFDM symbol (used when beamforming not done in RU)
-  /// - first index: beam index (for concurrent beams)
-  /// - second index: beam_id [0.. symbols_per_frame[
-  int **beam_id;
+  /// - first index: symbol index [0 .. symbols_per_frame)
+  /// - second index: beam ID for each antenna port [0 .. num_ports)
+  /// Array of beam id assigned to antenna ports in a frame
+  uint16_t **beam_id;
   int num_beams_period;
   bool analog_bf;
   int32_t *debugBuff;
@@ -361,7 +349,6 @@ typedef struct PHY_VARS_gNB_s {
   /// Ethernet parameters for fronthaul interface
   eth_params_t eth_params;
   int rx_total_gain_dB;
-  int (*nr_start_if)(struct RU_t_s *ru, struct PHY_VARS_gNB_s *gNB);
   nfapi_nr_config_request_scf_t gNB_config;
   NR_DL_FRAME_PARMS frame_parms;
   PHY_MEASUREMENTS_gNB measurements;
@@ -416,10 +403,6 @@ typedef struct PHY_VARS_gNB_s {
   /// counter to average prach energh over first 100 prach opportunities
   int prach_energy_counter;
 
-  int ap_N1;
-  int ap_N2;
-  int ap_XP;
-
   int pucch0_thres;
   int pusch_thres;
   int prach_thres;
@@ -445,10 +428,12 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t dlsch_resource_mapping_stats;
   time_stats_t dlsch_precoding_stats;
   time_stats_t tinput;
+  time_stats_t tinput_memcpy;
   time_stats_t tprep;
   time_stats_t tparity;
   time_stats_t toutput;
-  
+  time_stats_t tconcat;
+
   time_stats_t dlsch_rate_matching_stats;
   time_stats_t dlsch_interleaving_stats;
   time_stats_t dlsch_segmentation_stats;
@@ -463,11 +448,16 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t ulsch_decoding_stats;
   time_stats_t ts_deinterleave;
   time_stats_t ts_rate_unmatch;
+  time_stats_t ts_seg_prep;
   time_stats_t ts_ldpc_decode;
   time_stats_t ulsch_deinterleaving_stats;
   time_stats_t ulsch_channel_estimation_stats;
   time_stats_t pusch_channel_estimation_antenna_processing_stats;
   time_stats_t ulsch_llr_stats;
+  time_stats_t ulsch_layer_demapping_stats;
+  time_stats_t ulsch_unscrambling_stats;
+  time_stats_t pusch_extraction_stats;
+  time_stats_t pusch_channel_compensation_stats;
   time_stats_t rx_srs_stats;
   time_stats_t generate_srs_stats;
   time_stats_t get_srs_signal_stats;
@@ -518,7 +508,7 @@ typedef struct LDPCDecode_s {
   NR_UL_gNB_HARQ_t *ulsch_harq;
   t_nrLDPC_dec_params decoderParms;
   NR_gNB_ULSCH_t *ulsch;
-  short* ulsch_llr; 
+  int16_t *ulsch_llr;
   int ulsch_id;
   int harq_pid;
   int rv_index;

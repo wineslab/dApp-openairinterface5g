@@ -1,0 +1,112 @@
+name: Duranta Jenkins Dispatch
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [develop]
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: ${{ github.event_name }}-${{ github.event.action }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-24.04
+
+    if: |
+      github.event.action != 'labeled' ||
+      github.event.label.name == vars.RETRIGGER_CI_LABEL
+
+    outputs:
+      protected_files_changed: ${{ steps.filter.outputs.protected }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            protected:
+              - 'ci-scripts/**'
+              - '.github/workflows/**'
+              - '.github/actions/**'
+              - 'docker/**'
+              - 'charts/**'
+              - 'openshift/**'
+              - 'cmake_targets/build_oai'
+              - 'cmake_targets/tools/build_helper'
+
+  require-maintainer-approval:
+    needs: detect-changes
+
+    if: needs.detect-changes.outputs.protected_files_changed == 'true'
+
+    runs-on: ubuntu-24.04
+
+    environment:
+      name: ci-approval
+
+    steps:
+      - run: echo "Maintainer has approved the changes"
+
+  trigger-jenkins:
+    needs:
+      - detect-changes
+      - require-maintainer-approval
+
+    if: |
+      always() &&
+      (
+        needs.detect-changes.outputs.protected_files_changed == 'false' ||
+        needs.require-maintainer-approval.result == 'success'
+      )
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Trigger Jenkins
+        run: |
+          # Write payload to a temp file to avoid shell escaping issues
+          cat << 'EOF' > /tmp/payload.json
+          ${{ toJson(github.event) }}
+          EOF
+
+          # Filter and send
+          jq -c 'del(.pull_request.body)' /tmp/payload.json > /tmp/filtered_payload.json
+
+          # Remap pull_request_target -> pull_request for Jenkins compatibility
+          EVENT_NAME="${{ github.event_name }}"
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            EVENT_NAME="pull_request"
+          fi
+
+          curl -X POST "https://${{ secrets.J_USER }}:${{ secrets.J_PASS }}@${{ secrets.J_URL }}" \
+            -H "Accept: */*" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHub-Hookshot/${{ secrets.H_AGENT }}" \
+            -H "X-Github-Delivery: ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-Github-Event: $EVENT_NAME" \
+            -H "X-Github-Hook-Id: ${{ secrets.H_ID }}" \
+            -H "X-Github-Hook-Installation-Target-Id: ${{ secrets.H_TARGET }}" \
+            -H "X-Github-Hook-Installation-Target-Type: repository" \
+            --data @/tmp/filtered_payload.json
+
+      - name: Remove retrigger-ci label
+        if: always() && github.event.action == 'labeled' && github.event.label.name == vars.RETRIGGER_CI_LABEL
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label "${{ vars.RETRIGGER_CI_LABEL }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

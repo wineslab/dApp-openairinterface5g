@@ -97,8 +97,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                    const nfapi_nr_pusch_pdu_t *rel15_ul,
                    uint32_t *ret_unav_res,
                    uint32_t frame,
-                   uint8_t slot,
-                   int beam_nb);
+                   uint8_t slot);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH
@@ -107,61 +106,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
 */
 void nr_idft(int32_t *z, uint32_t Msc_PUSCH);
 
-void nr_ulsch_qpsk_qpsk(c16_t *stream0_in, 
-                        c16_t *stream1_in, 
-                        c16_t *stream0_out, 
-                        c16_t *rho01, 
-                        uint32_t length);
-
-void nr_ulsch_qam16_qam16(c16_t *stream0_in,
-                          c16_t *stream1_in,
-                          c16_t *ch_mag,
-                          c16_t *ch_mag_i,
-                          c16_t *stream0_out,
-                          c16_t *rho01,
-                          uint32_t length);
-
-void nr_ulsch_qam64_qam64(c16_t *stream0_in,
-                          c16_t *stream1_in,
-                          c16_t *ch_mag,
-                          c16_t *ch_mag_i,
-                          c16_t *stream0_out,
-                          c16_t *rho01,
-                          uint32_t length);
-
-/** \brief This function computes the log-likelihood ratios for 4, 16, and 64 QAM
-    @param rxdataF_comp Compensated channel output
-    @param ul_ch_mag  uplink channel magnitude multiplied by the 1st amplitude threshold in QAM 64
-    @param ul_ch_magb uplink channel magnitude multiplied by the 2bd amplitude threshold in QAM 64
-    @param ulsch_llr llr output
-    @param nb_re number of REs for this allocation
-    @param symbol OFDM symbol index in sub-frame
-    @param mod_order modulation order
-*/
-void nr_ulsch_compute_llr(c16_t *rxdataF_comp,
-                          c16_t *ul_ch_mag,
-                          c16_t *ul_ch_magb,
-                          c16_t *ul_ch_magc,
-                          int16_t *ulsch_llr,
-                          uint32_t nb_re,
-                          uint8_t symbol,
-                          uint8_t mod_order);
-
 void reset_active_stats(PHY_VARS_gNB *gNB, int frame);
 void reset_active_ulsch(PHY_VARS_gNB *gNB, int frame);
-
-void nr_ulsch_compute_ML_llr(c16_t *rxdataF_comp0,
-                             c16_t *rxdataF_comp1,
-                             c16_t *ul_ch_mag0,
-                             c16_t *ul_ch_mag1,
-                             int16_t *llr_layers0,
-                             int16_t *llr_layers1,
-                             c16_t *rho0,
-                             c16_t *rho1,
-                             uint32_t nb_re,
-                             uint8_t mod_order);
-
-void nr_ulsch_shift_llr(int16_t **llr_layers, uint32_t nb_re, uint32_t rxdataF_ext_offset, uint8_t mod_order, int shift);
 
 void nr_fill_ulsch(PHY_VARS_gNB *gNB,
                    int frame,
@@ -177,7 +123,7 @@ typedef struct rx_prach_out {
 } rx_prach_out_t;
 rx_prach_out_t rx_nr_prach(const prach_item_t *, int occasion);
 
-void rx_nr_prach_ru(prach_item_t *, int32_t **, NR_DL_FRAME_PARMS *frame_parms, int N_TA_offset);
+void rx_nr_prach_ru(prach_item_t *, int32_t **, NR_DL_FRAME_PARMS *frame_parms, int N_TA_offset, bool das);
 
 void nr_fill_pucch(PHY_VARS_gNB *gNB,
                    int frame,

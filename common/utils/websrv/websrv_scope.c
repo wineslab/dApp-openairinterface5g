@@ -20,8 +20,6 @@
 #include "openair1/PHY/TOOLS/phy_scope_interface.h"
 #include "common/utils/load_module_shlib.h"
 
-extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
-
 static websrv_scope_params_t scope_params = {0, 1000, NULL, NULL, 65535};
 static websrv_params_t *websrvparams_ptr;
 

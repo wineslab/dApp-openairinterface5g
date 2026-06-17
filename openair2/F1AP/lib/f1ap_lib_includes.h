@@ -77,5 +77,6 @@
 #include "F1AP_RANUEPagingIdentity.h"
 #include "F1AP_PagingIdentity.h"
 #include "F1AP_Paging.h"
+#include "F1AP_GBR-QoSFlowInformation.h"
 
 #endif /* F1AP_LIB_INCLUDES_H_ */

@@ -499,7 +499,7 @@ typedef struct pdschSymbolProc_s {
   unsigned int layerSz2;
   unsigned int dlPtrsSymPos;
   unsigned int n_ptrs;
-  unsigned int beam_nb;
+  uint16_t *ant_to_map;
   unsigned int re_beginning_of_symbol[14];
   c16_t *tx_layers[4];
   time_stats_t dlsch_resource_mapping_stats;
@@ -524,7 +524,7 @@ static void nr_pdsch_symbol_processing(void *arg)
   c16_t mod_dmrs[(n_dmrs + 63) & ~63] __attribute__((aligned(64)));
   const int symbol_sz = frame_parms->ofdm_symbol_size;
 
-  c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
+  c16_t **txdataF = gNB->common_vars.txdataF;
 
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
     start_meas(&rdata->dlsch_resource_mapping_stats);
@@ -579,7 +579,9 @@ static void nr_pdsch_symbol_processing(void *arg)
 
     start_meas(&rdata->dlsch_precoding_stats);
     const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
-    for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
+    const uint16_t num_log_ports =
+        rel15->param_v4.numberCodewords ? rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices : 0;
+    for (int ant = 0; ant < num_log_ports; ant++) {
       int pos = 0;
       int block_start, block_end;
       while (find_next_rb_block(freq_alloc->bitmap, rel15->BWPSize, &pos, &block_start, &block_end)) {
@@ -588,7 +590,7 @@ static void nr_pdsch_symbol_processing(void *arg)
                    txdataF_precoding,
                    gNB,
                    rel15,
-                   ant,
+                   rdata->ant_to_map[ant],
                    block_start,
                    block_end - block_start + 1,
                    txdataF_offset_per_symbol);
@@ -705,13 +707,24 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   // The Codebook Type I
   const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
-  int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      frame_parms->symbols_per_slot,
-                                      bitmap);
+  const uint16_t symb_bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
+  uint16_t ant_to_map[frame_parms->nb_antennas_tx];
+  const uint16_t num_log_ports = rel15->param_v4.numberCodewords ? rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices : 0;
+  for (int ant = 0; ant < num_log_ports; ant++) {
+    const uint16_t beam_id = pb->prgs_list[0].dig_bf_interface_list[ant].beam_idx;
+    ant_to_map[ant] = get_first_ant_idx(gNB->enable_analog_das,
+                                                  frame_parms->nb_antennas_tx / gNB->common_vars.num_beams_period,
+                                                  beam_id,
+                                                  rel15->param_v4.spatialStreamsCw[0].spatialStreamIndices[ant]);
+    beam_index_allocation(beam_id,
+                          ant_to_map[ant],
+                          1,
+                          frame_parms->symbols_per_slot,
+                          slot,
+                          symb_bitmap,
+                          frame_parms->nb_antennas_tx,
+                          gNB->common_vars.beam_id);
+  }
   stop_meas(&gNB->dlsch_layer_mapping_stats);
 
   // spawn symbol threads
@@ -751,7 +764,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->layerSz2 = layerSz2;
     rdata->dlPtrsSymPos = dlPtrsSymPos;
     rdata->n_ptrs = n_ptrs;
-    rdata->beam_nb = beam_nb;
+    rdata->ant_to_map = ant_to_map;
     for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
       rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
       re_beginning_of_symbol += freq_alloc->num_rbs * NR_NB_SC_PER_RB;
@@ -789,9 +802,11 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
 {
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
   time_stats_t *tinput = &gNB->tinput;
+  time_stats_t *tinput_memcpy = &gNB->tinput_memcpy;
   time_stats_t *tprep = &gNB->tprep;
   time_stats_t *tparity = &gNB->tparity;
   time_stats_t *toutput = &gNB->toutput;
+  time_stats_t *tconcat = &gNB->tconcat;
   time_stats_t *dlsch_rate_matching_stats = &gNB->dlsch_rate_matching_stats;
   time_stats_t *dlsch_interleaving_stats = &gNB->dlsch_interleaving_stats;
   time_stats_t *dlsch_segmentation_stats = &gNB->dlsch_segmentation_stats;
@@ -854,9 +869,11 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
                         slot,
                         output,
                         tinput,
+                        tinput_memcpy,
                         tprep,
                         tparity,
                         toutput,
+                        tconcat,
                         dlsch_rate_matching_stats,
                         dlsch_interleaving_stats,
                         dlsch_segmentation_stats)
