@@ -19,6 +19,7 @@
 
 #include "O-RAN/ran_func_kpm.h"
 #include "O-RAN/ran_func_rc.h"
+#include "O-RAN/ran_func_ccc.h"
 
 #ifdef E3_AGENT
 #include "O-RAN/ran_func_dapp.h"
@@ -40,6 +41,7 @@ void init_read_ind_tbl(read_ind_fp (*read_ind_tbl)[SM_AGENT_IF_READ_V0_END])
   
   (*read_ind_tbl)[KPM_STATS_V3_0] = read_kpm_sm ; 
   (*read_ind_tbl)[RAN_CTRL_STATS_V1_03] = read_rc_sm;
+  (*read_ind_tbl)[CCC_STATS_V1_0] = read_ccc_sm;
 #ifdef E3_AGENT
   (*read_ind_tbl)[DAPP_STATS_V0] = read_dapp_sm;
 #endif
@@ -61,6 +63,7 @@ void init_read_setup_tbl(read_e2_setup_fp (*read_setup_tbl)[SM_AGENT_IF_E2_SETUP
 
   (*read_setup_tbl)[KPM_V3_0_AGENT_IF_E2_SETUP_ANS_V0] = read_kpm_setup_sm ; 
   (*read_setup_tbl)[RAN_CTRL_V1_3_AGENT_IF_E2_SETUP_ANS_V0] = read_rc_setup_sm;
+  (*read_setup_tbl)[CCC_V1_0_AGENT_IF_E2_SETUP_ANS_V0] = read_ccc_setup_sm;
 #ifdef E3_AGENT
   (*read_setup_tbl)[DAPP_AGENT_IF_E2_SETUP_ANS_V0] = read_dapp_setup_sm;
 #endif
