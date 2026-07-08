@@ -148,11 +148,6 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
     for (int i = 0; i < num_beams; i++) {
       uint16_t *vrb_map_UL = cc[CC_id].vrb_map_UL[i];
       memcpy(&vrb_map_UL[prev_slot % size * MAX_BWP_SIZE], &gNB->ulprbbl, sizeof(uint16_t) * MAX_BWP_SIZE);
-#ifdef E3_AGENT
-      // This for downlink PRBs
-      uint16_t *vrb_map = cc[CC_id].vrb_map[i];
-      memcpy(vrb_map, &gNB->ulprbbl, sizeof(uint16_t) * MAX_BWP_SIZE);
-#endif // E3_AGENT
     }
     /* Hard-reserve prev_slot's UL for sensing so no UE allocator claims it. */
 #ifdef E3_AGENT
@@ -179,9 +174,6 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
             "periodical UE stats deactivated after reaching %d UEs, please check nrMAC_stats.log, or increase MACRLCs.[0].stats_max_ue\n",
             gNB->stats_max_ue);
     }
-#ifdef E3_AGENT
-    nr_update_prb_policy(module_idP, frame, slot);
-#endif // E3_AGENT
   }
 
   nr_measgap_scheduling(gNB, frame, slot);

@@ -1,6 +1,5 @@
 #include "e3_agent.h"
 #include "config/e3_config.h"
-#include "service_models/spectrum_sm/spectrum_sm.h"
 
 // TODO replace pthreads with itti or use a faster way
 // #include "intertask_interface.h"
@@ -16,6 +15,16 @@
 #include "common/utils/LOG/log.h"
 
 e3_agent_global_t e3 = {0};
+
+float e3_get_fp16_beta(void)
+{
+  return e3.fp16_beta;
+}
+
+int e3_get_encoding(void)
+{
+  return e3.encoding;
+}
 
 static void e2_e3_bridge(uint32_t dapp_id,
                               uint32_t ran_function_id,
@@ -60,40 +69,22 @@ int e3_init()
     return -1;
   }
   e3_readconfig(e3_cmdline_configs);
-  LOG_D(E3AP, "Validate configuration\n");
-  validate_configuration(e3_cmdline_configs);
 
-  // Create e3_config_t from e3_cmdline_configs (only link and transport, rest defaults)
+  /* Create e3_config_t from e3_cmdline_configs. link/transport/encoding arrive
+   * already mapped to the libe3 enum values by e3_readconfig. */
   e3_config_t config = {0};
   config.ran_identifier = "OAI DU";
   config.log_level = 3; // INFO
 
-#ifdef E3_ASN1_FORMAT
-  config.encoding = 0;
-#else
-  config.encoding = 1;
-#endif
-
-  // Map string values to enum/int as needed for link_layer and transport_layer
-  if (e3_cmdline_configs->link && strcmp(e3_cmdline_configs->link, "zmq") == 0) {
-    config.link_layer = 0; // ZMQ
-  } else if (e3_cmdline_configs->link && strcmp(e3_cmdline_configs->link, "posix") == 0) {
-    config.link_layer = 1; // POSIX
-  } else {
-    config.link_layer = -1; // default
-  }
-
-  if (e3_cmdline_configs->transport && strcmp(e3_cmdline_configs->transport, "sctp") == 0) {
-    config.transport_layer = 0; // SCTP
-  } else if (e3_cmdline_configs->transport && strcmp(e3_cmdline_configs->transport, "tcp") == 0) {
-    config.transport_layer = 1; // TCP
-  } else if (e3_cmdline_configs->transport && strcmp(e3_cmdline_configs->transport, "ipc") == 0) {
-    config.transport_layer = 2; // IPC
-  } else {
-    config.transport_layer = -1; // default
-  }
-
-  // All other fields left as default (0 or NULL)
+  config.link_layer      = e3_cmdline_configs->link_layer;
+  config.transport_layer = e3_cmdline_configs->transport_layer;
+  config.encoding        = e3_cmdline_configs->encoding;
+  config.setup_port      = e3_cmdline_configs->setup_port;
+  config.subscriber_port = e3_cmdline_configs->subscriber_port;
+  config.publisher_port  = e3_cmdline_configs->publisher_port;
+  // All other config fields (endpoints, io_threads, log_path) left as default (0 or NULL)
+  e3.encoding         = e3_cmdline_configs->encoding;
+  e3.fp16_beta        = e3_cmdline_configs->fp16_beta;
 
   // Create E3Agent with config
   e3.agent = e3_agent_create_with_config(&config);
@@ -108,15 +99,6 @@ int e3_init()
   e3_error_t err = e3_agent_init(e3.agent);
   if (err != 0) {
     LOG_E(E3AP, "Failed to initialize E3Agent (err=%d)\n", err);
-    e3_agent_destroy(e3.agent);
-    e3.agent = NULL;
-    return -1;
-  }
-
-  // Start agent
-  err = e3_agent_start(e3.agent);
-  if (err != 0) {
-    LOG_E(E3AP, "Failed to start E3Agent (err=%d)\n", err);
     e3_agent_destroy(e3.agent);
     e3.agent = NULL;
     return -1;
@@ -138,29 +120,15 @@ int e3_init()
     return -1;
   }
   
-  // Register the SMs
-  // SM Spectrum
-  e3_c_service_model_desc_t *desc_sm_spectrum = create_spectrum_sm_model();
-  if (!desc_sm_spectrum) {
-    LOG_E(E3AP, "Failed to create Spectrum SM descriptor\n");
-    e3_agent_destroy(e3.agent);
-    e3.agent = NULL;
-    return -1;
-  }
-  e3_service_model_handle_t *sm_spectrum = e3_service_model_create_from_c(desc_sm_spectrum);
-  if (!sm_spectrum) {
-    LOG_E(E3AP, "Failed to create Spectrum SM handle\n");
-    e3_agent_destroy(e3.agent);
-    e3.agent = NULL;
-    return -1;
-  }
-
-  spectrum_sm_set_handle(sm_spectrum);
-
-  err = e3_agent_register_sm(e3.agent, sm_spectrum);
+  /* Start LAST, once every SM and handler is in place: libe3's contract is
+   * register-before-start. start() spawns the setup thread immediately, and a
+   * dApp connecting before registration would get an empty ranFunctionList
+   * (late registrations are accepted but never re-advertised); the report and
+   * status handlers are plain function members read by the running threads,
+   * so installing them post-start is a data race. */
+  err = e3_agent_start(e3.agent);
   if (err != 0) {
-    LOG_E(E3AP, "Failed to register Spectrum SM (err=%d: %s)\n", err, e3_error_to_string(err));
-    e3_service_model_destroy(sm_spectrum);
+    LOG_E(E3AP, "Failed to start E3Agent (err=%d)\n", err);
     e3_agent_destroy(e3.agent);
     e3.agent = NULL;
     return -1;

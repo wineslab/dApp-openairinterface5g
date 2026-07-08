@@ -25,10 +25,6 @@
 #include <stdint.h>
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 
-#ifdef E3_AGENT
-#include <openair2/E3AP/service_models/spectrum_sm/spectrum_sm.h>
-#endif // E3_AGENT
-
 //#define DEBUG_RXDATA
 //#define SRS_IND_DEBUG
 
@@ -1251,32 +1247,6 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     handle_srs(now, gNB, &srs[i], &UL_INFO->srs_ind.pdu_list[i]);
     stop_meas(&gNB->rx_srs_stats);
   }
-
-#ifdef E3_AGENT
-  // Spectrum Listening Symbols
-  c16_t **rxdataF_sen = gNB->common_vars.rxdataF[0];
-  if (nr_slot_select(&gNB->gNB_config, frame_rx, slot_rx) == NR_UPLINK_SLOT && slot_rx == 8) {
-    e3_sm_spectrum_control->sampling_counter++;
-    if (e3_sm_spectrum_control->sampling_counter > e3_sm_spectrum_control->sampling_threshold) {
-      const uint16_t n_symbols = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot;
-      // Extracting 12th symbol
-      uint64_t symbol_offset = (n_symbols)*gNB->frame_parms.ofdm_symbol_size + (12) * gNB->frame_parms.ofdm_symbol_size;
-      int32_t *rx_signal = (int32_t *)&rxdataF_sen[0][symbol_offset];
-
-      // for(int i = 0; i < gNB->frame_parms.ofdm_symbol_size; i++){
-      // 	LOG_D(E3AP, "i = %d, (%d  %d) \n",i, ((c16_t*) rx_signal)[i].r, ((c16_t*) rx_signal)[i].i);
-      // }
-
-      T(T_GNB_PHY_UL_FREQ_SENSING_SYMBOL,
-        T_INT(0),
-        T_INT(frame_rx),
-        T_INT(slot_rx),
-        T_INT(0),
-        T_BUFFER(rx_signal, (gNB->frame_parms.ofdm_symbol_size) * sizeof(int32_t)));
-      e3_sm_spectrum_control->sampling_counter = 0;
-    }
-  }
-#endif // E3_AGENT
 
   stop_meas(&gNB->phy_proc_rx);
 

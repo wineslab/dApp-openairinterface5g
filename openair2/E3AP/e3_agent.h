@@ -19,6 +19,8 @@ typedef struct {
   e3_agent_handle_t *agent;
   e3_service_model_handle_t **service_models;
   size_t num_service_models;
+  int      encoding;           // E3_ENCODING_{ASN1,JSON}, from the config file
+  float    fp16_beta;          // IQ c16->fp16 scale
 } e3_agent_global_t;
 
 typedef struct {
@@ -33,6 +35,12 @@ typedef struct {
 } e3_dapp_subscription_map_t;
 
 extern e3_agent_global_t e3;
+
+float e3_get_fp16_beta(void);
+
+/* Wire encoding for this run (E3_ENCODING_ASN1 or E3_ENCODING_JSON), as
+ * selected in the config file; used by the SM payload encoders/decoders. */
+int e3_get_encoding(void);
 
 int e3_init();
 int e3_destroy();

@@ -163,10 +163,6 @@ ID = GNB_PHY_UL_SRS_TOA_NS
     DESC = gNB ToA estimate from SRS (in ns)
     GROUP = ALL:PHY:GNB
     FORMAT = int,gNB_ID : int,rnti : int,frame : int,subframe : buffer,toa_ns
-ID = GNB_PHY_UL_FREQ_SENSING_SYMBOL
-    DESC = gNodeB output data in the freq domain for sensing symbols
-    GROUP = ALL:PHY:GRAPHIC:HEAVY:GNB
-    FORMAT = int,gNB_ID : int,frame : int,slot : int,antenna : buffer,rxdata
 
 #MAC logs
 ID = ENB_MAC_UE_DL_SDU

@@ -20,10 +20,6 @@
 #include "executables/softmodem-common.h"
 #include "../../../nfapi/oai_integration/vendor_ext.h"
 
-#ifdef E3_AGENT
-#include <openair2/E3AP/service_models/spectrum_sm/spectrum_sm.h>
-#endif // E3_AGENT
-
 ////////////////////////////////////////////////////////
 /////* DLSCH MAC PDU generation (6.1.2 TS 38.321) */////
 ////////////////////////////////////////////////////////
@@ -52,30 +48,6 @@ int get_dl_tda(const gNB_MAC_INST *nrmac, int slot)
   }
   return 0; // if FDD or not mixed slot in TDD, for now use default TDA
 }
-
-#ifdef E3_AGENT
-void nr_update_prb_policy(module_id_t module_idP, frame_t frame, sub_frame_t slot)
-{
-  gNB_MAC_INST *gNB = RC.nrmac[module_idP];
-
-  NR_SCHED_ENSURE_LOCKED(&gNB->sched_lock);
-  LOG_W(NR_MAC, "Barred_PRBs ");
-
-  pthread_mutex_lock(&e3_sm_spectrum_control->mutex);
-  if (e3_sm_spectrum_control->ready) {
-    memcpy(gNB->ulprbbl, e3_sm_spectrum_control->dyn_prbbl, MAX_BWP_SIZE * sizeof(uint16_t));
-    e3_sm_spectrum_control->ready = 0; // Reset ready flag for next production
-  }
-  pthread_mutex_unlock(&e3_sm_spectrum_control->mutex);
-
-  for (int i = 0; i < MAX_BWP_SIZE; i++) {
-    if (gNB->ulprbbl[i] == 0x3FFF)
-      printf("%d ", i);
-  }
-
-  printf("\n");
-}
-#endif // E3_AGENT
 
 // Compute and write all MAC CEs and subheaders, and return number of written bytes
 int nr_write_ce_dlsch_pdu(module_id_t module_idP,
