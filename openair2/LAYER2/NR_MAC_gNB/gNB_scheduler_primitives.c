@@ -11,6 +11,11 @@
 
 #include "NR_MAC_gNB/nr_mac_gNB.h"
 #include "NR_MAC_gNB/mac_proto.h"
+#include "NR_MAC_gNB/gNB_scheduler_prb_block.h"
+#ifdef E3_AGENT
+#include "NR_MAC_gNB/periodic_alloc_registry.h"
+#include "NR_MAC_gNB/blocked_prbs_collision_handler.h"
+#endif /* E3_AGENT */
 #include "common/utils/bits.h"
 #include "common/utils/LOG/log.h"
 #include "UTIL/OPT/opt.h"
@@ -2546,6 +2551,10 @@ NR_UE_info_t *find_ra_UE(NR_UEs_t *UEs, rnti_t rntiP)
 
 void delete_nr_ue_data(NR_UE_info_t *UE, uid_allocator_t *uia)
 {
+#ifdef E3_AGENT
+  // Drop this UE's periodic UE-specific allocations from the registry.
+  periodic_alloc_unregister_ue(UE->uid);
+#endif /* E3_AGENT */
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->reconfigCellGroup);
   ASN_STRUCT_FREE(asn_DEF_NR_UE_NR_Capability, UE->capability);
@@ -3005,6 +3014,23 @@ void configure_UE_BWP(gNB_MAC_INST *nr_mac,
     mcs_Table = UL_BWP->transform_precoding ? UL_BWP->pusch_Config->mcs_Table : UL_BWP->pusch_Config->mcs_TableTransformPrecoder;
 
   UL_BWP->mcs_table = get_pusch_mcs_table(mcs_Table, !UL_BWP->transform_precoding, UL_BWP->dci_format, TYPE_C_RNTI_, target_ss, false);
+
+#ifdef E3_AGENT
+  // Active BWP / dedicated config is now set: (re)track this UE's periodic
+  // UE-specific allocations (PUCCH/SRS). Idempotent, so this covers attach,
+  // reconfiguration and BWP switch.
+  periodic_alloc_refresh_ue(UE);
+  // Event B: if the just-(re)configured allocations land on an active block,
+  // report them (so they can be relocated via RRC reconfiguration). Checks UL
+  // signals against the UL block and DL (CSI-RS) against the DL block; skipped
+  // when neither direction has a block active.
+  uint16_t effective_dl[MAX_BWP_SIZE];
+  uint16_t effective_ul[MAX_BWP_SIZE];
+  const bool have_dl = get_effective_prb_block_mask_dl(nr_mac, effective_dl);
+  const bool have_ul = get_effective_prb_block_mask_ul(nr_mac, effective_ul);
+  if (have_dl || have_ul)
+    blocked_prbs_check_on_ue_config(UE->uid, have_dl ? effective_dl : NULL, have_ul ? effective_ul : NULL);
+#endif /* E3_AGENT */
 }
 
 void reset_srs_stats(NR_UE_info_t *UE) {

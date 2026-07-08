@@ -1278,6 +1278,10 @@ typedef struct gNB_MAC_INST_s {
   /// Optional state persistence for scheduling policies.
   void *sched_stateful_data;
 
+  /// PRB blocking state populated by the dApp control plane and OR'd into
+  /// the VRB maps at slot start, before any scheduling step runs.
+  struct prb_block_state_s *prb_block;
+
   /// sensing mode: fake UE PUSCH injection for unused UL symbols
   bool sensing_enabled;
 

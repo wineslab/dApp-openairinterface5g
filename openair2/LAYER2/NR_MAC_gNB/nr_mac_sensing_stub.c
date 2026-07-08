@@ -68,3 +68,19 @@ __attribute__((weak)) bool set_sensing_policy(struct gNB_MAC_INST_s *mac,
   (void)n_slots;
   return false;
 }
+
+/* Weak stub for set_prb_block_mask (strong def in gNB_scheduler_prb_block.c,
+ * only nr-softmodem links it). No MAC in a CU-UP, so the stub is a no-op. The
+ * strong def takes prb_block_dir_t (an enum); declaring the stub with `int dir`
+ * is ABI-compatible at the C level since enums pass as int. */
+__attribute__((weak)) bool set_prb_block_mask(struct gNB_MAC_INST_s *mac,
+                                              int dir,
+                                              const uint16_t *mask,
+                                              int len)
+{
+  (void)mac;
+  (void)dir;
+  (void)mask;
+  (void)len;
+  return false;
+}

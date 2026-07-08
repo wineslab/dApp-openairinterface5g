@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +41,7 @@
 #include "time_meas.h"
 #include "utils.h"
 #include "gNB_scheduler_ul_sensing.h"
+#include "gNB_scheduler_prb_block.h"
 
 #define MACSTATSSTRLEN 36256
 
@@ -317,6 +319,17 @@ void mac_top_init_gNB(ngran_node_t node_type,
         pthread_mutex_init(&sp->lock, NULL);
         RC.nrmac[i]->sched_stateful_data = sp;
       }
+
+      /* Per-instance PRB-block state (dApp control plane), inactive until
+       * set_prb_block_mask(). calloc zeros the masks; retire_at starts at
+       * INT64_MAX ("none pending") so the first apply_prb_block_masks() doesn't
+       * retire bits that were never released. */
+      prb_block_state_t *pb = calloc(1, sizeof(*pb));
+      AssertFatal(pb != NULL, "out of memory allocating prb_block_state_t\n");
+      pthread_mutex_init(&pb->lock, NULL);
+      pb->ul_retire_at = INT64_MAX;
+      pb->dl_retire_at = INT64_MAX;
+      RC.nrmac[i]->prb_block = pb;
 #endif /* E3_AGENT */
 
       RC.nrmac[i]->ul_rb_alloc = nr_ul_proportional_fair;
@@ -381,8 +394,13 @@ void mac_top_destroy_gNB(gNB_MAC_INST *mac)
     free_f1ap_setup_response(mac->f1_config.setup_resp);
   free(mac->f1_config.setup_resp);
 #ifdef E3_AGENT
-  /* Free the per-instance sensing-policy state from mac_top_init_gNB;
-   * skippable at process exit, kept symmetric with init. */
+  /* Free the per-instance state from mac_top_init_gNB (prb_block + sensing
+   * policy); skippable at process exit, kept symmetric with init. */
+  if (mac->prb_block) {
+    pthread_mutex_destroy(&mac->prb_block->lock);
+    free(mac->prb_block);
+    mac->prb_block = NULL;
+  }
   if (mac->sched_stateful_data) {
     sensing_policy_state_t *sp = mac->sched_stateful_data; /* stored as void* */
     pthread_mutex_destroy(&sp->lock);

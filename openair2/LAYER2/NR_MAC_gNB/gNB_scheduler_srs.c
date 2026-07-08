@@ -11,6 +11,7 @@
 #include <softmodem-common.h>
 #include "NR_MAC_gNB/nr_mac_gNB.h"
 #include "NR_MAC_gNB/mac_proto.h"
+#include "NR_MAC_gNB/gNB_scheduler_prb_block.h"
 #include "common/ran_context.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "common/utils/nr/nr_common.h"
@@ -477,12 +478,22 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
   const uint8_t l0 = srs_pdu->time_start_position;
   uint16_t mask = SL_to_bitmap(l0, num);
   DevAssert(mask != 0);
+#ifdef E3_AGENT
+  /* Reserve the SRS RE band, skipping dApp-block collisions gracefully (SRS
+   * reception then sees the interference the dApp asked to block). SRS allows the
+   * static-ulprbbl carve-out (intended-occupied is fine for placement). */
+  prb_block_reserve_ul_channel(nrmac, vrb_map_UL, srs_pdu->bwp_start,
+                               srs_pdu->bwp_size, mask,
+                               /*allow_static_blacklist=*/true,
+                               frame, slot, UE->rnti, "SRS");
+#else /* E3_AGENT */
   for (int i = 0; i < srs_pdu->bwp_size; ++i) {
     int rb = i + srs_pdu->bwp_start;
     uint16_t alloc = vrb_map_UL[rb] & mask;
     AssertFatal(nrmac->ulprbbl[rb] != 0 || alloc == 0, "RB %d not free for SRS: alloc 0x%02x for mask 0x%02x\n", rb, alloc, mask);
     vrb_map_UL[rb] |= mask;
   }
+#endif /* E3_AGENT */
 }
 
 static void nr_fill_nfapi_srs(gNB_MAC_INST *nrmac,
@@ -578,6 +589,12 @@ void nr_schedule_periodic_srs(int module_id, frame_t frame, int slot)
       // Check if UE will transmit the SRS in this frame
       if ((sched_frame * n_slots_frame + sched_slot - offset) % period != 0)
         continue;
+
+      /* Detect-only baseline: SRS reception is always scheduled (the AVOID
+       * skip-the-occasion handling is deferred to the patch). A block over the
+       * SRS symbols is still detected on the RE-reservation path in
+       * nr_configure_srs (graceful skip + collision summary). */
+
       LOG_D(NR_MAC," %d.%d Scheduling SRS reception for %d.%d\n", frame, slot, sched_frame, sched_slot);
       nr_fill_nfapi_srs(nrmac, CC_id, UE, sched_frame, sched_slot, srs_resource_set, srs_resource);
     }

@@ -9,6 +9,7 @@
 #include "assertions.h"
 #include "NR_MAC_gNB/nr_mac_gNB.h"
 #include "NR_MAC_gNB/mac_proto.h"
+#include "NR_MAC_gNB/gNB_scheduler_prb_block.h"
 #include "common/utils/LOG/log.h"
 #include "UTIL/OPT/opt.h"
 #include "common/utils/nr/nr_common.h"
@@ -80,7 +81,9 @@ static void fill_ssb_vrb_map(NR_COMMON_channels_t *cc,
   uint16_t *vrb_map = cc[CC_id].vrb_map[beam];
   const int extra_prb = ssb_subcarrier_offset > 0;
   for (int rb = 0; rb < 20 + extra_prb; rb++)
-    vrb_map[rbStart + rb] = SL_to_bitmap(symStart % NR_SYMBOLS_PER_SLOT, 4);
+    /* OR rather than assign: PRB-block bits may already be stamped for this
+     * slot (E3); identical to plain assignment when the map starts empty. */
+    vrb_map[rbStart + rb] |= SL_to_bitmap(symStart % NR_SYMBOLS_PER_SLOT, 4);
 }
 
 static int encode_mib(NR_BCCH_BCH_Message_t *mib, frame_t frame, uint8_t *buffer, int buf_size)
@@ -493,6 +496,22 @@ static bool check_frame_sib1(NR_ServingCellConfigCommon_t *scc, NR_Type0_PDCCH_C
   }
 }
 
+#ifdef E3_AGENT
+/* One dApp-block SIB skip: rate-limited log + release the beam reservation the
+ * occasion acquired upstream. Shared by the SIB1 / otherSIB skip guards below;
+ * the caller still does its own continue/return (and any state reset). idx is
+ * the ssb / payload index, for the log only. */
+static void sib_block_skip(gNB_MAC_INST *mac, uint64_t *counter, int idx,
+                           int16_t beam_index, frame_t frame, slot_t slot,
+                           int slots_per_frame, bool new_beam, const char *reason)
+{
+  if (prb_block_ratelimit(counter))
+    LOG_E(NR_MAC, "[SIB] %s (idx=%d) -- skip occasion [#%llu]\n",
+          reason, idx, (unsigned long long)*counter);
+  reset_beam_status(&mac->beam_info, frame, slot, beam_index, slots_per_frame, new_beam);
+}
+#endif /* E3_AGENT */
+
 void schedule_nr_sib1(module_id_t module_idP,
                       frame_t frameP,
                       slot_t slotP,
@@ -563,6 +582,20 @@ void schedule_nr_sib1(module_id_t module_idP,
                                            &sched_pdcch,
                                            &gNB_mac->sched_ctrlSIB1->coreset,
                                            0);
+#ifdef E3_AGENT
+      /* No free CCE bundle (e.g. CORESET 0 PRBs blocked by the dApp): skip this
+       * occasion. Without the guard the -1 index reaches fill_pdcch_vrb_map and
+       * writes out of bounds. Unreachable without PRB blocking: the only earlier
+       * writer to this slot's map is the SSB fill, which never overlaps the
+       * CORESET 0 symbols. */
+      if (cce_index < 0) {
+        static uint64_t sib1_cce_skip = 0;
+        sib_block_skip(gNB_mac, &sib1_cce_skip, i, beam_index, frameP, slotP,
+                       n_slots_frame, beam.new_beam,
+                       "SIB1 no PDCCH candidate (CORESET 0 PRBs possibly blocked)");
+        continue;
+      }
+#endif /* E3_AGENT */
 
       bool res = false;
       if (gNB_mac->sib1_pdsch[i].time_domain_allocation < 0) {
@@ -573,7 +606,19 @@ void schedule_nr_sib1(module_id_t module_idP,
           }
         }
       }
+#ifdef E3_AGENT
+      /* No TDA fits (all 16 candidates blocked): skip. Demoted from AssertFatal
+       * since SIB1 retries every ~160 ms — losing one occasion beats crashing. */
+      if (gNB_mac->sib1_pdsch[i].time_domain_allocation < 0) {
+        static uint64_t sib1_tda_skip = 0;
+        sib_block_skip(gNB_mac, &sib1_tda_skip, i, beam_index, frameP, slotP,
+                       n_slots_frame, beam.new_beam,
+                       "SIB1 couldn't select any TDA (CORESET 0 PRBs possibly blocked)");
+        continue;
+      }
+#else /* E3_AGENT */
       AssertFatal(gNB_mac->sib1_pdsch[i].time_domain_allocation >= 0, "Couldn't select any TDA for SIB1\n");
+#endif /* E3_AGENT */
       if (!res)
         res = check_sib1_tda(gNB_mac,
                              &sched_pdcch,
@@ -584,7 +629,21 @@ void schedule_nr_sib1(module_id_t module_idP,
                              i,
                              CC_id);
       int tb_size = gNB_mac->sib1_pdsch[i].tb_size;
+#ifdef E3_AGENT
+      /* No TB fits on the cached TDA: skip (demoted from AssertFatal, same
+       * rationale as above). */
+      if (!res || tb_size <= 0) {
+        static uint64_t sib1_tb_skip = 0;
+        /* Reset the cached TDA so the next occasion re-runs the full search. */
+        gNB_mac->sib1_pdsch[i].time_domain_allocation = -1;
+        sib_block_skip(gNB_mac, &sib1_tb_skip, i, beam_index, frameP, slotP,
+                       n_slots_frame, beam.new_beam,
+                       "SIB1 couldn't allocate TB on already-allocated TDA");
+        continue;
+      }
+#else /* E3_AGENT */
       AssertFatal(res && tb_size > 0, "Couldn't allocate TB for SIB1 for an already allocated TDA\n");
+#endif /* E3_AGENT */
       nfapi_nr_dl_tti_request_body_t *dl_req = &DL_req->dl_tti_request_body;
       int pdu_index = gNB_mac->pdu_index[0]++;
       nr_fill_nfapi_dl_SIB_pdu(gNB_mac,
@@ -696,7 +755,20 @@ static void other_sib_sched_control(module_id_t module_idP,
                                        coreset,
                                        0);
 
+#ifdef E3_AGENT
+  /* No free CCE bundle (CORESET PRBs possibly blocked): skip this occasion
+   * (demoted from AssertFatal). sib_block_skip releases the beam reservation so
+   * it doesn't leak. */
+  if (cce_index < 0) {
+    static uint64_t othersib_cce_skip = 0;
+    sib_block_skip(gNB_mac, &othersib_cce_skip, payload_idx, beam_index, frame, slot,
+                   n_slots_frame, beam.new_beam,
+                   "other-SIB no PDCCH candidate (CORESET PRBs possibly blocked)");
+    return;
+  }
+#else /* E3_AGENT */
   AssertFatal(cce_index >= 0, "Could not find CCE for otherSIB DCI\n");
+#endif /* E3_AGENT */
 
   // Mark the corresponding RBs as used
   fill_pdcch_vrb_map(gNB_mac, 0, gNB_mac->sched_pdcch_otherSI, cce_index, aggregation_level, beam.idx);
@@ -716,7 +788,20 @@ static void other_sib_sched_control(module_id_t module_idP,
   uint8_t *sib_bcch_pdu = cc->other_sib_bcch_pdu[payload_idx];
   int num_total_bytes = cc->other_sib_bcch_length[payload_idx];
   bool success = update_rb_mcs_tbs(&sched_pdsch_otherSI, num_total_bytes, vrb_map);
+#ifdef E3_AGENT
+  /* No PRB run wide enough for the TB (CORESET PRBs possibly blocked): skip
+   * (demoted from AssertFatal). The CCEs marked by fill_pdcch_vrb_map above are
+   * harmless — vrb_map is rebuilt per tick and no FAPI PDU was emitted. */
+  if (!success) {
+    static uint64_t othersib_tbs_skip = 0;
+    sib_block_skip(gNB_mac, &othersib_tbs_skip, payload_idx, beam_index, frame, slot,
+                   n_slots_frame, beam.new_beam,
+                   "other-SIB couldn't allocate TBS (CORESET PRBs possibly blocked)");
+    return;
+  }
+#else /* E3_AGENT */
   AssertFatal(success, "Couldn't allocate TBS for other SIB\n");
+#endif /* E3_AGENT */
 
   for (int rb = 0; rb < sched_pdsch_otherSI.rbSize; rb++) {
     vrb_map[rb + type0_PDCCH_CSS_config->cset_start_rb] |= SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);

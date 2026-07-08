@@ -10,6 +10,7 @@
 
 #include "gNB_scheduler_ul_sensing.h"
 #include "LAYER2/NR_MAC_gNB/mac_proto.h"
+#include "LAYER2/NR_MAC_gNB/gNB_scheduler_prb_block.h"
 #include "LAYER2/NR_MAC_COMMON/nr_mac_common.h"
 #include "common/utils/nr/nr_common.h"
 
@@ -67,8 +68,10 @@ void nr_mac_sensing_restore_ul_slot(gNB_MAC_INST *mac, frame_t frame, slot_t slo
   const int num_beams = nr_mac_active_beams(mac);
   for (int b = 0; b < num_beams; b++) {
     uint16_t *row = &mac->common_channels[0].vrb_map_UL[b][buf_idx * MAX_BWP_SIZE];
-    /* Reset to the static block list. */
+    /* Reset to the static block list, then re-apply the live dApp UL block so
+     * reserved-slot sensing keeps the block intent. */
     memcpy(row, &mac->ulprbbl, sizeof(uint16_t) * MAX_BWP_SIZE);
+    prb_block_reapply_ul_row(mac, row);
   }
 }
 
@@ -718,6 +721,15 @@ static int nr_scan_sensing_tiles(gNB_MAC_INST *mac,
   /* beam 0 for now */
   uint16_t *vrb_map_UL = &mac->common_channels[0].vrb_map_UL[0][buf_idx * MAX_BWP_SIZE];
 
+  /* Subtract the dApp UL block (effective) from the occupancy so blocked PRBs
+   * read as FREE here and still surface as tiles: the dApp blocked them for
+   * interference but still watches them via the sensing telemetry. The bits stay
+   * set in vrb_map_UL (schedulers keep refusing them); only this scan subtracts
+   * them. The LIVE snapshot is read; a mid-interim shrink self-corrects on the
+   * next reseed. */
+  uint16_t prb_block_eff[MAX_BWP_SIZE];
+  const bool have_block = get_effective_prb_block_mask_ul(mac, prb_block_eff);
+
   /* Add the RRC-configured periodic UL control occupancy (SR + periodic CSI +
    * SRS) the UE transmits autonomously but that the reserved-slot VRB reset
    * erased — occasion-gated, OR'd into the LOCAL sense_vrb copy only (scheduling
@@ -727,11 +739,11 @@ static int nr_scan_sensing_tiles(gNB_MAC_INST *mac,
   memset(ctrl_occ, 0, sizeof(ctrl_occ));
   const int n_ctrl_prb = nr_sensing_add_ul_ctrl_occupancy(mac, frame, slot, ctrl_occ);
 
-  /* Build the control-occupancy-augmented snapshot: OR the per-slot control
-   * occupancy into the live vrb_map_UL row. */
+  /* Build the block-subtracted, control-occupancy-augmented snapshot: subtract
+   * the dApp block (when present), then OR the per-slot control occupancy. */
   uint16_t sense_vrb[MAX_BWP_SIZE];
   for (int rb = 0; rb < MAX_BWP_SIZE; rb++)
-    sense_vrb[rb] = vrb_map_UL[rb] | ctrl_occ[rb];
+    sense_vrb[rb] = (have_block ? (uint16_t)(vrb_map_UL[rb] & (uint16_t)~prb_block_eff[rb]) : vrb_map_UL[rb]) | ctrl_occ[rb];
   if (n_ctrl_prb > 0)
     LOG_D(NR_MAC, "%d.%d sensing mask: %d PRB(s) reserved for UL control\n",
           frame, slot, n_ctrl_prb);

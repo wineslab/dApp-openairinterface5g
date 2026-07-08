@@ -8,6 +8,7 @@
 
 #ifdef E3_AGENT
 #include "NR_MAC_gNB/gNB_scheduler_ul_sensing.h"
+#include "NR_MAC_gNB/gNB_scheduler_prb_block.h"
 #endif /* E3_AGENT */
 
 #include "common/utils/LOG/log.h"
@@ -155,6 +156,13 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
 #endif /* E3_AGENT */
     clear_nr_nfapi_information(gNB, CC_id, frame, slot);
   }
+
+  /* dApp-driven PRB blocking: OR'd into the vrb_maps before any scheduling step
+   * (PRACH/PUCCH/data) inspects them, so blocked PRBs are naturally treated as
+   * occupied by every downstream consumer. */
+#ifdef E3_AGENT
+  apply_prb_block_masks(gNB, frame, slot);
+#endif /* E3_AGENT */
 
   bool wait_prach_completed = gNB->num_scheduled_prach_rx >= NUM_PRACH_RX_FOR_NOISE_ESTIMATE;
   if (gNB->print_ue_stats && (wait_prach_completed || get_softmodem_params()->phy_test) && (slot == 0) && (frame & 127) == 0) {
