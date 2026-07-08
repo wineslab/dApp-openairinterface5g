@@ -31,7 +31,9 @@ void nr_rrc_config_dl_tda(NR_PDSCH_TimeDomainResourceAllocationList_t *pdsch_Tim
                           frame_type_t frame_type,
                           NR_TDD_UL_DL_ConfigCommon_t *tdd_UL_DL_ConfigurationCommon,
                           int len_coreset);
-void nr_rrc_config_ul_tda(NR_ServingCellConfigCommon_t *scc, int min_fb_delay, nr_srs_type_t do_SRS);
+struct additional_ul_tda;
+void nr_rrc_config_ul_tda(NR_ServingCellConfigCommon_t *scc, int min_fb_delay, int do_SRS,
+                          int num_additional_ul_tdas, const struct additional_ul_tda *additional_ul_tdas);
 NR_SearchSpace_t *rrc_searchspace_config(bool is_common,
                                          int searchspaceid,
                                          int coresetid,

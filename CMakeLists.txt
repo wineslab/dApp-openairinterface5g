@@ -1221,6 +1221,15 @@ set (MAC_NR_SRC
   ${NR_GNB_MAC_DIR}/nr_radio_config.c
  )
 
+# SPEAR sensing MAC sources: only with the E3 agent. Call sites in the shared
+# MAC sources are gated with #ifdef E3_AGENT.
+if(E3_AGENT)
+  list(APPEND MAC_NR_SRC
+    ${NR_GNB_MAC_DIR}/gNB_scheduler_ul_sensing.c
+    ${NR_GNB_MAC_DIR}/gNB_scheduler_ul_sensing_aerial.c
+  )
+endif()
+
 
 set (MAC_SRC_UE
   ${PHY_INTERFACE_DIR}/phy_stub_UE.c

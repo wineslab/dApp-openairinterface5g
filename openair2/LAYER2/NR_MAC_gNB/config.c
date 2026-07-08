@@ -914,7 +914,10 @@ static int config_sched_ctrlSIB1(gNB_MAC_INST *nr_mac)
  * nr_rrc_config_ul_tda() are designed to work in sync (get_num_ul_tda()
  * assumes an ordering, output by nr_rrc_config_ul_tda()).
  */
-static void init_ul_tda_info(const NR_PUSCH_TimeDomainResourceAllocationList_t *l, seq_arr_t *sa_tda)
+static void init_ul_tda_info(const NR_PUSCH_TimeDomainResourceAllocationList_t *l,
+                             seq_arr_t *sa_tda,
+                             int num_additional,
+                             const additional_ul_tda_t *additional)
 {
   DevAssert(l->list.count > 0 && l->list.count <= 16);
   DevAssert(seq_arr_size(sa_tda) == 0);
@@ -924,7 +927,15 @@ static void init_ul_tda_info(const NR_PUSCH_TimeDomainResourceAllocationList_t *
     DevAssert(t->k2);
     NR_tda_info_t tda = { .mapping_type = typeB, .k2 = *t->k2, .valid_tda = true };
     SLIV2SL(t->startSymbolAndLength, &tda.startSymbolIndex, &tda.nrOfSymbols);
-    LOG_I(NR_MAC, "TDA index %d: start %d length %d k2 %ld\n", i, tda.startSymbolIndex, tda.nrOfSymbols, tda.k2);
+    /* Tag as additional if (start, length) matches any configured extra TDA */
+    for (int j = 0; j < num_additional; j++) {
+      if (tda.startSymbolIndex == additional[j].start_symbol && tda.nrOfSymbols == additional[j].num_symbols) {
+        tda.is_additional = true;
+        break;
+      }
+    }
+    LOG_I(NR_MAC, "TDA index %d: start %d length %d k2 %ld%s\n",
+          i, tda.startSymbolIndex, tda.nrOfSymbols, tda.k2, tda.is_additional ? " [additional]" : "");
     seq_arr_push_back(sa_tda, &tda, sizeof(tda));
   }
 }
@@ -977,15 +988,30 @@ void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, c
   if (IS_SA_MODE(get_softmodem_params()))
     num_symb_cset = config_sched_ctrlSIB1(nrmac);
 
-  const nr_mac_config_t *rc = &nrmac->radio_config;
   const NR_DownlinkConfigCommon_t *dlcc = scc->downlinkConfigCommon;
   nr_rrc_config_dl_tda(dlcc->initialDownlinkBWP->pdsch_ConfigCommon->choice.setup->pdsch_TimeDomainAllocationList,
                        get_frame_type((int)*dlcc->frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing),
                        scc->tdd_UL_DL_ConfigurationCommon,
                        num_symb_cset);
-  nr_rrc_config_ul_tda(scc, rc->minRXTXTIME, rc->do_SRS);
   seq_arr_init(&nrmac->ul_tda, sizeof(NR_tda_info_t));
-  init_ul_tda_info(scc->uplinkConfigCommon->initialUplinkBWP->pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList, &nrmac->ul_tda);
+  init_ul_tda_info(scc->uplinkConfigCommon->initialUplinkBWP->pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList,
+                   &nrmac->ul_tda,
+                   config->num_additional_ul_tdas,
+                   config->additional_ul_tdas);
+
+#ifdef E3_AGENT
+  /* Enable the sensing scanner when either additional_ul_tdas (dApp soft-mask)
+   * or sensing_target_slots (operator hard-reserve) are configured -- otherwise
+   * a hard-reserve-only deployment would reserve slots but emit no sensing. */
+  nrmac->sensing_enabled = (config->num_additional_ul_tdas > 0)
+                        || (config->num_sensing_target_slots > 0);
+  if (nrmac->sensing_enabled)
+    LOG_I(NR_MAC,
+          "Sensing mode enabled: %d additional UL TDAs, %d hard-reserved slots "
+          "(additional TDAs are picked only when the dApp installs a sensing policy)\n",
+          config->num_additional_ul_tdas,
+          config->num_sensing_target_slots);
+#endif /* E3_AGENT */
 }
 
 bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_sib_msg_t cu_sib[num_cu_sib])

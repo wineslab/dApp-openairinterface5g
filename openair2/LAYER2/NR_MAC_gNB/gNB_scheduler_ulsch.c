@@ -37,10 +37,9 @@ int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **
       break; // there won't be a suitable k2 anymore
 
     uint16_t tda_bitmap = SL_to_bitmap(tda->startSymbolIndex, tda->nrOfSymbols);
-    // nr_rrc_config_ul_tda() assures TDAs are from largest to smallest symbol number.
-    // check that this TDA fits entirely into this slot's mask (slot might be
-    // smaller in mixed slots)., A mixed slot TDA would be checked last, so a
-    // full slot TDA will be used for a full UL slot.
+    // nr_rrc_config_ul_tda() orders same-k2 TDAs so the ones that fit a slot's
+    // UL mask form a contiguous suffix: take the first that fits (the loop
+    // below assumes the rest fit too).
     if ((tda_bitmap & ul_bitmap) == tda_bitmap) { // if TDA fits entiry
       *first_idx = tda;
       break;
@@ -65,7 +64,7 @@ int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **
   return diff;
 }
 
-static void get_max_rb_range(const uint16_t *vrb_map_ul, const uint16_t *ulprbbl, uint16_t mask, int *rb_start, int *rb_len)
+void get_max_rb_range(const uint16_t *vrb_map_ul, const uint16_t *ulprbbl, uint16_t mask, int *rb_start, int *rb_len)
 {
   int best_start = *rb_start;
   int best_len = 0;
@@ -110,15 +109,6 @@ const NR_tda_info_t *get_best_ul_tda(const gNB_MAC_INST *nrmac, int beam, const 
     int start = check_rb_start;
     int len = check_rb_len;
     uint16_t tda_mask = SL_to_bitmap(tdas->startSymbolIndex, tdas->nrOfSymbols);
-
-#ifdef E3_AGENT
-    // Skip TDAs that use symbol 12 in slot 8 (reserved for spectrum sensing)
-    if (slot == 8 && (tda_mask & (1 << 12))) {
-      LOG_D(NR_MAC, "%4d.%2d skipping TDA (mask 0x%04x) overlapping spectrum sensing symbol\n", frame, slot, tda_mask);
-      continue;
-    }
-#endif
-
     get_max_rb_range(vrb_map_UL, nrmac->ulprbbl, tda_mask, &start, &len);
     uint64_t s = (uint64_t)tdas->nrOfSymbols * len;
     if (s > score) {
@@ -738,7 +728,12 @@ static void nr_rx_ra_sdu(const module_id_t mod_id,
   NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
   NR_UE_info_t *UE = find_ra_UE(&mac->UE_info, rnti);
   if (!UE) {
-    LOG_E(NR_MAC, "UL SDU discarded. Couldn't finde UE with RNTI %04x \n", rnti);
+#ifdef ENABLE_AERIAL
+    /* The Aerial sensing-PUSCH inject uses a reserved RNTI with no UE state, so
+     * silence the discard log for it (would spam once per sensing slot). */
+    if (!is_sensing_rnti(rnti))
+#endif
+      LOG_E(NR_MAC, "UL SDU discarded. Couldn't find UE with RNTI %04x \n", rnti);
     return;
   }
 

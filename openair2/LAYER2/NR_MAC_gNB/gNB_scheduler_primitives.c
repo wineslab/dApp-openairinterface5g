@@ -4204,7 +4204,12 @@ bool nr_mac_get_new_rnti(NR_UEs_t *UEs, rnti_t *rnti)
     exist_connected_ue = find_nr_UE(UEs, *rnti) != NULL;
     exist_in_pending_ra_ue = find_ra_UE(UEs, *rnti) != NULL;
     loop++;
-  } while (loop < 100 && (exist_connected_ue || exist_in_pending_ra_ue));
+  } while (loop < 100
+           && (exist_connected_ue || exist_in_pending_ra_ue
+#ifdef E3_AGENT
+               || is_sensing_rnti(*rnti)
+#endif
+               ));
   return loop < 100; // nothing found: loop count 100
 }
 

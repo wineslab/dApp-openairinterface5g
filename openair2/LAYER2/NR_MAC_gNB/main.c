@@ -39,6 +39,7 @@
 #include "system.h"
 #include "time_meas.h"
 #include "utils.h"
+#include "gNB_scheduler_ul_sensing.h"
 
 #define MACSTATSSTRLEN 36256
 
@@ -304,6 +305,20 @@ void mac_top_init_gNB(ngran_node_t node_type,
       RC.nrmac[i]->ul_tda_select = nr_ul_tda_select_default;
       RC.nrmac[i]->ul_beam_select = nr_ul_beam_select_default;
       RC.nrmac[i]->ul_mcs_select = nr_ul_mcs_select_default;
+
+#ifdef E3_AGENT
+      /* Sensing opt-in: override the UL TDA selector when sensing TDAs or target
+       * slots are configured (mirrors the phy_test pre_processor override below).
+       * The policy state starts inactive; set_sensing_policy() populates it. */
+      if (config->num_additional_ul_tdas > 0 || config->num_sensing_target_slots > 0) {
+        RC.nrmac[i]->ul_tda_select = nr_ul_tda_select_sensing;
+        sensing_policy_state_t *sp = calloc(1, sizeof(*sp));
+        AssertFatal(sp != NULL, "out of memory allocating sensing_policy_state_t\n");
+        pthread_mutex_init(&sp->lock, NULL);
+        RC.nrmac[i]->sched_stateful_data = sp;
+      }
+#endif /* E3_AGENT */
+
       RC.nrmac[i]->ul_rb_alloc = nr_ul_proportional_fair;
 
       RC.nrmac[i]->dl_lcid_alloc = nr_dl_lcid_alloc_default;
@@ -365,6 +380,16 @@ void mac_top_destroy_gNB(gNB_MAC_INST *mac)
   if (mac->f1_config.setup_resp)
     free_f1ap_setup_response(mac->f1_config.setup_resp);
   free(mac->f1_config.setup_resp);
+#ifdef E3_AGENT
+  /* Free the per-instance sensing-policy state from mac_top_init_gNB;
+   * skippable at process exit, kept symmetric with init. */
+  if (mac->sched_stateful_data) {
+    sensing_policy_state_t *sp = mac->sched_stateful_data; /* stored as void* */
+    pthread_mutex_destroy(&sp->lock);
+    free(sp);
+    mac->sched_stateful_data = NULL;
+  }
+#endif /* E3_AGENT */
 }
 
 void nr_mac_send_f1_setup_req(void)

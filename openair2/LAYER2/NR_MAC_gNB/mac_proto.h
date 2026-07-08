@@ -389,6 +389,8 @@ bool add_UE_to_list(int list_size, NR_UE_info_t *list[list_size], NR_UE_info_t *
 NR_UE_info_t *remove_UE_from_list(int list_size, NR_UE_info_t *list[list_size], rnti_t rnti);
 int get_dl_tda(const gNB_MAC_INST *nrmac, int slot);
 int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **first_idx);
+void get_max_rb_range(const uint16_t *vrb_map_ul, const uint16_t *ulprbbl, uint16_t mask, int *rb_start, int *rb_len);
+bool nr_mac_ul_slot_is_sensing_reserved(const gNB_MAC_INST *mac, int slot);
 const NR_tda_info_t *get_best_ul_tda(const gNB_MAC_INST *nrmac,
                                      int beam,
                                      const NR_tda_info_t *tdas,
