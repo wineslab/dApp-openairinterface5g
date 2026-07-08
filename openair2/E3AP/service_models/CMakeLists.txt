@@ -11,6 +11,7 @@ target_include_directories(e3_sm_worker PUBLIC
 )
 target_link_libraries(e3_sm_worker pthread)
 
+add_subdirectory(spectrum_sm)
 add_subdirectory(l1_kpm_sm)
 
 add_library(service_models INTERFACE)
@@ -19,10 +20,11 @@ target_include_directories(service_models INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/common/utils/LOG
     ${CMAKE_SOURCE_DIR}/openair2/E3AP
-    ${CLIBE3_INCLUDE_DIRS}
+    ${CLIBE3_INCLUDE_DIRS} 
 )
 
 target_link_libraries(service_models INTERFACE
+    ${SPECTRUM_SM_LIBRARY}
     ${L1_KPM_SM_LIBRARY}
     e3_sm_worker
 )

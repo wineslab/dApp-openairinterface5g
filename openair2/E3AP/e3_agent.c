@@ -1,5 +1,6 @@
 #include "e3_agent.h"
 #include "config/e3_config.h"
+#include "service_models/spectrum_sm/spectrum_sm.h"
 #include "service_models/l1_kpm_sm/l1_kpm_sm.h"
 
 // TODO replace pthreads with itti or use a faster way
@@ -75,6 +76,7 @@ static uint32_t min_subscription_period_us(uint32_t ran_function_id)
 void on_dapp_status_changed(void)
 {
   LOG_I(E3AP, "dApp status changed, triggering RIC Service Update\n");
+  spectrum_telemetry_set_period_us(min_subscription_period_us(E3_SM_ID_SPECTRUM));
   l1_kpm_sm_set_period_us(min_subscription_period_us(E3_SM_ID_KPM));
 #ifdef E2_AGENT
   notify_dapp_status_changed();
@@ -161,6 +163,35 @@ int e3_init()
   }
   
   // Register the SMs (each only if listed in enabled_sms, or all if the list is empty)
+  // SM Spectrum
+  if (sm_enabled(E3_SM_ID_SPECTRUM, enabled_sms, num_enabled_sms)) {
+    e3_c_service_model_desc_t *desc_sm_spectrum = create_spectrum_sm_model();
+    if (!desc_sm_spectrum) {
+      LOG_E(E3AP, "Failed to create Spectrum SM descriptor\n");
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+    e3_service_model_handle_t *sm_spectrum = e3_service_model_create_from_c(desc_sm_spectrum);
+    if (!sm_spectrum) {
+      LOG_E(E3AP, "Failed to create Spectrum SM handle\n");
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+
+    spectrum_sm_set_handle(sm_spectrum);
+
+    err = e3_agent_register_sm(e3.agent, sm_spectrum);
+    if (err != 0) {
+      LOG_E(E3AP, "Failed to register Spectrum SM (err=%d: %s)\n", err, e3_error_to_string(err));
+      e3_service_model_destroy(sm_spectrum);
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+  }
+
   // SM L1-KPM
   if (sm_enabled(E3_SM_ID_KPM, enabled_sms, num_enabled_sms)) {
     e3_c_service_model_desc_t *desc_sm_kpm = create_l1_kpm_sm_model();
