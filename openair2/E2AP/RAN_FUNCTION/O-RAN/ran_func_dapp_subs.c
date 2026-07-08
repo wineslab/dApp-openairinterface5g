@@ -151,9 +151,6 @@ void remove_dapp_subs_data(dapp_subs_data_t *dapp_subs_data, uint32_t ric_req_id
   if (had_f2)
     seq_arr_erase(&dapp_subs_data->frmt_2_subs, elm_f2.it);
 
-  if (!had_f1 && !had_f2)
-    printf("[E2 AGENT][WARN] Tried to remove unknown RIC request ID: %u\n", ric_req_id);
-
   pthread_mutex_unlock(&dapp_mutex);
 
   if (had_f1)
@@ -167,14 +164,20 @@ void remove_dapp_subs_data(dapp_subs_data_t *dapp_subs_data, uint32_t ric_req_id
 void insert_frmt_1_ric_id(dapp_subs_data_t *d, uint32_t ric_req_id)
 {
   pthread_mutex_lock(&dapp_mutex);
-  seq_arr_push_back(&d->frmt_1_subs, &ric_req_id, sizeof(ric_req_id));
+  /* Dedup like the global registry (ric_subs_frmt1_add via seq_push_unique):
+   * a duplicate ric_req_id here would desync the per-SM list from the global
+   * (remove erases one entry each), stranding a still-active subscriber. */
+  if (find_if(&d->frmt_1_subs, &ric_req_id, eq_uint32).it == NULL)
+    seq_arr_push_back(&d->frmt_1_subs, &ric_req_id, sizeof(ric_req_id));
   pthread_mutex_unlock(&dapp_mutex);
 }
 
 void insert_frmt_2_ric_id(dapp_subs_data_t *d, uint32_t ric_req_id)
 {
   pthread_mutex_lock(&dapp_mutex);
-  seq_arr_push_back(&d->frmt_2_subs, &ric_req_id, sizeof(ric_req_id));
+  /* Dedup to match the global registry (see insert_frmt_1_ric_id). */
+  if (find_if(&d->frmt_2_subs, &ric_req_id, eq_uint32).it == NULL)
+    seq_arr_push_back(&d->frmt_2_subs, &ric_req_id, sizeof(ric_req_id));
   pthread_mutex_unlock(&dapp_mutex);
 }
 

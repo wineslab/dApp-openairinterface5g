@@ -1,7 +1,16 @@
 #include "ran_func_dapp.h"
 
+#include <stdatomic.h>
+
 static pthread_once_t once_dapp_mutex = PTHREAD_ONCE_INIT;
 static dapp_subs_data_t dapp_subs_data = {0};
+
+/* True once any RIC-originated callback (subscription/control) has reached
+ * this RAN function; those only arrive over an established E2 connection, so
+ * this is the closest "E2 setup completed" signal available outside the agent
+ * (flexric exposes no connection state). Never cleared: a lost association
+ * cannot be observed from here either. */
+static atomic_bool e2_ric_seen = false;
 
 /**
  * @brief Create a byte_array_t from a C-string.
@@ -222,6 +231,10 @@ void read_dapp_setup_sm(void* data)
  */
 static void generate_e2_indication_dapp_e3_subscriptions(void)
 {
+  /* E2-connection gate: RIC request IDs exist only for subscriptions installed
+   * over an established E2 connection, so an empty snapshot means there is
+   * nothing to send and no connection to send it over (the agent API
+   * additionally drops async events if the agent is down). */
   uint32_t* ric_ids = NULL;
   size_t count = ric_subs_frmt2_snapshot(&ric_ids);
   if (count == 0 || ric_ids == NULL) {
@@ -236,7 +249,11 @@ static void generate_e2_indication_dapp_e3_subscriptions(void)
     }
   }
 
-  const f1ap_setup_req_t* f1_req = RC.nrmac[0]->f1_config.setup_req;
+  /* MAC/RRC only provide the node identity for the header: absent on nr-cuup
+   * (which registers this same RAN function but hosts no gNB MAC/RRC), the
+   * identity fields are simply omitted. */
+  const bool have_node_identity = RC.nrmac && RC.nrmac[0] && RC.nrrrc && RC.nrrrc[0];
+  const f1ap_setup_req_t* f1_req = have_node_identity ? RC.nrmac[0]->f1_config.setup_req : NULL;
   const f1ap_served_cell_info_t* cell = (f1_req && f1_req->num_cells_available > 0) ? &f1_req->cell[0].info : NULL;
 
   for (size_t s = 0; s < count; ++s) {
@@ -294,9 +311,21 @@ static void generate_e2_indication_dapp_e3_subscriptions(void)
   free(ric_ids);
 }
 
+/* Called from the E3 agent whenever a dApp connects/disconnects; may therefore
+ * fire with no E2 connection up. Both callees gate on the E2 side: the service
+ * update is skipped until the RIC has been heard from (see below), and the
+ * indication fan-out sends only to RIC request IDs of installed subscriptions. */
 void notify_dapp_status_changed(void)
 {
-  trigger_ric_service_update_api();
+  /* Skip the RIC Service Update until E2 setup has completed: the agent sends
+   * it synchronously on THIS thread, and with the association still
+   * establishing the blocking SCTP send can hold the libe3 RX thread (the E3
+   * control plane) for minutes. Nothing is lost while setup is pending -- the
+   * agent regenerates the RAN-function definition, including the current dApp
+   * subscription map, on every E2 SETUP REQUEST retry. */
+  if (atomic_load(&e2_ric_seen)) {
+    trigger_ric_service_update_api();
+  }
   generate_e2_indication_dapp_e3_subscriptions();
 }
 
@@ -320,13 +349,19 @@ void generate_e2_indication_from_e3_dapp_report(uint32_t ran_function_id,
     return;
   }
 
+  /* E2-connection gate: RIC request IDs exist only for subscriptions installed
+   * over an established E2 connection (see
+   * generate_e2_indication_dapp_e3_subscriptions). */
   uint32_t* ric_ids = NULL;
   size_t count = ric_subs_frmt1_snapshot(&ric_ids);
   if (count == 0 || ric_ids == NULL) {
     return;
   }
 
-  const f1ap_setup_req_t* f1_req = RC.nrmac[0]->f1_config.setup_req;
+  /* Node identity for the header; absent on nr-cuup (no gNB MAC/RRC), the
+   * identity fields are simply omitted. */
+  const bool have_node_identity = RC.nrmac && RC.nrmac[0] && RC.nrrrc && RC.nrrrc[0];
+  const f1ap_setup_req_t* f1_req = have_node_identity ? RC.nrmac[0]->f1_config.setup_req : NULL;
   const f1ap_served_cell_info_t* cell = (f1_req && f1_req->num_cells_available > 0) ? &f1_req->cell[0].info : NULL;
 
   for (size_t i = 0; i < count; ++i) {
@@ -389,6 +424,7 @@ static void free_aperiodic_subscription(uint32_t ric_req_id)
 sm_ag_if_ans_t write_subs_dapp_sm(void const* src)
 {
   assert(src != NULL);
+  atomic_store(&e2_ric_seen, true);
   wr_dapp_sub_data_t* wr_dapp = (wr_dapp_sub_data_t*)src;
 
   sm_ag_if_ans_t ans = {0};
@@ -433,6 +469,7 @@ sm_ag_if_ans_t write_subs_dapp_sm(void const* src)
 sm_ag_if_ans_t write_ctrl_dapp_sm(void const* data)
 {
   assert(data != NULL);
+  atomic_store(&e2_ric_seen, true);
 
   dapp_ctrl_req_data_t const* ctrl = (dapp_ctrl_req_data_t const*)data;
   sm_ag_if_ans_t ans = {0};
@@ -466,13 +503,14 @@ sm_ag_if_ans_t write_ctrl_dapp_sm(void const* data)
 /**
  * @brief Read DAPP SM state from the agent (not implemented).
  *
- * Placeholder for a future read operation for the DAPP SM. Currently it
- * asserts unconditionally and returns true to satisfy the interface.
+ * No READ operation is defined for the DAPP SM; this returns false (and never
+ * aborts) so a stray READ cannot kill the gNB.
  */
 bool read_dapp_sm(void* data)
 {
   assert(data != NULL);
-  assert(0 != 0 && "Not implemented");
-
-  return true;
+  /* No READ operation is defined for the DAPP SM. Return false rather than
+   * assert(0)/abort, so a stray READ can never kill the gNB (and isn't a
+   * silent fake-success under NDEBUG). */
+  return false;
 }
