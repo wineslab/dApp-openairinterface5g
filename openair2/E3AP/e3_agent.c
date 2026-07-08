@@ -1,5 +1,6 @@
 #include "e3_agent.h"
 #include "config/e3_config.h"
+#include "service_models/l1_kpm_sm/l1_kpm_sm.h"
 
 // TODO replace pthreads with itti or use a faster way
 // #include "intertask_interface.h"
@@ -50,14 +51,48 @@ static void e2_e3_bridge(uint32_t dapp_id,
 #endif
 }
 
+/* Emit cadence for one RAN function: the fastest periodicity any subscribed
+ * dApp declared in its subscription (microseconds, 0 = on-data). No
+ * subscribers, or any subscriber without a periodicity, means on-data. */
+static uint32_t min_subscription_period_us(uint32_t ran_function_id)
+{
+  size_t n = 0;
+  uint32_t *dapps = e3_agent_get_ran_function_subscribers(e3.agent, ran_function_id, &n);
+  uint32_t min_us = 0;
+  for (size_t i = 0; i < n; i++) {
+    const uint32_t p = e3_agent_get_subscription_periodicity(e3.agent, dapps[i], ran_function_id);
+    if (p == 0) { /* on-data requested: fastest possible, wins outright */
+      min_us = 0;
+      break;
+    }
+    if (min_us == 0 || p < min_us)
+      min_us = p;
+  }
+  e3_agent_free_uint32_array(dapps);
+  return min_us;
+}
+
 void on_dapp_status_changed(void)
 {
   LOG_I(E3AP, "dApp status changed, triggering RIC Service Update\n");
+  l1_kpm_sm_set_period_us(min_subscription_period_us(E3_SM_ID_KPM));
 #ifdef E2_AGENT
   notify_dapp_status_changed();
 #endif
 }
 
+
+// True if SM id is in the configuration file's enabled_sms list, or if the list is
+// empty/NULL (empty = enable every compiled-in SM).
+static int sm_enabled(int32_t id, const int32_t *enabled, int n)
+{
+  if (!enabled || n <= 0)
+    return 1;
+  for (int i = 0; i < n; i++)
+    if (enabled[i] == id)
+      return 1;
+  return 0;
+}
 
 int e3_init()
 {
@@ -85,6 +120,11 @@ int e3_init()
   // All other config fields (endpoints, io_threads, log_path) left as default (0 or NULL)
   e3.encoding         = e3_cmdline_configs->encoding;
   e3.fp16_beta        = e3_cmdline_configs->fp16_beta;
+
+  // enabled_sms points into config-system-owned (PARAMFLAG_NOFREE) memory, so it
+  // stays valid after the cmdline-config struct is freed below.
+  int32_t *enabled_sms = e3_cmdline_configs->enabled_sms;
+  int num_enabled_sms = e3_cmdline_configs->num_enabled_sms;
 
   // Create E3Agent with config
   e3.agent = e3_agent_create_with_config(&config);
@@ -120,6 +160,36 @@ int e3_init()
     return -1;
   }
   
+  // Register the SMs (each only if listed in enabled_sms, or all if the list is empty)
+  // SM L1-KPM
+  if (sm_enabled(E3_SM_ID_KPM, enabled_sms, num_enabled_sms)) {
+    e3_c_service_model_desc_t *desc_sm_kpm = create_l1_kpm_sm_model();
+    if (!desc_sm_kpm) {
+      LOG_E(E3AP, "Failed to create L1-KPM SM descriptor\n");
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+    e3_service_model_handle_t *sm_kpm = e3_service_model_create_from_c(desc_sm_kpm);
+    if (!sm_kpm) {
+      LOG_E(E3AP, "Failed to create L1-KPM SM handle\n");
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+
+    l1_kpm_sm_set_handle(sm_kpm);
+
+    err = e3_agent_register_sm(e3.agent, sm_kpm);
+    if (err != 0) {
+      LOG_E(E3AP, "Failed to register L1-KPM SM (err=%d: %s)\n", err, e3_error_to_string(err));
+      e3_service_model_destroy(sm_kpm);
+      e3_agent_destroy(e3.agent);
+      e3.agent = NULL;
+      return -1;
+    }
+  }
+
   /* Start LAST, once every SM and handler is in place: libe3's contract is
    * register-before-start. start() spawns the setup thread immediately, and a
    * dApp connecting before registration would get an empty ranFunctionList

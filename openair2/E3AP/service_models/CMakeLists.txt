@@ -11,6 +11,8 @@ target_include_directories(e3_sm_worker PUBLIC
 )
 target_link_libraries(e3_sm_worker pthread)
 
+add_subdirectory(l1_kpm_sm)
+
 add_library(service_models INTERFACE)
 
 target_include_directories(service_models INTERFACE
@@ -21,6 +23,7 @@ target_include_directories(service_models INTERFACE
 )
 
 target_link_libraries(service_models INTERFACE
+    ${L1_KPM_SM_LIBRARY}
     e3_sm_worker
 )
 

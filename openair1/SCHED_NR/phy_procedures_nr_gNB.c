@@ -25,6 +25,11 @@
 #include <stdint.h>
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 
+#ifdef E3_AGENT
+#include "openair2/E3AP/service_models/l1_kpm_sm/e3_ran_buffers.h"
+#include "openair2/E3AP/service_models/l1_kpm_sm/l1_kpm_sm.h"
+#endif // E3_AGENT
+
 //#define DEBUG_RXDATA
 //#define SRS_IND_DEBUG
 
@@ -1257,6 +1262,15 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
       T_INT(slot_rx),
       T_BUFFER(&gNB->common_vars.rxdataF[0][0], frame_parms->symbols_per_slot * ofdm_symbol_size * 4));
   }
+
+#ifdef E3_AGENT
+  /* Hand each UL/MIXED slot's IQ to the L1-KPM SM (RF=2) via /e3_ran_buffers.
+   * Only when a dApp is subscribed */
+  int sel = nr_slot_select(&gNB->gNB_config, frame_rx, slot_rx);
+  if ((sel == NR_UPLINK_SLOT || sel == NR_MIXED_SLOT) && l1_kpm_sm_has_subscribers()) {
+    e3_ran_buffers_push_rxdataF(gNB, frame_rx, slot_rx);
+  }
+#endif // E3_AGENT
 
   return pusch_DTX;
 }
