@@ -1,4 +1,9 @@
 -- Spectrum Service Model ASN.1 Definitions
+--
+-- Copyright (c) 2026 Institute for Intelligent Networked Systems (INSI)
+-- at Northeastern University. All rights reserved.
+-- SPDX-License-Identifier: LicenseRef-CSSL-1.0
+--
 -- This service model extends E3 messages for spectrum sharing applications
 --
 -- Usage with E3 Protocol:

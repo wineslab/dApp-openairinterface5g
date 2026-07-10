@@ -1,14 +1,26 @@
 -- L1-KPM Service Model ASN.1 Definitions
 --
+-- Copyright (c) 2026 Institute for Intelligent Networked Systems (INSI)
+-- at Northeastern University. All rights reserved.
+-- SPDX-License-Identifier: LicenseRef-CSSL-1.0
+--
+-- Portions of this ASN.1 grammar are derived from NVIDIA Aerial E3
+-- message schemas.
+--
+-- Original source:
+-- https://github.com/NVIDIA/aerial-sample-apps (dapps/docs/e3_message_schemas.json)
+--
+-- Original copyright:
+-- Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+--
+-- NVIDIA publishes the JSON Schema; this ASN.1 grammar is an independently
+-- authored translation. Modifications and additions by Institute for Intelligent Networked
+-- Systems (INSI) at Northeastern University are identified separately.
+--
 -- PHY-layer KPM SM at RAN Function ID 2. Telemetry-only: emits one
 -- indication payload per UL slot (or per period), referencing the
 -- /e3_ran_buffers POSIX shm region for the actual IQ bytes.
---
--- ATTRIBUTION: this ASN.1 grammar is DERIVED FROM NVIDIA Aerial's public E3
--- message schema (indicationMessage.protocolData), Copyright (c) 2026 NVIDIA
--- CORPORATION & AFFILIATES, SPDX-License-Identifier: Apache-2.0. See
---   https://github.com/NVIDIA/aerial-sample-apps (dapps/docs/e3_message_schemas.json)
--- NVIDIA publishes the JSON schema only; this grammar is its ASN.1 translation.
 --
 -- Field-for-field equivalent to the JSON schema in l1_kpm_enc.c
 -- so a dApp supporting both encodings can reuse most parsing logic:
