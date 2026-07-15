@@ -22,6 +22,10 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(__AVX2__)
+#include <immintrin.h>             /* SIMD int16 -> FP16 spans in the rxdataF copy */
+#endif
+
 /* Buffer shape [ant][sym][prb][sc]. The writer checks
  * PHY's runtime PRB count fits within E3_RB_N_PRBS_LAYOUT and zero-fills the
  * rest, so a dApp always gets a buffer of this shape. */
@@ -104,6 +108,48 @@ static inline uint16_t fp32_to_fp16_rne(float f) {
 }
 #endif
 
+#if !defined(__F16C__) && !defined(__aarch64__)
+/* No hardware fp32->fp16 on this target: use a full int16->fp16 lookup
+ * table for the configured beta (128 KiB, built once at init). */
+static uint16_t g_fp16_table[65536];
+static float    g_fp16_table_beta;
+static bool     g_fp16_table_ready;
+
+static void fp16_table_build(float beta) {
+    for (uint32_t v = 0; v < 65536u; ++v) {
+        g_fp16_table[v] = fp32_to_fp16_rne((float)(int16_t)v * beta);
+    }
+    g_fp16_table_beta  = beta;
+    g_fp16_table_ready = true;
+}
+#endif
+
+/* dst[i] = fp16_rne((float)src[i] * beta). Each path hands its tail to the
+ * next; all paths are bit-identical under the default round-to-nearest-even
+ * FP mode. */
+static void convert_span_fp16(uint16_t *dst, const int16_t *src, size_t n, float beta) {
+    size_t i = 0;
+#if defined(__AVX2__) && defined(__F16C__)
+    const __m256 beta_vec = _mm256_set1_ps(beta);
+    for (; i + 8 <= n; i += 8) {
+        const __m256i widened = _mm256_cvtepi16_epi32(_mm_loadu_si128((const __m128i *)(src + i)));
+        const __m256  scaled  = _mm256_mul_ps(_mm256_cvtepi32_ps(widened), beta_vec);
+        _mm_storeu_si128((__m128i *)(dst + i), _mm256_cvtps_ph(scaled, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
+    }
+#endif
+#if !defined(__F16C__) && !defined(__aarch64__)
+    if (g_fp16_table_ready && beta == g_fp16_table_beta) {
+        for (; i < n; ++i) {
+            dst[i] = g_fp16_table[(uint16_t)src[i]];
+        }
+        return;
+    }
+#endif
+    for (; i < n; ++i) {
+        dst[i] = fp32_to_fp16_rne((float)src[i] * beta);
+    }
+}
+
 /* ---- Module state ---- */
 
 static const e3_shm_region_desc_t g_rb_desc = {
@@ -185,6 +231,10 @@ int e3_ran_buffers_init_from_phy(const PHY_VARS_gNB *gNB) {
     g_fh_chan.publish_sequence = 0;
     memset(&g_state.latest, 0, sizeof(g_state.latest));
 
+#if !defined(__F16C__) && !defined(__aarch64__)
+    fp16_table_build(e3_get_fp16_beta());
+#endif
+
     atomic_store(&g_ready, true);
 
     LOG_I(E3AP,
@@ -246,25 +296,19 @@ void e3_ran_buffers_push_rxdataF(const PHY_VARS_gNB *gNB, int frame_rx, int slot
     const uint32_t slot_offset = (uint32_t)(slot_rx % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * fft_size;
 
     /* Write [ant][sym][prb][sc][I,Q] FP16. */
+    const uint32_t total_sc = n_prbs * E3_RB_N_SC_PER_PRB;
+    const uint32_t span1_sc = (k0 + total_sc <= fft_size) ? total_sc : fft_size - k0;
+    const uint32_t span2_sc = total_sc - span1_sc;
     for (uint32_t antenna = 0; antenna < ants; ++antenna) {
         const c16_t *ant_data = common_vars->rxdataF[antenna] + slot_offset;
         for (uint32_t symbol = 0; symbol < (uint32_t)E3_RB_N_SYMBOLS; ++symbol) {
-            const uint32_t sym_off = symbol * fft_size;
+            const c16_t *sym_data = ant_data + (size_t)symbol * fft_size;
             uint16_t *out_iq = (uint16_t *)(row_base
                 + (((size_t)antenna * E3_RB_N_SYMBOLS + symbol) * E3_RB_N_SC_PER_SLOT) * E3_RB_BYTES_PER_SAMPLE);
-            uint32_t out_pos = 0;
-            for (uint32_t prb = 0; prb < n_prbs; ++prb) {
-                for (uint32_t sc = 0; sc < (uint32_t)E3_RB_N_SC_PER_PRB; ++sc) {
-                    const uint32_t bin = (k0 + prb * E3_RB_N_SC_PER_PRB + sc) % fft_size;
-                    const c16_t sample = ant_data[sym_off + bin];
-                    out_iq[out_pos++] = fp32_to_fp16_rne((float)sample.r * beta);
-                    out_iq[out_pos++] = fp32_to_fp16_rne((float)sample.i * beta);
-                }
-            }
+            convert_span_fp16(out_iq, (const int16_t *)(sym_data + k0), 2u * span1_sc, beta);
+            convert_span_fp16(out_iq + 2u * span1_sc, (const int16_t *)sym_data, 2u * span2_sc, beta);
             /* Zero-pad remaining PRB columns if PHY has fewer than the layout. */
-            for (; out_pos < (uint32_t)(E3_RB_N_SC_PER_SLOT * 2); ++out_pos) {
-                out_iq[out_pos] = 0;
-            }
+            memset(out_iq + 2u * total_sc, 0, ((size_t)E3_RB_N_SC_PER_SLOT - total_sc) * E3_RB_BYTES_PER_SAMPLE);
         }
     }
 
