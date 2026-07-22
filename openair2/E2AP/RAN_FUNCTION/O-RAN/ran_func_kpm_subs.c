@@ -5,6 +5,7 @@
 #include "ran_func_kpm_subs.h"
 
 #include <search.h>
+#include "openair2/RRC/NR/nr_rrc_defs.h"
 
 e2_node_level_stats_t cp_node_level_stats(const e2_node_level_stats_t *src)
 {
@@ -234,11 +235,36 @@ static meas_record_lst_t fill_CARR_PDSCHMCSDist(const label_info_lst_t label,
 
   return meas_record;
 }
-#endif
+
+/* 3GPP TS 28.552 - section 5.1.1.4.1
+   RRC.ConnMean - Mean number of users in RRC connected mode per NR cell
+   Gauge pattern: instantaneous count of UEs in RRC_CONNECTED state */
+static meas_record_lst_t fill_RRC_ConnMean(__attribute__((unused)) const label_info_lst_t label,
+                                           __attribute__((unused)) uint32_t gran_period_ms,
+                                           __attribute__((unused)) cudu_ue_info_pair_t ue_info,
+                                           __attribute__((unused)) const size_t ue_idx,
+                                           __attribute__((unused)) e2_node_level_stats_t* node_stats)
+{
+  meas_record_lst_t meas_record = {.value = INTEGER_MEAS_VALUE};
+
+  // Count UEs in RRC connected mode by iterating the RRC UE tree
+  int count = 0;
+  rrc_gNB_ue_context_t *rrc_ue_context = NULL;
+  RB_FOREACH(rrc_ue_context, rrc_nr_ue_tree_s, &RC.nrrrc[0]->rrc_ue_head) {
+    gNB_RRC_UE_t *ue = &rrc_ue_context->ue_context;
+    // UE has no AMF UE NGAP ID yet => not fully connected
+    if (ue->amf_ue_ngap_id < (1LL << 40))
+      count++;
+  }
+
+  meas_record.int_val = count;
+  return meas_record;
+}
 
 static kv_measure_t lst_measure[] = {
   {.key = "DRB.PdcpSduVolumeDL", .value = fill_DRB_PdcpSduVolumeDL }, 
   {.key = "DRB.PdcpSduVolumeUL", .value = fill_DRB_PdcpSduVolumeUL },
+  {.key = "RRC.ConnMean", .value = fill_RRC_ConnMean },
 #if defined (NGRAN_GNB_DU)
   {.key = "DRB.RlcSduDelayDl", .value =  fill_DRB_RlcSduDelayDl }, 
   {.key = "DRB.UEThpDl", .value =  fill_DRB_UEThpDl }, 

@@ -440,11 +440,13 @@ bool read_kpm_sm(void* data)
 
 static const char* kpm_node_meas_du[] = {
   "CARR.PDSCHMCSDist",
+  "RRC.ConnMean",
   NULL,
 };
 
 static const char* kpm_node_meas_gnb[] = {
   "CARR.PDSCHMCSDist",
+  "RRC.ConnMean",
   NULL,
 };
 
