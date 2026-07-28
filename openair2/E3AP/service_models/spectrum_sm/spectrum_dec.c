@@ -15,6 +15,9 @@
 #include "Spectrum-PRBBlacklistControl.h"
 #include "Spectrum-SensingPolicyControl.h"
 #include <json-c/json.h>
+#ifdef E3_SM_HAVE_PROTOBUF
+#include "e3sm_spectrum.pb-c.h"
+#endif
 
 /* 14-bit symbol bitmap upper bound (Spectrum-SensingPolicyControl INTEGER
  * (0..16383)) and per-slot vector upper bound (maxSlotsFrame=160, numerology 4 worst
@@ -339,6 +342,73 @@ static spectrum_prb_control_t* spectrum_decode_prb_control_json(uint8_t *encoded
     return prb_control;
 }
 
+#ifdef E3_SM_HAVE_PROTOBUF
+/* protobuf-c decode of the DAppControlData envelope's prbBlacklistControl. */
+static spectrum_prb_control_t *spectrum_decode_prb_control_protobuf(uint8_t *encoded_data, size_t encoded_size)
+{
+  E3sm__Spectrum__V1__SpectrumDAppControlData *env =
+      e3sm__spectrum__v1__spectrum_dapp_control_data__unpack(NULL, encoded_size, encoded_data);
+  if (!env) {
+    LOG_E(E3AP, "Failed to decode dApp control envelope (protobuf)\n");
+    return NULL;
+  }
+  if (env->control_payload_case != E3SM__SPECTRUM__V1__SPECTRUM_DAPP_CONTROL_DATA__CONTROL_PAYLOAD_PRB_BLACKLIST_CONTROL
+      || !env->prb_blacklist_control) {
+    LOG_E(E3AP, "Unexpected dApp control variant (protobuf, case=%d)\n", (int)env->control_payload_case);
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+  const E3sm__Spectrum__V1__SpectrumPRBBlacklistControl *pc = env->prb_blacklist_control;
+
+  if (pc->n_blacklisted_prbs > SPECTRUM_MAX_PRB_COUNT) {
+    LOG_E(E3AP, "Invalid PRB list count: %zu\n", pc->n_blacklisted_prbs);
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+
+  spectrum_prb_control_t *prb_control = calloc(1, sizeof(*prb_control));
+  if (!prb_control) {
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+  prb_control->prb_count = (uint32_t)pc->n_blacklisted_prbs;
+  if (prb_control->prb_count > 0) {
+    prb_control->blacklisted_prbs = malloc((size_t)prb_control->prb_count * sizeof(uint16_t));
+    if (!prb_control->blacklisted_prbs) {
+      free(prb_control);
+      e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+      return NULL;
+    }
+    for (size_t i = 0; i < pc->n_blacklisted_prbs; ++i) {
+      uint32_t v = pc->blacklisted_prbs[i];
+      if (v > SPECTRUM_MAX_PRB_INDEX) {
+        LOG_E(E3AP, "Invalid PRB value at index %zu: %u\n", i, v);
+        free(prb_control->blacklisted_prbs);
+        free(prb_control);
+        e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+        return NULL;
+      }
+      prb_control->blacklisted_prbs[i] = (uint16_t)v;
+    }
+  }
+  if (pc->has_sampling_threshold) {
+    prb_control->sampling_threshold = pc->sampling_threshold;
+  }
+  if (pc->has_validity_period) {
+    prb_control->validity_period = pc->validity_period;
+  }
+
+  LOG_D(E3AP,
+        "Decoded PRB-block (protobuf): %u PRBs, sampling threshold %u, validity %u s\n",
+        prb_control->prb_count,
+        prb_control->sampling_threshold,
+        prb_control->validity_period);
+
+  e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+  return prb_control;
+}
+#endif
+
 spectrum_prb_control_t* spectrum_decode_prb_control(uint8_t *encoded_data, size_t encoded_size) {
     if (!encoded_data || encoded_size == 0) {
       LOG_E(E3AP, "[SPECTRUM] tried to decode an empty buffer\n");
@@ -346,6 +416,14 @@ spectrum_prb_control_t* spectrum_decode_prb_control(uint8_t *encoded_data, size_
     }
     if (e3_get_encoding() == E3_ENCODING_ASN1) {
         return spectrum_decode_prb_control_asn1(encoded_data, encoded_size);
+    }
+    if (e3_get_encoding() == E3_ENCODING_PROTOBUF) {
+#ifdef E3_SM_HAVE_PROTOBUF
+      return spectrum_decode_prb_control_protobuf(encoded_data, encoded_size);
+#else
+      LOG_E(E3AP, "[SPECTRUM] protobuf encoding not compiled in\n");
+      return NULL;
+#endif
     }
     return spectrum_decode_prb_control_json(encoded_data, encoded_size);
 }
@@ -446,6 +524,70 @@ static spectrum_sensing_policy_t *spectrum_decode_sensing_policy_json(uint8_t *e
     return policy;
 }
 
+#ifdef E3_SM_HAVE_PROTOBUF
+/* protobuf-c decode of the DAppControlData envelope's sensingPolicyControl. */
+static spectrum_sensing_policy_t *spectrum_decode_sensing_policy_protobuf(uint8_t *encoded_data, size_t encoded_size)
+{
+  E3sm__Spectrum__V1__SpectrumDAppControlData *env =
+      e3sm__spectrum__v1__spectrum_dapp_control_data__unpack(NULL, encoded_size, encoded_data);
+  if (!env) {
+    LOG_E(E3AP, "Failed to decode sensing-policy envelope (protobuf)\n");
+    return NULL;
+  }
+  if (env->control_payload_case != E3SM__SPECTRUM__V1__SPECTRUM_DAPP_CONTROL_DATA__CONTROL_PAYLOAD_SENSING_POLICY_CONTROL
+      || !env->sensing_policy_control) {
+    LOG_E(E3AP, "Unexpected envelope variant for sensingPolicy (protobuf, case=%d)\n", (int)env->control_payload_case);
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+  const E3sm__Spectrum__V1__SpectrumSensingPolicyControl *sp = env->sensing_policy_control;
+  if (sp->n_mask_per_slot < 1 || sp->n_mask_per_slot > SPECTRUM_SENSING_MAX_SLOTS) {
+    LOG_E(E3AP, "Invalid sensing-policy mask length: %zu (max %u)\n", sp->n_mask_per_slot, SPECTRUM_SENSING_MAX_SLOTS);
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+
+  spectrum_sensing_policy_t *policy = calloc(1, sizeof(*policy));
+  if (!policy) {
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+  policy->mask_per_slot = malloc(sp->n_mask_per_slot * sizeof(uint16_t));
+  if (!policy->mask_per_slot) {
+    free(policy);
+    e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+    return NULL;
+  }
+  policy->n_slots = (uint32_t)sp->n_mask_per_slot;
+  for (size_t i = 0; i < sp->n_mask_per_slot; ++i) {
+    uint32_t v = sp->mask_per_slot[i];
+    if (v > SPECTRUM_SENSING_MASK_MAX) {
+      LOG_E(E3AP, "Invalid sensing-policy mask[%zu]=0x%x (max 0x%x)\n", i, v, SPECTRUM_SENSING_MASK_MAX);
+      free(policy->mask_per_slot);
+      free(policy);
+      e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+      return NULL;
+    }
+    policy->mask_per_slot[i] = (uint16_t)v;
+  }
+  if (sp->has_deactivate) {
+    policy->deactivate = sp->deactivate ? true : false;
+  }
+  if (sp->has_validity_period) {
+    policy->validity_period = sp->validity_period;
+  }
+
+  LOG_D(E3AP,
+        "Decoded sensingPolicy (protobuf): n_slots=%u deactivate=%d validity=%u\n",
+        policy->n_slots,
+        (int)policy->deactivate,
+        policy->validity_period);
+
+  e3sm__spectrum__v1__spectrum_dapp_control_data__free_unpacked(env, NULL);
+  return policy;
+}
+#endif
+
 spectrum_sensing_policy_t *spectrum_decode_sensing_policy(uint8_t *encoded_data, size_t encoded_size)
 {
     if (!encoded_data || encoded_size == 0) {
@@ -454,6 +596,14 @@ spectrum_sensing_policy_t *spectrum_decode_sensing_policy(uint8_t *encoded_data,
     }
     if (e3_get_encoding() == E3_ENCODING_ASN1) {
         return spectrum_decode_sensing_policy_asn1(encoded_data, encoded_size);
+    }
+    if (e3_get_encoding() == E3_ENCODING_PROTOBUF) {
+#ifdef E3_SM_HAVE_PROTOBUF
+      return spectrum_decode_sensing_policy_protobuf(encoded_data, encoded_size);
+#else
+      LOG_E(E3AP, "[SPECTRUM] protobuf encoding not compiled in\n");
+      return NULL;
+#endif
     }
     return spectrum_decode_sensing_policy_json(encoded_data, encoded_size);
 }

@@ -283,8 +283,11 @@ void spectrum_sm_set_handle(e3_service_model_handle_t *sm_handle)
 e3_c_service_model_desc_t *create_spectrum_sm_model(void)
 {
   if (!spectrum_ran_function_data_ready) {
-    LOG_I(E3AP, "[SPECTRUM] Encoding RAN function data with %s encoder\n",
-          e3_get_encoding() == E3_ENCODING_ASN1 ? "ASN.1" : "JSON");
+    LOG_I(E3AP,
+          "[SPECTRUM] Encoding RAN function data with %s encoder\n",
+          e3_get_encoding() == E3_ENCODING_ASN1       ? "ASN.1"
+          : e3_get_encoding() == E3_ENCODING_PROTOBUF ? "Protocol Buffers"
+                                                      : "JSON");
     int rc = spectrum_encode_ran_function_data(&spectrum_ran_function_data,
                                                &spectrum_ran_function_data_len);
     if (rc != E3_SUCCESS) {

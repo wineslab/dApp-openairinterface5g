@@ -12,6 +12,9 @@
 #include "../../e3_agent.h"         /* e3_get_encoding() */
 #include "Spectrum-SensingIndication.h"
 #include "aper_encoder.h"
+#ifdef E3_SM_HAVE_PROTOBUF
+#include "e3sm_spectrum.pb-c.h"
+#endif
 
 #define RAN_FUNCTION_BUFFER_SIZE 512
 #define SPECTRUM_RAN_FUNCTION_NAME "spectrum_sm"
@@ -112,10 +115,49 @@ static int spectrum_encode_ran_function_data_json(uint8_t **encoded_data, size_t
     return E3_SUCCESS;
 }
 
+#ifdef E3_SM_HAVE_PROTOBUF
+static int spectrum_encode_ran_function_data_protobuf(uint8_t **encoded_data, size_t *encoded_size)
+{
+  if (!encoded_data || !encoded_size) {
+    return E3_SM_ERROR_INVALID_PARAM;
+  }
+  *encoded_data = NULL;
+  *encoded_size = 0;
+
+  E3sm__Spectrum__V1__SpectrumRanFunctionData rf = E3SM__SPECTRUM__V1__SPECTRUM_RAN_FUNCTION_DATA__INIT;
+  rf.has_name = 1;
+  rf.name.data = (uint8_t *)SPECTRUM_RAN_FUNCTION_NAME;
+  rf.name.len = strlen(SPECTRUM_RAN_FUNCTION_NAME);
+  rf.has_version = 1;
+  rf.version = SPECTRUM_RAN_FUNCTION_VERSION;
+  rf.has_description = 1;
+  rf.description.data = (uint8_t *)SPECTRUM_RAN_FUNCTION_DESCRIPTION;
+  rf.description.len = strlen(SPECTRUM_RAN_FUNCTION_DESCRIPTION);
+
+  size_t sz = e3sm__spectrum__v1__spectrum_ran_function_data__get_packed_size(&rf);
+  uint8_t *buf = malloc(sz);
+  if (!buf) {
+    return E3_SM_ERROR_MEMORY;
+  }
+  e3sm__spectrum__v1__spectrum_ran_function_data__pack(&rf, buf);
+  *encoded_data = buf;
+  *encoded_size = sz;
+  return E3_SUCCESS;
+}
+#endif
+
 int spectrum_encode_ran_function_data(uint8_t **encoded_data, size_t *encoded_size)
 {
     if (e3_get_encoding() == E3_ENCODING_ASN1) {
         return spectrum_encode_ran_function_data_asn1(encoded_data, encoded_size);
+    }
+    if (e3_get_encoding() == E3_ENCODING_PROTOBUF) {
+#ifdef E3_SM_HAVE_PROTOBUF
+      return spectrum_encode_ran_function_data_protobuf(encoded_data, encoded_size);
+#else
+      LOG_E(E3AP, "[SPECTRUM] protobuf encoding not compiled in\n");
+      return E3_SM_ERROR_INVALID_PARAM;
+#endif
     }
     return spectrum_encode_ran_function_data_json(encoded_data, encoded_size);
 }
@@ -170,28 +212,60 @@ int spectrum_encode_indication(const nr_mac_sensing_publish_meta_t *meta,
             return -1;
         }
         return (int)bytes;
+    } else if (e3_get_encoding() == E3_ENCODING_PROTOBUF) {
+#ifdef E3_SM_HAVE_PROTOBUF
+      E3sm__Spectrum__V1__SpectrumSensingIndication pdu = E3SM__SPECTRUM__V1__SPECTRUM_SENSING_INDICATION__INIT;
+      pdu.has_timestamp = 1;
+      pdu.timestamp = (int64_t)meta->timestamp_ns;
+      pdu.has_sfn = 1;
+      pdu.sfn = (uint32_t)meta->frame;
+      pdu.has_slot = 1;
+      pdu.slot = (uint32_t)meta->slot;
+      pdu.has_beam = 1;
+      pdu.beam = (uint32_t)meta->beam;
+      pdu.has_shm_name = 1;
+      pdu.shm_name.data = (uint8_t *)SPECTRUM_SENSING_RING_SHM_NAME;
+      pdu.shm_name.len = sizeof(SPECTRUM_SENSING_RING_SHM_NAME) - 1u;
+      pdu.has_shm_write_idx = 1;
+      pdu.shm_write_idx = write_idx;
+      pdu.has_n_ranges = 1;
+      pdu.n_ranges = n_ranges;
+
+      size_t sz = e3sm__spectrum__v1__spectrum_sensing_indication__get_packed_size(&pdu);
+      if (sz > out_buf_size) {
+        return -1;
+      }
+      e3sm__spectrum__v1__spectrum_sensing_indication__pack(&pdu, out_buf);
+      return (int)sz;
+#else
+      LOG_E(E3AP, "[SPECTRUM] protobuf encoding not compiled in\n");
+      return -1;
+#endif
     } else {
-        int written = snprintf((char *)out_buf, out_buf_size,
-            "{"
-                "\"sensing_shm\":{"
-                    "\"shm_name\":\"" SPECTRUM_SENSING_RING_SHM_NAME "\","
-                    "\"write_idx\":%u,"
-                    "\"n_ranges\":%u"
-                "},"
-                "\"timestamp\":%" PRIu64 ","
-                "\"sfn\":%u,"
-                "\"slot\":%u,"
-                "\"beam\":%u"
-            "}",
-            (unsigned)write_idx,
-            (unsigned)n_ranges,
-            meta->timestamp_ns,
-            (unsigned)meta->frame,
-            (unsigned)meta->slot,
-            (unsigned)meta->beam);
-        if (written < 0 || (size_t)written >= out_buf_size) {
-            return -1;
-        }
-        return written;
+      int written = snprintf((char *)out_buf,
+                             out_buf_size,
+                             "{"
+                             "\"sensing_shm\":{"
+                             "\"shm_name\":\"" SPECTRUM_SENSING_RING_SHM_NAME
+                             "\","
+                             "\"write_idx\":%u,"
+                             "\"n_ranges\":%u"
+                             "},"
+                             "\"timestamp\":%" PRIu64
+                             ","
+                             "\"sfn\":%u,"
+                             "\"slot\":%u,"
+                             "\"beam\":%u"
+                             "}",
+                             (unsigned)write_idx,
+                             (unsigned)n_ranges,
+                             meta->timestamp_ns,
+                             (unsigned)meta->frame,
+                             (unsigned)meta->slot,
+                             (unsigned)meta->beam);
+      if (written < 0 || (size_t)written >= out_buf_size) {
+        return -1;
+      }
+      return written;
     }
 }

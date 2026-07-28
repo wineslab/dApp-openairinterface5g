@@ -23,6 +23,7 @@
 /* encoding values (match libe3 e3_config_t; -1 = libe3 default) */
 #define E3_ENCODING_ASN1 0
 #define E3_ENCODING_JSON 1
+#define E3_ENCODING_PROTOBUF 2
 
 // Configuration structure for E3AP
 typedef struct {
