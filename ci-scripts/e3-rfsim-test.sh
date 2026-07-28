@@ -15,28 +15,28 @@
 # conf pins those ports for every encoding; the gNB serves whatever
 # encoding we force on the same ports.
 #
-# Usage: ci-scripts/e3-rfsim-test.sh [encoding ...]     (default: asn1 json)
+# Usage: ci-scripts/e3-rfsim-test.sh [encoding ...] (default: asn1 json protobuf)
 # Env:   BUILD_DIR  nr-softmodem build dir   (default: cmake_targets/ran_build/build)
 #        CONF       gNB config to derive from (default: the 106-PRB band78 conf)
 #        DAPP_TIMED dApp run seconds           (default: 20)
 #        SKIP_PIP   set to 1 to skip `pip install -U dapps` (use the env as-is)
 #        BOOT_TIMEOUT_S  gNB bring-up timeout  (default: 90)
 #
-# The dApp is the PyPI `dapps` package; ci-scripts/e3_rfsim_spectrum_dapp.py
-# instantiates spectrum.SpectrumSharingDApp and runs its E3 lifecycle.
+# The dApp is the PyPI `dapps` package; the test runs its shipped example
+# (`python -m examples.spectrum_dapp`), which instantiates
+# spectrum.SpectrumSharingDApp and runs its E3 lifecycle headless.
 
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/cmake_targets/ran_build/build}"
 CONF="${CONF:-${REPO_ROOT}/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.band78.sa.fr1.106PRB.usrpx400.conf}"
-RUNNER="${REPO_ROOT}/ci-scripts/e3_rfsim_spectrum_dapp.py"
 DAPP_TIMED="${DAPP_TIMED:-20}"
 SKIP_PIP="${SKIP_PIP:-0}"
 BOOT_TIMEOUT_S="${BOOT_TIMEOUT_S:-90}"
 SHUTDOWN_TIMEOUT_S="${SHUTDOWN_TIMEOUT_S:-40}"
 ENCODINGS=("$@")
-[ $# -eq 0 ] && ENCODINGS=(asn1 json)
+[ $# -eq 0 ] && ENCODINGS=(asn1 json protobuf)
 
 WORK="$(mktemp -d /tmp/e3-rfsim-ci.XXXXXX)"
 GNB_PID=""
@@ -57,14 +57,14 @@ trap cleanup EXIT
 # ---- preconditions -----------------------------------------------------------
 [ -x "${BUILD_DIR}/nr-softmodem" ] || { echo "[e3-ci] nr-softmodem not found in ${BUILD_DIR}" >&2; exit 2; }
 [ -f "${CONF}" ]                   || { echo "[e3-ci] conf not found: ${CONF}" >&2; exit 2; }
-[ -f "${RUNNER}" ] || { echo "[e3-ci] dApp launcher not found: ${RUNNER}" >&2; exit 2; }
 if [ "${SKIP_PIP}" != "1" ]; then
     echo "[e3-ci] installing/upgrading the dApp-library (pip install -U dapps)"
     python3 -m pip install -U dapps >/dev/null 2>&1 \
         || { echo "[e3-ci] 'pip install -U dapps' failed" >&2; exit 2; }
 fi
-python3 -c "import e3interface, spectrum.spectrum_dapp" 2>/dev/null \
-    || { echo "[e3-ci] dApp-library not importable after install (dapps + numpy/asn1tools/pyzmq)" >&2; exit 2; }
+# The shipped example (examples.spectrum_dapp) must import from the installed wheel.
+python3 -c "import e3interface, spectrum.spectrum_dapp, examples.spectrum_dapp" 2>/dev/null \
+    || { echo "[e3-ci] dApp-library not importable after install (need dapps>=0.2.1 with shipped examples)" >&2; exit 2; }
 for port in 9990 9991 9999; do
     if ss -ltn 2>/dev/null | grep -q ":${port} "; then
         echo "[e3-ci] port ${port} already in use (stale gNB?)" >&2; exit 2
@@ -86,7 +86,7 @@ run_encoding() {
         -e "s/^\([[:space:]]*setup_port[[:space:]]*=[[:space:]]*\)[0-9]*;/\19990;/" \
         -e "s/^\([[:space:]]*publisher_port[[:space:]]*=[[:space:]]*\)[0-9]*;/\19991;/" \
         -e "s/^\([[:space:]]*subscriber_port[[:space:]]*=[[:space:]]*\)[0-9]*;/\19999;/" \
-        -e "s/\(ipv4[[:space:]]*=[[:space:]]*\)\"[0-9.]*\"/\1\"127.0.0.99\"/" \
+        -e "/amf_ip_address/ s/\(ipv4[[:space:]]*=[[:space:]]*\)\"[0-9.]*\"/\1\"127.0.0.99\"/" \
         "${CONF}" > "${conf}"
     grep -q "= \"${enc}\";" "${conf}" || { fail "${enc}: could not set encoding in the derived conf"; return; }
 
@@ -116,7 +116,7 @@ run_encoding() {
     : > /tmp/dapp.log 2>/dev/null; : > /tmp/e3.log 2>/dev/null
     local rc=0
     timeout $((DAPP_TIMED + 30)) \
-        python3 "${RUNNER}" \
+        python3 -m examples.spectrum_dapp \
         --link zmq --transport tcp --encoding-method "${enc}" --timed "${DAPP_TIMED}" \
         > "${dapp_log}" 2>&1 || rc=$?
     cp -f /tmp/dapp.log "${applog}"            2>/dev/null
@@ -151,7 +151,7 @@ run_encoding() {
     done
     # The gNB selected the encoder we forced in the derived conf.
     local encname
-    case "${enc}" in asn1) encname="ASN.1";; json) encname="JSON";; *) encname="${enc}";; esac
+    case "${enc}" in asn1) encname="ASN.1";; json) encname="JSON";; protobuf) encname="Protocol Buffers";; *) encname="${enc}";; esac
     grep -q "Encoding RAN function data with ${encname} encoder" "${gnb_log}" \
         || fail "${enc}: gNB did not select the ${encname} encoder"
     if grep -q "Assertion" "${gnb_log}"; then
